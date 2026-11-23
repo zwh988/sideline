@@ -89,6 +89,8 @@ These should be folded into the spec (see PLAN, task "Spec sync").
 - Later: general idea explanation (plans, free text) beyond exact lines.
 - Open question: ideas that ignore the opponent's replies (a player move or two with no replies). Probably allow "what I want to do" as a plan, checked as threats/plans, not as a line; decide with the plans task.
 
+- After 1.5: the captured-material line under the board is a stopgap ("You took … · Coach took … · You +3"); wanted: each side's captures on that side of the board. Eval bar undecided. Both are in PLAN task 1.6b. No-tactic hints now name the engine's best move with a board-fact reason (`Coach.hint`), untested in the browser.
+
 ## Known issues and gaps
 
 - Explain: the verdict arrows are drawn on the position before the line, so a piece that moves twice (e.g. a queen) has its second arrow start from an empty square. Plans (free text, AI model structure) are not built, and a line can't yet be played out as a branch (1.6). Promotion inside a line is untested by clicking. An opponent's move that is "worse than best" is reported even when both choices are bad for them but one is much less bad (e.g. +7.8 vs +3.9 for the player): that is true by the engine, but may feel picky at low levels.

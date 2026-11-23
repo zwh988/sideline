@@ -77,6 +77,14 @@ Spec: "Branches: play it out" and its rules. This is large; split it if needed (
 - Save branches as PGN variations.
 - **Done when:** the branch flow is play-tested end to end, including merge, on the phone viewport.
 
+### ⬜ 1.6b UX pass (after branches)
+Collected from play-testing 1.5; do it once branches (1.6) exist, since they change the flow.
+- **Ask about a line:** fewer taps (today: button, arrows, "Ask coach", then "Change my line"). Make clear it is a question to the coach: checking a line, confirming understanding, or exploring options. Revisit button and prompt wording.
+- **Captured material:** put what *you* captured on your side of the board and what the coach captured on its side (not one text line under the board); the point balance next to them.
+- **Eval bar:** decide whether to have one at all (it gives away answers; the coach plays weak moves on purpose). Candidate: Review mode only, or an off-by-default setting.
+- **Ideas without replies / general ideas:** see the notes in STATE; belongs with the plans task.
+- Phone: bubble below the board is barely visible (also in 1.8).
+
 ### ⬜ 1.7 Game persistence and PGN
 - Save the game in progress, plus finished games with their branches, on the device. Resume after a reload.
 - Export the PGN (copy or download).
