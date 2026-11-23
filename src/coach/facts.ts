@@ -136,3 +136,34 @@ export function playAndDescribe(chess: Chess, uci: string): MoveFacts {
     discovered,
   };
 }
+
+export interface FailedRecapture {
+  /** The loser's only legal recapture on the square. */
+  recapture: { san: string; piece: PieceSymbol };
+  /** The winner's cheapest capture of the recapturing piece, which can't be taken again. */
+  reply: { san: string; piece: PieceSymbol };
+}
+
+/**
+ * Why a capture on `sq` can't simply be answered by taking back (`fen`: after
+ * the capture, the loser to move). Only the plain case is explained: there is
+ * exactly one legal recapture, the winner takes the recapturing piece on the
+ * same square, the loser has no capture there again, and the recapturing piece
+ * is worth more than what it won back. Otherwise nothing (the reason is
+ * elsewhere, or there's no recapture at all, which `capturedUndefended` covers).
+ */
+export function failedRecapture(fen: string, sq: Square): FailedRecapture | undefined {
+  const chess = new Chess(fen);
+  const takesOn = (c: Chess) => c.moves({ verbose: true }).filter((m) => m.to === sq && m.captured);
+  const recaptures = takesOn(chess);
+  if (recaptures.length !== 1) return undefined;
+  const r = recaptures[0];
+  chess.move(r);
+  const replies = takesOn(chess).sort((x, y) => VALUE[x.piece] - VALUE[y.piece]);
+  if (!replies.length) return undefined; // the recapture works
+  const reply = replies[0];
+  chess.move(reply);
+  if (takesOn(chess).length) return undefined; // a longer exchange: not explained here
+  if (VALUE[r.piece] <= VALUE[r.captured as PieceSymbol]) return undefined; // the recapture still pays
+  return { recapture: { san: r.san, piece: r.piece }, reply: { san: reply.san, piece: reply.piece } };
+}

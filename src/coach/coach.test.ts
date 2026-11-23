@@ -137,7 +137,9 @@ describe('Coach: hung material below the mistake size', () => {
   it('flags a hung pawn at Level 2 in Lesson, with a takeback offer', async () => {
     const r = await coach('lesson', hungScript(173)).onPlayerMove(HUNG, 'd3d4', 10);
     expect(r).toMatchObject({ kind: 'mistake', offerTakeback: true });
-    expect(r?.text).toBe('Careful: after d4, I can play exd4, which takes the pawn. That would win a pawn. Want to take it back?');
+    expect(r?.text).toBe(
+      'Careful: after d4, I can play exd4, which takes the pawn. That would win a pawn: if you recapture with Qxd4, I take your queen with Qxd4. Want to take it back?',
+    );
     expect(r?.shapes).toEqual([{ orig: 'e5', dest: 'd4', brush: 'red' }]);
   });
 

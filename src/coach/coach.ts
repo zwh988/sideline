@@ -17,10 +17,12 @@ import type { Level } from '../app/levels';
 import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
 import type { TaughtLine } from './lines';
+import { failedRecapture, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
 import {
   byImportance,
   capitalize,
+  failedRecapturePhrase,
   moveWithWhich,
   narrateCoachMove,
   narrateLine,
@@ -269,11 +271,21 @@ export class Coach {
     }
     await this.analyst.markForced(refutation);
     const first = refutation.moves[0];
+    // A single defended capture: say why taking back doesn't help, if the board shows it.
+    let why: FailedRecapture | undefined;
+    if (refutation.moves.length === 1 && first.captured && !first.capturedUndefended) {
+      const chess = new Chess(refutation.rootFen);
+      chess.move({ from: first.from, to: first.to, promotion: first.promotion });
+      why = failedRecapture(chess.fen(), first.to);
+    }
+    const wins = refutation.mate
+      ? ''
+      : `That would win ${winsPhrase(refutation)}${why ? `: ${failedRecapturePhrase(why)}` : ''}. `;
     return this.remark(ply, {
       kind: 'mistake',
-      text: `Careful: after ${san}, I can play ${moveWithWhich(first)}. ${
-        refutation.mate ? '' : `That would win ${winsPhrase(refutation)}. `
-      }${this.mode.takebacks ? 'Want to take it back?' : ''}`.trim(),
+      text: `Careful: after ${san}, I can play ${moveWithWhich(first)}. ${wins}${
+        this.mode.takebacks ? 'Want to take it back?' : ''
+      }`.trim(),
       mood: 'concerned',
       offerTakeback: this.mode.takebacks,
       shapes: [{ orig: first.from, dest: first.to, brush: 'red' }],

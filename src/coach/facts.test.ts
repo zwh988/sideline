@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
-import { materialBalance, playAndDescribe } from './facts';
+import { failedRecapture, materialBalance, playAndDescribe } from './facts';
 
 describe('materialBalance', () => {
   it('is zero at the start and counts a won rook', () => {
@@ -64,5 +64,45 @@ describe('playAndDescribe', () => {
     const f = playAndDescribe(chess, 'c3d5');
     expect(f.attacks.length).toBe(2);
     expect(f.doubleAttack).toBe(false);
+  });
+});
+
+describe('failedRecapture', () => {
+  const afterMoves = (fen: string, ...ucis: string[]) => {
+    const c = new Chess(fen);
+    for (const u of ucis) c.move({ from: u.slice(0, 2), to: u.slice(2, 4) });
+    return c.fen();
+  };
+
+  it('explains a pawn defended only by a queen that would be lost', () => {
+    // Real game: 1.e4 Nf6 2.Nc3 d5 3.d3 e5 4.Nxd5 Nxd5 5.exd5 Qxd5 6.d4? exd4: Qxd4 loses the queen to Qxd4.
+    const fen = afterMoves('rnb1kb1r/ppp2ppp/8/3qp3/8/3P4/PPP2PPP/R1BQKBNR w KQkq - 0 6', 'd3d4', 'e5d4');
+    expect(failedRecapture(fen, 'd4')).toEqual({
+      recapture: { san: 'Qxd4', piece: 'q' },
+      reply: { san: 'Qxd4', piece: 'q' },
+    });
+  });
+
+  it('says nothing when the recapture works', () => {
+    // 1.e4 d5 2.exd5: Qxd5 can't be taken.
+    const fen = afterMoves(new Chess().fen(), 'e2e4', 'd7d5', 'e4d5');
+    expect(failedRecapture(fen, 'd5')).toBeUndefined();
+  });
+
+  it('says nothing when there is no recapture', () => {
+    expect(failedRecapture('4k3/8/8/4P3/8/8/8/4K3 b - - 0 1', 'e5')).toBeUndefined();
+  });
+
+  it('says nothing when the exchange goes on (a rook behind the queen)', () => {
+    // Qxd4 Qxd4 Rxd4: the rook takes back again.
+    expect(failedRecapture('6k1/8/8/3q4/3p4/8/3Q4/3R2K1 w - - 0 1', 'd4')).toBeUndefined();
+  });
+
+  it('says nothing when the recapture still pays (a rook takes a queen)', () => {
+    expect(failedRecapture('6k1/8/8/3q4/3q4/8/8/3R2K1 w - - 0 1', 'd4')).toBeUndefined();
+  });
+
+  it('says nothing with two ways to take back', () => {
+    expect(failedRecapture('6k1/8/8/3q4/3p4/5N2/8/3Q2K1 w - - 0 1', 'd4')).toBeUndefined();
   });
 });

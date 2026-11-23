@@ -2,7 +2,7 @@
 // coach's main voice (feasibility test 3 showed small AI models still get
 // facts wrong); an AI model may later rephrase, never add facts.
 import type { PieceSymbol, Square } from 'chess.js';
-import { PIECE_NAME, VALUE, type MoveFacts, type Target } from './facts';
+import { PIECE_NAME, VALUE, type FailedRecapture, type MoveFacts, type Target } from './facts';
 import type { Motif, TaughtLine } from './lines';
 import type { CoachMoveFacts, Intent } from './narration';
 
@@ -47,6 +47,11 @@ export function winsPhrase(line: TaughtLine): string {
   const l = listAnd(lost.sort(byValue).map(a));
   if (!w) return 'material';
   return l ? `${w} for ${l}` : w;
+}
+
+/** Why taking back doesn't help: "if you recapture with Qxd4, I take your queen with Qxd4". */
+export function failedRecapturePhrase(f: FailedRecapture): string {
+  return `if you recapture with ${f.recapture.san}, I take your ${PIECE_NAME[f.recapture.piece]} with ${f.reply.san}`;
 }
 
 /** A short description of what one move does, from facts only: "Nxc7+ attacks …". */
