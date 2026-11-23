@@ -16,6 +16,16 @@ export type Result =
   | { over: false }
   | { over: true; winner: Color | null; reason: string };
 
+/** Whether the position is over, and how (shared with branches). */
+export function resultOf(c: Chess): Result {
+  if (c.isCheckmate()) return { over: true, winner: c.turn() === 'w' ? 'black' : 'white', reason: 'checkmate' };
+  if (c.isStalemate()) return { over: true, winner: null, reason: 'stalemate' };
+  if (c.isInsufficientMaterial()) return { over: true, winner: null, reason: 'insufficient material' };
+  if (c.isThreefoldRepetition()) return { over: true, winner: null, reason: 'threefold repetition' };
+  if (c.isDraw()) return { over: true, winner: null, reason: 'fifty-move rule' };
+  return { over: false };
+}
+
 export class Game {
   private chess: Chess;
   readonly playerColor: Color;
@@ -97,13 +107,7 @@ export class Game {
   }
 
   get result(): Result {
-    const c = this.chess;
-    if (c.isCheckmate()) return { over: true, winner: this.turn === 'white' ? 'black' : 'white', reason: 'checkmate' };
-    if (c.isStalemate()) return { over: true, winner: null, reason: 'stalemate' };
-    if (c.isInsufficientMaterial()) return { over: true, winner: null, reason: 'insufficient material' };
-    if (c.isThreefoldRepetition()) return { over: true, winner: null, reason: 'threefold repetition' };
-    if (c.isDraw()) return { over: true, winner: null, reason: 'fifty-move rule' };
-    return { over: false };
+    return resultOf(this.chess);
   }
 
   get pgn(): string {

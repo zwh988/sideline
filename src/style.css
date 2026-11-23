@@ -413,3 +413,63 @@ button.primary {
   font-size: 0.95rem;
   color: var(--muted);
 }
+
+/* Branches ("What if?"): tinted board border + breadcrumb, always visible */
+.branchbar {
+  --branch-tint: #c77d1a;
+  margin-top: 8px;
+  padding: 8px;
+  border: 2px solid var(--branch-tint);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.branchbar.depth-2 {
+  --branch-tint: #8a4fc7;
+}
+
+.branchbar[hidden] {
+  display: none;
+}
+
+.crumbs {
+  margin: 0 0 4px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.crumbs .sep {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.branch-line {
+  margin: 0 0 8px;
+  min-height: 1.4em;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.branch-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.branch-buttons button {
+  flex: 1 1 30%;
+  min-height: 48px;
+}
+
+.board-area.branching #board {
+  box-shadow: 0 0 0 5px #c77d1a;
+}
+
+.board-area.branching.depth-2 #board {
+  box-shadow: 0 0 0 5px #8a4fc7;
+}
+
+.board-area.branching .nav,
+.board-area.branching .material {
+  display: none;
+}

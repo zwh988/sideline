@@ -1,10 +1,10 @@
 # Project state
 
-Last updated: 2026-11-23, after task 1.5 (Explain your idea: lines).
+Last updated: 2026-11-23, after task 1.6a (branch state and UI).
 
 ## Summary
 
-Roadmap phase 1 (coached game MVP) is about half done. You can play a full game against a Maia opponent at your level. The coach speaks on rule-based triggers (tactic available, threat, mistake with takeback offer, praise, phase prompts) and gives 4-step hints, all from board-checked facts. The coach also thinks aloud on its own moves (how it answered your threat, its captures, the idea behind a quiet move), honestly and under the comment budget. Two modes: Lesson (all of the above, takebacks) and Sparring (serious moments only, hints on request, no takebacks, no thinking aloud). You can view earlier positions. You can show a line with tap-arrows ("Explain") and the coach checks it against Stockfish. Not yet built: plans (free text), branches.
+Roadmap phase 1 (coached game MVP) is about half done. You can play a full game against a Maia opponent at your level. The coach speaks on rule-based triggers (tactic available, threat, mistake with takeback offer, praise, phase prompts) and gives 4-step hints, all from board-checked facts. The coach also thinks aloud on its own moves (how it answered your threat, its captures, the idea behind a quiet move), honestly and under the comment budget. Two modes: Lesson (all of the above, takebacks) and Sparring (serious moments only, hints on request, no takebacks, no thinking aloud). You can view earlier positions. You can show a line with tap-arrows ("Explain") and the coach checks it against Stockfish. You can open a "What if?" side line (two deep) and play it out against Stockfish. Not yet built: plans (free text), branch verdict/merge/comments.
 
 ## Done
 
@@ -22,6 +22,7 @@ Roadmap phase 1 (coached game MVP) is about half done. You can play a full game 
 | `08f8738` | Mistake remarks say why taking back fails (`failedRecapture`) (64 tests) |
 | (after 1.4b) | Move navigation: `navigation.ts`, remark log in the bubble, tap buttons, move-list taps, keys (87 tests) |
 | (after 1.5) | Explain your idea (lines): `lines-input.ts` (tap-arrow state), `linecheck.ts` (move-by-move check), verdict wording in `templates.ts`, Explain button + arrow bar in the game screen (106 tests) |
+| (after 1.6a) | "What if?" branches: `branches.ts` (`Branch`, `BranchStack`), `resultOf` shared from `game.ts`, `Mode.branches`, branch bar + breadcrumb + tinted border in the game screen (119 tests) |
 | (after 1.4) | Praise for a sound sacrifice; hung threshold 0.9 per pawn; the engine's top move is never a mistake (72 tests) |
 
 ## Feasibility results (desktop only so far)
@@ -48,6 +49,8 @@ Measured on the developer's PC (16 cores, Intel Iris Xe-class integrated GPU).
 - Task 1.4b: 15 unit tests in `navigation.test.ts` (clamping, snap to live, new move while viewing, takeback while viewing, ply labels incl. the Greek-gift FEN, remark log). Browser, Greek gift in Lesson (`?fen=rnbq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 7`, Bxh7+): "Bold!…" stays in the bubble after Kxh7; « ‹ buttons, Home key and a tap on a move-list cell show the position with "Viewing 7.Bxh7+" bar, check highlight, Hint/Take back disabled; tapping the last move returns to live. A case where the coach narrates after a remark (two entries in the log) is only covered by unit tests, and a coach move arriving while viewing was not tried live. Not tried on a real Galaxy Z Fold 7: all controls are buttons (48px tall), the emulated 390px phone viewport looked right.
 
 - Task 1.5: 10 tests in `lines-input.test.ts` (select/move/invalid/reselect/undo/promotion/full/game over/load+truncate) and 9 in `linecheck.test.ts` (scripted engine over real positions: knight fork good line, 5.Bc4?? refuted with Nxd4, refuted at a later move, a better opponent reply, "both already lost" and slower-mate cases, a weaker move that keeps the edge, labels). Browser (real engine), emulated 390px phone and 600px: the knight fork entered by real taps (illegal d6 shows a red arrow + "That's not a legal move for the knight."; numbered green/blue arrows; Done → "Good line!… +6.9"); Greek gift (`?fen=rnbq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 7`): good line 1.Bxh7+ Kxh7 2.Ng5+ Kg6 3.h4 (all engine top moves, +6.2); refuted 3.Qg4 ("I'd answer with f5, … -3.8 for me"); better reply (expecting Kg8: "Kg6 is a better reply… +7.8 … but only +3.9"); 7.Ba6 refuted ("Nxa6, winning a bishop"); 7.O-O + Bxc3 flagged as a better reply (f6). Black orientation taps checked on a flipped board. Navigation: Explain is disabled while viewing an earlier position, the « ‹ › » buttons are hidden and arrow keys ignored in arrow mode, Esc cancels. Checking a 5-move line takes about 3 s on desktop. Not tried on a real Galaxy Z Fold 7; no console errors seen.
+
+- Task 1.6a: 10 tests in `branches.test.ts` (moves marked mine/coach, illegal move, promotion, undo keeping a coach opening move, labels with move numbers for White and Black roots, fool's mate result, depth limit, nested root). Browser (real engine, emulated 375px phone): knight fork FEN, What if? → Nxc7+ → coach Kd7 (best move); nested What if? → Nxa8 → Kc6; breadcrumb "Game → What if 1.Nxc7+ → What if 2.Nxa8", orange then purple border, nested button disabled at depth 2; Back twice returns to an untouched game (0 moves, Hint enabled); Undo; Sparring hides the button. No console errors. Not tried: a branch from a viewed earlier position (code path exists), promotion in a branch, a game started as Black, a real phone.
 
 ## Decisions (differ from or add to the spec)
 
@@ -82,6 +85,8 @@ These should be folded into the spec (see PLAN, task "Spec sync").
     - **Lesson:** a tactic prompt also shows a "Show me your idea" button (`Remark.offerExplain`); the Explain button is always there (also in Sparring: the player asks for it, so it isn't unasked talk). Not done: asking for an explanation at other key moments.
     - Arrows: green = your move, blue = their reply, numbered; after a verdict the board keeps the arrows up to the failing move, with the better reply in red.
 
+16. **Branches (task 1.6a).** `BranchStack` holds at most 2 `Branch`es over chess.js; the game is not touched while one is open (no takebacks, hints, Explain, or navigation inside). Start: the shown position (live, or an earlier one when viewing; the player keeps their colour, so if the opponent is to move there the coach plays first). The coach's reply is Stockfish's top move (analyst, depth 12/10), not Maia. Coach text in a branch is limited to board facts (start, checkmate/draw); it is kept in the branch (`Branch.notes`), not in the game's remark log. Lesson only (`Mode.branches`). No clock exists yet, so "clock pauses" is moot.
+
 ## Notes from the user after 1.5 (to do later)
 
 - Wording: "Show me your idea" read as the coach showing its idea (now "Let me show you"); "Explain" felt odd (button now "Show a line"). Still open: the whole flow feels clunky (too many taps: button, arrows, Done, then "Change my line"). Rethink in a UX pass.
@@ -89,7 +94,7 @@ These should be folded into the spec (see PLAN, task "Spec sync").
 - Later: general idea explanation (plans, free text) beyond exact lines.
 - Open question: ideas that ignore the opponent's replies (a player move or two with no replies). Probably allow "what I want to do" as a plan, checked as threats/plans, not as a line; decide with the plans task.
 
-- After 1.5: the captured-material line under the board is a stopgap ("You took … · Coach took … · You +3"); wanted: each side's captures on that side of the board. Eval bar undecided. Both are in PLAN task 1.6b. No-tactic hints now name the engine's best move with a board-fact reason (`Coach.hint`), untested in the browser.
+- After 1.5: the captured-material line under the board is a stopgap ("You took … · Coach took … · You +3"); wanted: each side's captures on that side of the board. Eval bar undecided. Both are in PLAN task 1.6c. No-tactic hints now name the engine's best move with a board-fact reason (`Coach.hint`), untested in the browser.
 
 ## Known issues and gaps
 

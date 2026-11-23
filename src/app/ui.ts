@@ -8,6 +8,7 @@ import type { Key } from '@lichess-org/chessground/types';
 import { Chess, SQUARES, type Square } from 'chess.js';
 import { Analyst } from '../coach/analyst';
 import { Coach, joinRemarks, type Remark, type Shape } from '../coach/coach';
+import { BranchStack, type Branch } from './branches';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { MODES, modeInfo, type Mode, type ModeId } from './modes';
@@ -76,6 +77,12 @@ export class App {
   private lastLine?: Line;
   /** A rejected arrow, shown for a moment so the player sees why nothing happened. */
   private invalid?: { from: Square; to: Square };
+  /** "What if?" side lines (at most two deep); while one is open the game is paused. */
+  private branches = new BranchStack();
+  /** Bumped whenever a branch changes, so a late engine reply for an old state is dropped. */
+  private branchToken = 0;
+  /** True while the coach picks its reply in a branch. */
+  private branchBusy = false;
   private el: Record<string, HTMLElement> = {};
 
   constructor(
@@ -133,6 +140,15 @@ export class App {
               <button id="explain-done" class="primary">Ask coach</button>
             </div>
           </div>
+          <div id="branch-bar" class="branchbar" hidden>
+            <p id="crumbs" class="crumbs" aria-label="Where you are"></p>
+            <p id="branch-line" class="branch-line"></p>
+            <div class="branch-buttons">
+              <button id="branch-undo">Undo</button>
+              <button id="branch-deeper">What if?</button>
+              <button id="branch-exit" class="primary">Back to game</button>
+            </div>
+          </div>
           <div id="viewbar" class="viewbar" hidden>
             <span id="viewtext"></span>
             <button id="back-to-game" class="primary">Back to game</button>
@@ -153,6 +169,7 @@ export class App {
           <div class="actions">
             <button id="hint">Hint</button>
             <button id="explain">Ask about a line</button>
+            <button id="whatif">What if?</button>
             <button id="takeback">Take back</button>
             <button id="flip">Flip board</button>
           </div>
@@ -161,7 +178,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'explain', 'material', 'explain-bar', 'explain-text', 'explain-undo', 'explain-cancel', 'explain-done']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'explain', 'material', 'explain-bar', 'explain-text', 'explain-undo', 'explain-cancel', 'explain-done', 'whatif', 'branch-bar', 'crumbs', 'branch-line', 'branch-undo', 'branch-deeper', 'branch-exit']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -183,6 +200,10 @@ export class App {
     this.el['explain-cancel'].addEventListener('click', () => this.endExplain());
     this.el['explain-done'].addEventListener('click', () => void this.explainDone());
     this.el.board.addEventListener('click', (e) => this.onBoardTap(e));
+    this.el.whatif.addEventListener('click', () => void this.startBranch());
+    this.el['branch-deeper'].addEventListener('click', () => void this.startBranch());
+    this.el['branch-undo'].addEventListener('click', () => this.branchUndo());
+    this.el['branch-exit'].addEventListener('click', () => this.exitBranch());
 
     this.el['nav-start'].addEventListener('click', () => this.navigate(() => this.nav.start()));
     this.el['nav-back'].addEventListener('click', () => this.navigate(() => this.nav.back()));
@@ -222,6 +243,9 @@ export class App {
     this.input = undefined;
     this.lastLine = undefined;
     this.invalid = undefined;
+    this.branches.clear();
+    this.branchToken++;
+    this.branchBusy = false;
     // `?fen=` starts from a position, playing the side to move (for testing,
     // and later for starting games from repertoire positions).
     const startFen = new URLSearchParams(location.search).get('fen') ?? undefined;
@@ -271,6 +295,10 @@ export class App {
     this.el['board-area'].classList.toggle('exploring', !!this.input);
     this.el['explain-bar'].hidden = !this.input;
     nav.setLive(g.moves.length);
+    this.el['board-area'].classList.toggle('branching', this.branches.active);
+    this.el['board-area'].classList.toggle('depth-2', this.branches.depth === 2);
+    this.el['branch-bar'].hidden = !this.branches.active;
+    if (this.branches.active) return this.renderBranch();
     if (this.input) return this.renderExplain();
     this.board.set({ viewOnly: false });
     const view = nav.viewing ? g.positionAt(nav.ply) : undefined;
@@ -302,6 +330,9 @@ export class App {
     (this.el.hint as HTMLButtonElement).disabled = !canMove;
     // Explaining a line starts from the live position, on the player's turn.
     (this.el.explain as HTMLButtonElement).disabled = !canMove;
+    // A side line can start from any shown position (also an earlier one), unless the coach is busy.
+    this.el.whatif.hidden = !this.mode.branches;
+    (this.el.whatif as HTMLButtonElement).disabled = this.thinking || g.result.over && !nav.viewing;
     this.el.portrait.classList.toggle('busy', this.thinking);
   }
 
@@ -346,6 +377,10 @@ export class App {
   private onKey(e: KeyboardEvent): void {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (e.target instanceof Element && e.target.closest('select, input, textarea')) return;
+    if (this.branches.active) {
+      if (e.key === 'Escape') this.exitBranch();
+      return; // no move navigation in a side line
+    }
     if (this.input) {
       if (e.key === 'Escape') this.endExplain();
       return; // no move navigation while a line is being entered
@@ -382,8 +417,24 @@ export class App {
   /** The bubble: the coach's remarks for the position, newest at the bottom. */
   private renderBubble(): void {
     const nav = this.nav;
-    const entries = nav.viewing ? this.log.at(nav.ply) : this.log.recent(nav.live);
     const bubble = this.el.bubble;
+    const branch = this.branches.current;
+    if (branch) {
+      // In a side line the bubble shows what the coach said there, not the game's log.
+      bubble.replaceChildren(
+        ...branch.notes.slice(-3).map((text, i, all) => {
+          const p = document.createElement('p');
+          p.className = i < all.length - 1 ? 'entry old' : 'entry';
+          p.textContent = text;
+          return p;
+        }),
+      );
+      this.el.mood.textContent = '';
+      this.el.portrait.dataset.mood = 'neutral';
+      bubble.scrollTop = bubble.scrollHeight;
+      return;
+    }
+    const entries = nav.viewing ? this.log.at(nav.ply) : this.log.recent(nav.live);
     bubble.replaceChildren();
     if (!entries.length) {
       const p = document.createElement('p');
@@ -411,7 +462,7 @@ export class App {
     this.el['bubble-box'].classList.remove('stale');
     // While looking at the past, the new remark waits in the log (arrows too).
     // (or entering a line: the arrows on the board are the player's).
-    if (!this.nav.viewing && !this.input) {
+    if (!this.nav.viewing && !this.input && !this.branches.active) {
       this.board.setAutoShapes((r.shapes ?? []).map(drawShape));
     }
     this.renderBubble();
@@ -447,6 +498,7 @@ export class App {
   }
 
   private async onPlayerMove(from: Square, to: Square): Promise<void> {
+    if (this.branches.active) return this.onBranchMove(from, to);
     const id = this.gameId;
     let promotion = '';
     if (this.game.isPromotion(from, to)) {
@@ -531,7 +583,7 @@ export class App {
   }
 
   private async takeback(): Promise<void> {
-    if (this.input || this.thinking || this.nav.viewing || !this.mode.takebacks || !this.game.takeback()) return;
+    if (this.branches.active || this.input || this.thinking || this.nav.viewing || !this.mode.takebacks || !this.game.takeback()) return;
     this.log.truncate(this.game.moves.length);
     this.board.setAutoShapes([]);
     this.sync();
@@ -542,12 +594,153 @@ export class App {
   }
 
   private async hint(): Promise<void> {
-    if (this.nav.viewing || this.input) return;
+    if (this.nav.viewing || this.input || this.branches.active) return;
     const id = this.gameId;
     const ply = this.game.moves.length;
     const coach = await this.coach;
     const remark = await coach.hint();
     if (!this.stale(id, ply)) this.say(remark);
+  }
+
+  // --- Branches: "What if?" -----------------------------------------------
+  // A side line from the position on the board (or, in a branch, from where
+  // the branch stands). The player moves their colour; the coach answers with
+  // Stockfish's best move, not the level-matched opponent's. The game is paused.
+
+  private async startBranch(): Promise<void> {
+    if (!this.mode.branches || this.input || this.thinking || this.branchBusy || !this.branches.canEnter) return;
+    const current = this.branches.current;
+    if (current && !current.isPlayerTurn) return;
+    const fen = current ? current.fen : this.nav.viewing ? this.game.positionAt(this.nav.ply).fen : this.game.fen;
+    const branch = this.branches.enter(fen, this.game.playerColor);
+    if (!branch) return;
+    if (branch.result.over) {
+      this.branches.exit();
+      this.status('The game is over here, so there is nothing to try.');
+      return;
+    }
+    this.branchToken++;
+    this.el.choices.hidden = true;
+    this.board.setAutoShapes([]);
+    branch.notes.push(
+      branch.isPlayerTurn
+        ? 'Let’s see what happens. Make your move; I’ll answer with my best. The game waits for us.'
+        : 'Let’s see what happens. I’ll start with my best move here; the game waits for us.',
+    );
+    this.sync();
+    if (!branch.isPlayerTurn) await this.branchReply();
+  }
+
+  /** Leaves the current branch: back to the one before it, or to the game. */
+  private exitBranch(): void {
+    if (!this.branches.exit()) return;
+    this.branchToken++;
+    this.branchBusy = false;
+    this.board.setAutoShapes(this.branches.active ? [] : this.shapesAt(this.nav.ply));
+    this.sync();
+    this.status(this.branches.active ? 'Back in your first line.' : 'Back to the game.');
+  }
+
+  private branchUndo(): void {
+    const b = this.branches.current;
+    if (!b || !b.undo()) return;
+    this.branchToken++;
+    this.branchBusy = false;
+    this.sync();
+  }
+
+  private async onBranchMove(from: Square, to: Square): Promise<void> {
+    const b = this.branches.current;
+    if (!b || this.branchBusy || !b.isPlayerTurn) return;
+    const token = this.branchToken;
+    let promotion = '';
+    if (b.isPromotion(from, to)) {
+      promotion = await this.askPromotion(this.game.playerColor);
+      if (token !== this.branchToken) return;
+    }
+    b.play(from + to + promotion);
+    this.sync();
+    if (this.branchEnded(b)) return;
+    await this.branchReply();
+  }
+
+  /** The coach's reply in a branch: Stockfish's best move. */
+  private async branchReply(): Promise<void> {
+    const b = this.branches.current;
+    if (!b || b.result.over) return;
+    const token = ++this.branchToken;
+    this.branchBusy = true;
+    this.sync();
+    this.status('Thinking…');
+    let uci: string | undefined;
+    try {
+      const analyst = await this.analyst;
+      [uci] = await Promise.all([analyst.evaluate(b.fen, 1).then((ev) => ev.lines[0]?.pv[0]), sleep(MIN_THINK_MS)]);
+    } catch {
+      /* engine trouble: fall back below */
+    }
+    if (token !== this.branchToken || this.branches.current !== b) return; // left or changed meanwhile
+    this.branchBusy = false;
+    const legal = [...b.dests].flatMap(([f, ts]) => ts.map((t) => f + t));
+    const reply = uci && legal.includes(uci.slice(0, 4)) ? uci : legal[0];
+    const move = b.play(reply);
+    this.sync();
+    this.status(`I played ${move.san}.${b.inCheck ? ' Check!' : ''} Your move.`);
+    this.branchEnded(b);
+  }
+
+  /** Says so when the line has ended (a board fact: mate or a draw). */
+  private branchEnded(b: Branch): boolean {
+    const r = b.result;
+    if (!r.over) return false;
+    const player = this.game.playerColor;
+    b.notes.push(
+      r.winner
+        ? r.winner === player
+          ? 'Checkmate. In this line you win.'
+          : 'Checkmate. In this line I win.'
+        : `This line ends in a draw by ${r.reason}.`,
+    );
+    this.status('The line is over. Undo a move or go back.');
+    this.renderBubble();
+    return true;
+  }
+
+  /** The board, breadcrumb and buttons for the open branch. */
+  private renderBranch(): void {
+    const b = this.branches.current!;
+    const last = b.lastMove;
+    const turn = b.turn;
+    const canMove = b.isPlayerTurn && !b.result.over && !this.branchBusy;
+    this.board.set({
+      fen: b.fen,
+      turnColor: turn,
+      check: b.inCheck ? turn : false,
+      lastMove: last ? [last.from as Key, last.to as Key] : undefined,
+      viewOnly: false,
+      movable: { color: canMove ? this.game.playerColor : undefined, dests: canMove ? (b.dests as Map<Key, Key[]>) : new Map() },
+    });
+    // The breadcrumb: Game → What if 14.Nxe5 → What if 15…Qd4
+    this.el.crumbs.replaceChildren(
+      ...this.branches.breadcrumb.flatMap((c, i) => {
+        const s = document.createElement('span');
+        s.textContent = c;
+        if (i === 0) return [s];
+        const sep = document.createElement('span');
+        sep.className = 'sep';
+        sep.textContent = ' → ';
+        return [sep, s];
+      }),
+    );
+    this.el['branch-line'].textContent = b.lineText || 'No moves yet.';
+    (this.el['branch-undo'] as HTMLButtonElement).disabled = !b.moves.some((m) => m.mine);
+    (this.el['branch-deeper'] as HTMLButtonElement).disabled = !this.branches.canEnter || !canMove;
+    this.el['branch-exit'].textContent = this.branches.depth > 1 ? 'Back to first line' : 'Back to game';
+    this.el.viewbar.hidden = true;
+    this.el['board-area'].classList.remove('viewing');
+    for (const id of ['hint', 'explain', 'takeback', 'whatif']) (this.el[id] as HTMLButtonElement).disabled = true;
+    this.el.portrait.classList.toggle('busy', this.branchBusy);
+    this.renderBubble();
   }
 
   // --- Explain your idea: lines with tap-arrows ---------------------------
@@ -566,7 +759,7 @@ export class App {
 
   private startExplain(prefill?: readonly LineMove[]): void {
     const g = this.game;
-    if (this.input || this.nav.viewing || this.thinking || g.result.over || !g.isPlayerTurn) return;
+    if (this.branches.active || this.input || this.nav.viewing || this.thinking || g.result.over || !g.isPlayerTurn) return;
     this.el.choices.hidden = true;
     this.input = new LineInput(g.fen, true);
     if (prefill) this.input.load(prefill);

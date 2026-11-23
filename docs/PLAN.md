@@ -68,17 +68,21 @@ Spec: "Explain your idea", "Lines".
 - **Done when:** this works on the phone viewport, and there are unit tests for line checking.
 - Done: `src/app/lines-input.ts`, `src/coach/linecheck.ts`, `narrateVerdict` in `templates.ts`, `Coach.explainLine`. Explain button + "Show me your idea" at a Lesson tactic prompt; live position only (see STATE decision 15). Asking at other key moments, and plans (free text), are not done.
 
-### ⬜ 1.6 Branches: "What if?"
+### ✅ 1.6a Branches: state and UI ("What if?")
 Spec: "Branches: play it out" and its rules. This is large; split it if needed (a: branch state and UI, b: verdict and merge).
 - A branch state stack, at most 2 deep. Always visible: a tinted board border and a breadcrumb (*Game → What if 14.Nxe5*).
 - In a branch the coach plays Stockfish's best replies, not Maia's, and comments as the line goes. It ends the branch using the line rules, or steers the player back if they wander into random moves.
 - **Verdict:** a bad line returns to the branch point; a good line can be merged. Merging plays only the player's first move in the real game. Merging from an earlier position needs a takeback, so it's Lesson mode only.
 - Sources: a "What if?" button, a coach-suggested branch, or a line entered in task 1.5.
 - Save branches as PGN variations.
-- **Done when:** the branch flow is play-tested end to end, including merge, on the phone viewport.
+- **Done when (1.6 overall):** the branch flow is play-tested end to end, including merge, on the phone viewport.
+- **1.6a done:** `src/app/branches.ts` (`Branch`, `BranchStack`, max 2 deep), a "What if?" button (Lesson only) from the live or a viewed position, a nested "What if?" inside a branch, tinted board border (orange, purple at depth 2), breadcrumb, line text, Undo, Back. The coach answers with Stockfish's best move and says only board facts (start, mate or draw). The game is paused and untouched.
 
-### ⬜ 1.6b UX pass (after branches)
-Collected from play-testing 1.5; do it once branches (1.6) exist, since they change the flow.
+### ⬜ 1.6b Branches: verdict, merge, comments, PGN
+What is left of the list above: comments as the line goes; ending a branch by the line rules or steering back from random moves; bad line (return to the branch point) and good line (merge, Lesson only, plays only the player's first move); a coach-suggested branch; a branch started from a line entered in 1.5; saving branches as PGN variations (with 1.7).
+
+### ⬜ 1.6c UX pass (after branches)
+Collected from play-testing 1.5; do it once branches (1.6a/b) exist, since they change the flow.
 - **Ask about a line:** fewer taps (today: button, arrows, "Ask coach", then "Change my line"). Make clear it is a question to the coach: checking a line, confirming understanding, or exploring options. Revisit button and prompt wording.
 - **Captured material:** put what *you* captured on your side of the board and what the coach captured on its side (not one text line under the board); the point balance next to them.
 - **Eval bar:** decide whether to have one at all (it gives away answers; the coach plays weak moves on purpose). Candidate: Review mode only, or an off-by-default setting.
