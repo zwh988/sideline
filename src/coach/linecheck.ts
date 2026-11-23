@@ -6,11 +6,44 @@
 // Scores are from the side to move, so the value of a move is the negated
 // score of the position it leads to. A move is a problem when it is worth
 // clearly less than the engine's best move there; the first problem decides.
-import { Chess, type Color } from 'chess.js';
-import type { Line } from '../app/lines-input';
+import { Chess, type Color, type Square } from 'chess.js';
 import type { PositionEval } from './analyst';
 import { materialBalance, playAndDescribe, type MoveFacts } from './facts';
 import { cutLine, type TaughtLine } from './lines';
+
+/** One move of a line (a sideline, or one the player wants checked). */
+export interface LineMove {
+  from: Square;
+  to: Square;
+  promotion?: string;
+  uci: string;
+  san: string;
+  /** True for the player's own moves, false for the opponent's replies. */
+  mine: boolean;
+}
+
+/** A line from a position. */
+export interface Line {
+  rootFen: string;
+  moves: LineMove[];
+}
+
+/** One move of a line (a sideline, or one the player wants checked). */
+export interface LineMove {
+  from: Square;
+  to: Square;
+  promotion?: string;
+  uci: string;
+  san: string;
+  /** True for the player's own moves, false for the opponent's replies. */
+  mine: boolean;
+}
+
+/** A line from a position. */
+export interface Line {
+  rootFen: string;
+  moves: LineMove[];
+}
 
 /** The part of the analyst this module needs (tests script it). */
 export interface LineEvaluator {

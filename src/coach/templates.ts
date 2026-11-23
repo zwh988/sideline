@@ -4,8 +4,6 @@
 import type { PieceSymbol, Square } from 'chess.js';
 import { PIECE_NAME, VALUE, type FailedRecapture, type MoveFacts, type Target } from './facts';
 import type { Motif, TaughtLine } from './lines';
-import type { LineVerdict } from './linecheck';
-import { lineMoveLabel } from './linecheck';
 import type { CoachMoveFacts, Intent } from './narration';
 
 const a = (p: PieceSymbol) => `a ${PIECE_NAME[p]}`;
@@ -229,7 +227,7 @@ function intentSentence(intent: Intent, m: MoveFacts): string {
   }
 }
 
-// --- Verdicts on a line the player entered ("Explain your idea") -------------
+// --- Engine scores in words (sideline verdicts are in sideline.ts) ---------
 // Numbers are the engine's, stated as such; the move facts are board code.
 
 /** An engine score from the point of view of `who` ("you" or "me"): "+1.4 for you", "a forced mate for me". */
@@ -241,57 +239,4 @@ export function evalPhrase(cp: number, who: 'you' | 'me' = 'you'): string {
 function signed(cp: number): string {
   const pawns = (Math.abs(cp) / 100).toFixed(1);
   return cp >= 5 ? `+${pawns}` : cp <= -5 ? `-${pawns}` : '0.0';
-}
-
-/** "Move 3 (13.Qh5)": the arrow number and the move, as the player entered it. */
-function stepRef(rootFen: string, index: number, san: string): string {
-  return `move ${index + 1} (${lineMoveLabel(rootFen, index, san)})`;
-}
-
-/** The coach's answer to a checked line. */
-export function narrateVerdict(rootFen: string, v: LineVerdict): string {
-  switch (v.kind) {
-    case 'empty':
-      return 'Show me a move first: tap a piece, then a square.';
-    case 'refuted': {
-      const move = v.checks[v.index].facts;
-      const head = `Refuted at ${stepRef(rootFen, v.index, move.san)}.`;
-      let how: string;
-      if (v.refutation && v.reply && v.refutation.moves[0].uci === v.reply.uci) {
-        how = v.refutation.mate
-          ? `I'd answer with ${v.reply.san}, and it ends in checkmate.`
-          : `I'd answer with ${v.reply.san}, winning ${winsPhrase(v.refutation)}.`;
-      } else if (v.reply) {
-        how = `I'd answer with ${moveWithWhich(v.reply)}, and the engine then rates the position ${evalPhrase(v.replyCp, 'me')}.`;
-      } else {
-        how = `The engine rates the position ${evalPhrase(v.replyCp, 'me')} after it.`;
-      }
-      const earlier = v.index > 0 ? ` The moves before it hold up.` : '';
-      return `${head} ${how}${earlier}`;
-    }
-    case 'better-reply': {
-      const reply = v.checks[v.index].facts;
-      return (
-        `Your line works only if I cooperate. At ${stepRef(rootFen, v.index, reply.san)} you expect ${reply.san}, ` +
-        `but ${moveWithWhich(v.best)} is a better reply. The engine rates the position ${evalPhrase(v.lineCp)} after ${reply.san}, ` +
-        `but only ${evalPhrase(v.bestCp)} after ${v.best.san}.`
-      );
-    }
-    case 'good': {
-      const agree = v.allTop
-        ? 'The engine agrees with every move you chose, and the replies you expect are good ones.'
-        : v.weaker
-          ? 'It holds up against the engine, and the replies you expect are good ones.'
-          : 'The engine finds nothing wrong with it, and the replies you expect are good ones.';
-      const outcome = v.mate
-        ? 'It ends in checkmate.'
-        : v.won
-          ? `It wins ${winsPhrase(v.won)}, and the engine rates the end position ${evalPhrase(v.endCp)}.`
-          : `The engine rates the end position ${evalPhrase(v.endCp)}.`;
-      const weaker = v.weaker
-        ? ` The engine would pick ${moveWithWhich(v.weaker.best)} instead of ${v.checks[v.weaker.index].facts.san} at move ${v.weaker.index + 1}, but yours holds up too.`
-        : '';
-      return `Good line! ${agree} ${outcome}${weaker}`;
-    }
-  }
 }

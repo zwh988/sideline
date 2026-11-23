@@ -16,9 +16,10 @@ import { Chess, type PieceSymbol, type Square } from 'chess.js';
 import type { Level } from '../app/levels';
 import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
-import type { Line } from '../app/lines-input';
 import type { TaughtLine } from './lines';
-import { checkLine, type LineVerdict } from './linecheck';
+import { checkLine, type LineEvaluator, type LineMove } from './linecheck';
+import type { NoteConcept } from './explain';
+import { narrateSidelineMove, sidelineReplyText } from './sideline';
 import { failedRecapture, PIECE_NAME, playAndDescribe, VALUE, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
 import {
@@ -28,7 +29,6 @@ import {
   moveWithWhich,
   narrateCoachMove,
   narrateLine,
-  narrateVerdict,
   pieceRef,
   praise,
   targetList,
@@ -52,8 +52,8 @@ export interface Remark {
   text: string;
   mood: Mood;
   offerTakeback?: boolean;
-  /** Lesson: invite the player to show their idea with the Explain button. */
-  offerExplain?: boolean;
+  /** Lesson: invite the player to try their idea in a sideline. */
+  offerSideline?: boolean;
   shapes?: Shape[];
 }
 
@@ -146,7 +146,7 @@ export class Coach {
         kind: 'tactic',
         text: "There's something strong here. Take your time.",
         mood: 'pleased',
-        offerExplain: true,
+        offerSideline: true,
       });
     }
     if (t.threat) {
@@ -338,18 +338,41 @@ export class Coach {
     });
   }
 
+  /** Engine results by position, so a sideline reuses the search that picked a reply to judge the move. */
+  private cache = new Map<string, Promise<PositionEval>>();
+  private evaluator: LineEvaluator = {
+    evaluate: (fen, multiPv = 1, depth) => {
+      const key = `${fen}|${multiPv}|${depth ?? ''}`;
+      let r = this.cache.get(key);
+      if (!r) this.cache.set(key, (r = this.analyst.evaluate(fen, multiPv, depth)));
+      return r;
+    },
+  };
+  /** Concepts named this game: a concept's habit is said only once. */
+  private seenConcepts = new Set<NoteConcept>();
+
+  /** The coach's reply in a sideline: the engine's best move (UCI), not the level-matched opponent's. */
+  async sidelineReply(fen: string): Promise<string | undefined> {
+    const ev = await this.evaluator.evaluate(fen, 1);
+    return ev.lines[0]?.pv[0];
+  }
+
+  /** What the coach says about a move it plays itself in a sideline ("Show me"): what it does, and the concept. */
+  describeSidelineReply(fenBefore: string, uci: string): string {
+    const f = playAndDescribe(new Chess(fenBefore), uci);
+    return sidelineReplyText(fenBefore, f, this.seenConcepts);
+  }
+
   /**
-   * "Explain your idea": checks the line the player entered against the
-   * engine, move by move, and answers with the verdict. The line's arrows
-   * stay up to the move that fails; the opponent's better answer is red.
+   * "Try a sideline": the player played `move` from `fenBefore`. The engine says whether it
+   * holds up, and the board code names the concept behind it (or says it can't).
    */
-  async explainLine(line: Line): Promise<Remark> {
-    const verdict = await checkLine(this.analyst, line, { maxPlies: Math.max(this.level.maxPlies, line.moves.length) });
+  async judgeSidelineMove(fenBefore: string, move: LineMove): Promise<Remark> {
+    const verdict = await checkLine(this.evaluator, { rootFen: fenBefore, moves: [move] }, { maxPlies: Math.max(this.level.maxPlies, 4) });
     return {
       kind: 'line',
-      text: narrateVerdict(line.rootFen, verdict),
-      mood: verdict.kind === 'good' ? 'pleased' : verdict.kind === 'empty' ? 'neutral' : 'concerned',
-      shapes: verdictShapes(line, verdict),
+      text: narrateSidelineMove(fenBefore, verdict, this.seenConcepts),
+      mood: verdict.kind === 'good' ? 'pleased' : verdict.kind === 'refuted' ? 'concerned' : 'neutral',
     };
   }
 
@@ -518,23 +541,3 @@ export function joinRemarks(first: Remark | undefined, second: Remark | undefine
   };
 }
 
-/** The line's numbered arrows (mine green, theirs blue) up to the problem, then the better reply in red. */
-export function verdictShapes(line: Line, v: LineVerdict): Shape[] {
-  if (v.kind === 'empty') return [];
-  const upTo = v.kind === 'good' ? line.moves.length : v.index + 1;
-  const shapes: Shape[] = line.moves.slice(0, upTo).map((m, i) => ({
-    orig: m.from,
-    dest: m.to,
-    brush: m.mine ? 'green' : 'blue',
-    label: String(i + 1),
-  }));
-  if (v.kind === 'refuted' && v.reply) {
-    shapes.push({ orig: v.reply.from, dest: v.reply.to, brush: 'red', label: String(v.index + 2) });
-  }
-  if (v.kind === 'better-reply') {
-    // Their better move replaces the one in the line.
-    shapes.pop();
-    shapes.push({ orig: v.best.from, dest: v.best.to, brush: 'red', label: String(v.index + 1) });
-  }
-  return shapes;
-}

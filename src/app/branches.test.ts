@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Branch, BranchStack, MAX_BRANCH_DEPTH } from './branches';
+import { Branch } from './branches';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 // Black to move after 1.e4.
@@ -62,17 +62,19 @@ describe('Branch', () => {
     expect(b.undo()).toBe(false); // nothing of the player's left
   });
 
-  it('labels a branch from the first move, with the right move number and dots', () => {
+  it('writes the line with move numbers, from either side', () => {
     const w = new Branch(FORK, 'white');
-    expect(w.label).toBe('What if …');
     w.play('d5c7');
-    expect(w.label).toBe('What if 1.Nxc7+');
+    w.play('e8d7');
+    w.play('c7a8');
+    expect(w.lineText).toBe('1.Nxc7+ Kd7 2.Nxa8');
     const bl = new Branch(AFTER_E4, 'black');
     bl.play('e7e5');
-    expect(bl.label).toBe('What if 1…e5');
+    bl.play('g1f3');
+    expect(bl.lineText).toBe('1…e5 2.Nf3');
     const mid = new Branch('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3', 'white');
     mid.play('f1b5');
-    expect(mid.label).toBe('What if 3.Bb5');
+    expect(mid.lineText).toBe('3.Bb5');
   });
 
   it('reports the end of the line (checkmate, with the winner)', () => {
@@ -82,50 +84,5 @@ describe('Branch', () => {
     b.play('d8h4');
     expect(b.result).toEqual({ over: true, winner: 'black', reason: 'checkmate' });
     expect(b.inCheck).toBe(true);
-  });
-});
-
-describe('BranchStack', () => {
-  it('goes at most two deep and exits one level at a time', () => {
-    const s = new BranchStack();
-    expect(s.active).toBe(false);
-    expect(s.breadcrumb).toEqual(['Game']);
-    const first = s.enter(FORK, 'white')!;
-    first.play('d5c7');
-    first.play('e8d7');
-    const second = s.enter(first.fen, 'white')!;
-    expect(second).toBeDefined();
-    expect(s.depth).toBe(MAX_BRANCH_DEPTH);
-    expect(s.canEnter).toBe(false);
-    expect(s.enter(second.fen, 'white')).toBeUndefined();
-    second.play('c7a8');
-    expect(s.breadcrumb).toEqual(['Game', 'What if 1.Nxc7+', 'What if 2.Nxa8']);
-    expect(s.exit()).toBe(second);
-    expect(s.current).toBe(first);
-    expect(s.canEnter).toBe(true);
-    s.exit();
-    expect(s.active).toBe(false);
-    expect(s.exit()).toBeUndefined();
-  });
-
-  it('a nested branch starts where the first one stands and leaves it unchanged', () => {
-    const s = new BranchStack();
-    const first = s.enter(FORK, 'white')!;
-    first.play('d5c7');
-    first.play('e8d7');
-    const fenBefore = first.fen;
-    const second = s.enter(first.fen, 'white')!;
-    second.play('c7a8');
-    expect(second.rootFen).toBe(fenBefore);
-    expect(first.fen).toBe(fenBefore);
-    expect(first.moves).toHaveLength(2);
-  });
-
-  it('clear() leaves every branch', () => {
-    const s = new BranchStack();
-    s.enter(FORK, 'white');
-    s.enter(FORK, 'white');
-    s.clear();
-    expect(s.depth).toBe(0);
   });
 });

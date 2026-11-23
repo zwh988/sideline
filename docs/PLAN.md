@@ -82,7 +82,7 @@ The concept layer needs ground truth. Lichess puzzles (CC0) carry theme labels.
 Add and score detectors, one theme at a time (pin, skewer, back-rank mate, trapped piece, capturing/removing the defender, deflection, attraction, double check, sacrifice, quiet move...), cheapest and most common below 1600 first. Each needs: a detector in board code, an engine check, a test on real puzzles, and wording in `templates.ts` (hand-written; rule 1). Unfound concepts stay honest: "I can't name a reason I can check."
 - Done (first round): pin (absolute), skewer, capturing the defender, trapped piece, sacrifice, better discovered attack; numbers in STATE. Still open: deflection, attraction, quiet move and the rest of `NOT_YET`, relative pins, x-ray batteries; raising fork, hanging-piece and sacrifice precision. Do these as needed once 1.6d shows which concepts the coach actually says.
 
-### ⬜ 1.6d Try a sideline (replaces 1.6a's branches and 1.5's arrow flow)
+### ✅ 1.6d Try a sideline (replaces 1.6a's branches and 1.5's arrow flow)
 Spec: "Try a sideline".
 - One level, always visible (tinted border + banner + Back). The player plays a move or short line on the board; the coach answers with Stockfish and judges each move live using the 1.5 line checks, then explains with the concept (1.6b/c). Play it, or go back.
 - Lesson only; open (no limits). Sparring has none.
@@ -90,6 +90,8 @@ Spec: "Try a sideline".
 - Retire "Ask about a line" arrows and "What if?", dropping the two-level stack and breadcrumb.
 - **UX pass folded in** (from play-testing 1.5 and 1.6a): fewer taps, wording, the bubble visible on a phone, captured material on each side, decide on the eval bar. See the notes in STATE.
 - **Done when:** played end to end on the phone viewport, with tests for the judging and the concept wording.
+- Done: one-level `Branch`, "Try a sideline" button (Lesson only), per-move judging with concept sentences (`explain.ts`, `sideline.ts`), "Show me" after a mistake, "Try it out" at a tactic prompt; the arrow flow, two-deep stack, breadcrumb and "What if?" are gone. UX: one button instead of two, a banner with the line and Undo / Back to game.
+- **Not done from the UX list, moved on:** captured material on each side of the board, the eval bar decision (still undecided; the sideline shows no numbers except in the "can't name a reason" fallback), the bubble above the board on phones (task 1.8). Also open: wording for trapped piece, sacrifice, capturing the defender and the rest once their detectors are good enough (1.6c round 2).
 
 ### ⬜ 1.7 Game persistence and PGN
 - Save the game in progress, plus finished games with their sidelines, on the device. Resume after a reload.

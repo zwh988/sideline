@@ -1,12 +1,10 @@
-// Branches ("What if?"): a side line played out from a position, at most two
+// A sideline ("Try a sideline"): a line played out from a position, one level
 // deep. Pure state over chess.js, no DOM, so it can be unit-tested. The player
 // moves their own colour; the other side's replies are added by the caller
 // (Stockfish's best move, not the level-matched opponent).
 import { Chess, SQUARES, type Square } from 'chess.js';
 import { resultOf, type Color, type Result } from './game';
 import { plyLabel } from './navigation';
-
-export const MAX_BRANCH_DEPTH = 2;
 
 export interface BranchMove {
   from: Square;
@@ -93,12 +91,6 @@ export class Branch {
     return true;
   }
 
-  /** "What if 14.Nxe5", or "What if …" before the first move. */
-  get label(): string {
-    const first = this.moves[0];
-    return first ? `What if ${plyLabel(this.rootFen, 1, first.san)}` : 'What if …';
-  }
-
   /** The line so far, with move numbers: "14.Nxe5 Qd4 15.Nxf7". */
   get lineText(): string {
     // Numbers before White's moves, and before the first move whoever plays it.
@@ -108,48 +100,5 @@ export class Branch {
         return i === 0 || label.includes('.') && !label.includes('…') ? label : m.san;
       })
       .join(' ');
-  }
-}
-
-/** The branches the player is in: the first starts from the game, a second from inside the first. */
-export class BranchStack {
-  private stack: Branch[] = [];
-
-  get depth(): number {
-    return this.stack.length;
-  }
-
-  get active(): boolean {
-    return this.stack.length > 0;
-  }
-
-  get current(): Branch | undefined {
-    return this.stack.at(-1);
-  }
-
-  get canEnter(): boolean {
-    return this.stack.length < MAX_BRANCH_DEPTH;
-  }
-
-  /** Starts a branch from `fen` (the game position shown, or the end of the current branch). */
-  enter(fen: string, playerColor: Color): Branch | undefined {
-    if (!this.canEnter) return undefined;
-    const b = new Branch(fen, playerColor);
-    this.stack.push(b);
-    return b;
-  }
-
-  /** Leaves the current branch, back to where it started. */
-  exit(): Branch | undefined {
-    return this.stack.pop();
-  }
-
-  clear(): void {
-    this.stack = [];
-  }
-
-  /** "Game → What if 14.Nxe5 → What if 15…Qd4". */
-  get breadcrumb(): string[] {
-    return ['Game', ...this.stack.map((b) => b.label)];
   }
 }

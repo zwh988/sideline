@@ -130,7 +130,7 @@ The player can show what their move is meant to do, and the coach gives feedback
 - **Arrows by tapping:** tap a piece, then a square. No dragging, so it is precise on a phone.
 - **Arrows snap to legal moves;** an illegal arrow shows as invalid immediately.
 - **Automatic order and colors:** arrows are numbered 1, 2, 3, with one color for the player's moves and another for the opponent's replies. Undo removes the last arrow.
-- **Play it out:** the player moves pieces in a sideline (see "Try a sideline" above). Every move is legal by construction. *Design change (Nov 23):* playing on the board replaces arrow entry, which took too many taps, so the arrow flow built in task 1.5 will be retired once sidelines are judged move by move.
+- **Play it out:** the player moves pieces in a sideline (see "Try a sideline" above). Every move is legal by construction. *Design change (Nov 23):* playing on the board replaces arrow entry, which took too many taps, so the arrow flow built in task 1.5 was retired in task 1.6d, when sidelines became judged move by move.
 - Lines are checked move by move against the engine and board code.
 
 **Plans** ("Re1, because the central pawns may be traded and the e-file may open"):

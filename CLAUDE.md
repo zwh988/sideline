@@ -27,13 +27,17 @@ npx tsc              # type-check only
 | `src/main.ts`, `src/app/ui.ts` | Game screen: board (chessground), coach bubble, status line, hints, takebacks, promotion |
 | `src/app/game.ts` | Game state over chess.js (moves, results, takeback, start from FEN) |
 | `src/app/levels.ts` | The 6 levels: Maia rating, max taught line, min gain, mistake threshold, patterns flagged |
-| `src/app/modes.ts` | Lesson / Sparring: switches the coach and game screen read (prompts, small talk, takebacks, reveals plans) |
+| `src/app/modes.ts` | Lesson / Sparring: switches the coach and game screen read (prompts, small talk, takebacks, reveals plans, sidelines) |
+| `src/app/branches.ts` | A sideline: a line played out from a position, one level deep (state only; the screen is in `ui.ts`) |
 | `src/app/opponent.ts` | Coach's move choice: Maia (human-like), weakened Stockfish fallback |
 | `src/app/theme.ts`, `public/themes/<id>/` | Theme packs: `theme.json` + piece images, no code changes to reskin |
 | `src/engine/stockfish.ts` | UCI wrapper for Stockfish WASM (single-threaded lite build) |
 | `src/engine/maia.ts` | Maia3 via maia3-js + ONNX Runtime Web (wasm build) |
 | `src/engine/llm.ts` | WebLLM wrapper (only used by the tests page so far) |
 | `src/coach/facts.ts` | Board facts per move: material, captures, forks, discovered attacks, check/mate |
+| `src/coach/linecheck.ts` | Checks a move or line against Stockfish scores: refuted, holds up, better reply |
+| `src/coach/explain.ts`, `src/coach/sideline.ts` | Concept sentences ("That's a fork: …") from board facts, and the coach's words for a move in a sideline |
+| `src/coach/motifs.ts` | Board geometry for concepts: pins, skewers, discovered attacks, trapped pieces |
 | `src/coach/concepts.ts` | Concepts (Lichess theme names) detected in a line; `npm run concepts` scores them against sampled Lichess puzzles |
 | `src/coach/lines.ts` | Cuts engine lines to the taught part, names the motif |
 | `src/coach/analyst.ts` | Second Stockfish: position evals, threats (pass the move), forced replies |

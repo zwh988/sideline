@@ -357,43 +357,6 @@ button.primary {
   min-height: 44px;
 }
 
-/* Explain mode: the arrow-entry bar replaces the move navigation under the board */
-.explainbar {
-  margin-top: 8px;
-  padding: 8px;
-  border: 1px solid var(--coach-accent);
-  border-radius: 10px;
-  background: var(--panel);
-}
-
-.explainbar[hidden] {
-  display: none;
-}
-
-.explain-text {
-  margin: 0 0 8px;
-  min-height: 2.6em;
-}
-
-.explain-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.explain-buttons button {
-  flex: 1;
-  min-height: 48px;
-}
-
-.board-area.exploring #board {
-  outline: 3px dashed var(--coach-accent);
-  outline-offset: -3px;
-}
-
-.board-area.exploring .nav {
-  display: none;
-}
-
 #board {
   touch-action: manipulation;
 }
@@ -414,62 +377,46 @@ button.primary {
   color: var(--muted);
 }
 
-/* Branches ("What if?"): tinted board border + breadcrumb, always visible */
-.branchbar {
-  --branch-tint: #c77d1a;
+/* Sideline ("Try a sideline"): a banner under the board and a tinted board border, always visible */
+.sidelinebar {
   margin-top: 8px;
   padding: 8px;
-  border: 2px solid var(--branch-tint);
+  border: 2px solid #c77d1a;
   border-radius: 10px;
   background: var(--panel);
 }
 
-.branchbar.depth-2 {
-  --branch-tint: #8a4fc7;
-}
-
-.branchbar[hidden] {
+.sidelinebar[hidden] {
   display: none;
 }
 
-.crumbs {
+.sideline-title {
   margin: 0 0 4px;
   font-weight: 600;
-  overflow-wrap: anywhere;
 }
 
-.crumbs .sep {
-  color: var(--muted);
-  font-weight: 400;
-}
-
-.branch-line {
+.sideline-line {
   margin: 0 0 8px;
   min-height: 1.4em;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
 
-.branch-buttons {
+.sideline-buttons {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
-.branch-buttons button {
-  flex: 1 1 30%;
+.sideline-buttons button {
+  flex: 1;
   min-height: 48px;
 }
 
-.board-area.branching #board {
+.board-area.sidelining #board {
   box-shadow: 0 0 0 5px #c77d1a;
 }
 
-.board-area.branching.depth-2 #board {
-  box-shadow: 0 0 0 5px #8a4fc7;
-}
-
-.board-area.branching .nav,
-.board-area.branching .material {
+.board-area.sidelining .nav,
+.board-area.sidelining .material {
   display: none;
 }

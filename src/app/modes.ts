@@ -28,13 +28,13 @@ export interface Mode {
    * themselves, and a mistake is flagged without saying how it is punished.
    */
   revealsPlans: boolean;
-  /** The "What if?" button: playing a side line out with the coach (spec: not in Sparring). */
-  branches: boolean;
+  /** "Try a sideline": playing a move or a short line out with the coach before committing (spec: not in Sparring). */
+  sidelines: boolean;
 }
 
 export const MODES: Mode[] = [
-  { id: 'lesson', name: 'Lesson', prompts: true, smallTalk: true, minorMistakes: true, takebacks: true, revealsPlans: true, branches: true },
-  { id: 'sparring', name: 'Sparring', prompts: false, smallTalk: false, minorMistakes: false, takebacks: false, revealsPlans: false, branches: false },
+  { id: 'lesson', name: 'Lesson', prompts: true, smallTalk: true, minorMistakes: true, takebacks: true, revealsPlans: true, sidelines: true },
+  { id: 'sparring', name: 'Sparring', prompts: false, smallTalk: false, minorMistakes: false, takebacks: false, revealsPlans: false, sidelines: false },
 ];
 
 export const modeInfo = (id: string | undefined): Mode => MODES.find((m) => m.id === id) ?? MODES[0];
