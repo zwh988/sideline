@@ -18,7 +18,7 @@ import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
 import type { TaughtLine } from './lines';
 import { checkLine, type LineEvaluator, type LineMove } from './linecheck';
-import type { NoteConcept } from './explain';
+import { conceptOf, type NoteConcept } from './explain';
 import { narrateSidelineMove, sidelineReplyText } from './sideline';
 import { failedRecapture, PIECE_NAME, playAndDescribe, VALUE, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
@@ -47,6 +47,25 @@ export interface Shape {
   label?: string;
 }
 
+/**
+ * A moment worth remembering (spec: the record the improvement loop works
+ * from): the position the player decided in, what they played, and what the
+ * coach found, with the concept when a detector named one.
+ */
+export interface Moment {
+  kind: 'mistake' | 'missed-tactic' | 'found-tactic';
+  /** The position before the player's move. */
+  fen: string;
+  /** The player's move (UCI). */
+  played: string;
+  /** The coach's answer to a mistake, or the tactic's first move for a missed one (UCI). */
+  better?: string;
+  /** A Lichess-style theme name ("fork", "hangingPiece"...), or none when no detector found one. */
+  concept?: string;
+  /** What the move cost against the engine's best, in centipawns (mistakes and missed tactics). */
+  lossCp?: number;
+}
+
 export interface Remark {
   kind: 'tactic' | 'threat' | 'mistake' | 'missed-tactic' | 'praise' | 'defended' | 'phase' | 'hint' | 'narration' | 'line';
   text: string;
@@ -55,6 +74,8 @@ export interface Remark {
   /** Lesson: invite the player to try their idea in a sideline. */
   offerSideline?: boolean;
   shapes?: Shape[];
+  /** Set on a mistake, a missed tactic or a found tactic: saved with the game. */
+  moment?: Moment;
 }
 
 /** What the coach knows about the position on the player's turn. */
@@ -177,14 +198,19 @@ export class Coach {
     if (t.tactic && uci === t.tactic.moves[0].uci) {
       if (this.continuing) return undefined;
       this.combination = t.tactic;
-      return this.remark(ply, { kind: 'praise', text: praise(t.tactic), mood: 'pleased' });
+      return this.remark(ply, {
+        kind: 'praise',
+        text: praise(t.tactic),
+        mood: 'pleased',
+        moment: { kind: 'found-tactic', fen: fenBefore, played: uci, concept: conceptOf(fenBefore, uci, 'you', t.tactic.motif) },
+      });
     }
 
     if (loss >= this.level.mistakeCp && !topMove) {
       // The move lets the coach win something the player has learned to see.
       const cut = this.analyst.taughtLine(after, this.limits());
       const refutation = this.teachable(cut.kind === 'line' ? cut.line : undefined);
-      if (refutation) return this.mistakeRemark(ply, move.san, refutation);
+      if (refutation) return this.mistakeRemark(ply, move.san, refutation, { fenBefore, uci, loss });
       // The player missed their own tactic.
       if (t.tactic) {
         return this.remark(ply, {
@@ -194,6 +220,14 @@ export class Coach {
             : `You had something stronger than ${move.san} here.`,
           mood: 'concerned',
           offerTakeback: this.mode.takebacks,
+          moment: {
+            kind: 'missed-tactic',
+            fen: fenBefore,
+            played: uci,
+            better: t.tactic.moves[0].uci,
+            concept: conceptOf(fenBefore, t.tactic.moves[0].uci, 'you', t.tactic.motif),
+            lossCp: loss,
+          },
         });
       }
     }
@@ -201,7 +235,7 @@ export class Coach {
     // Smaller than the level's mistake size, but plainly hung: a pawn or piece
     // the coach can just take, and the evaluation confirms it stays lost.
     const hung = this.mode.minorMistakes && !topMove ? this.hungMaterial(after, loss) : undefined;
-    if (hung) return this.mistakeRemark(ply, move.san, hung);
+    if (hung) return this.mistakeRemark(ply, move.san, hung, { fenBefore, uci, loss });
     if (loss >= this.level.mistakeCp && !topMove) return undefined; // beyond the player's concepts: stay quiet
 
     // Gave up material on purpose (or by luck), and the engine agrees it's fine.
@@ -306,13 +340,30 @@ export class Coach {
   }
 
   /** "Careful: after Bc4, I can play Nxd4…" (Lesson), or a plain warning (Sparring). */
-  private async mistakeRemark(ply: number, san: string, refutation: TaughtLine): Promise<Remark> {
+  private async mistakeRemark(
+    ply: number,
+    san: string,
+    refutation: TaughtLine,
+    ctx: { fenBefore: string; uci: string; loss: number },
+  ): Promise<Remark> {
+    // The concept is the coach's answer: the position after the player's move.
+    const chess = new Chess(ctx.fenBefore);
+    chess.move({ from: ctx.uci.slice(0, 2), to: ctx.uci.slice(2, 4), promotion: ctx.uci[4] });
+    const moment: Moment = {
+      kind: 'mistake',
+      fen: ctx.fenBefore,
+      played: ctx.uci,
+      better: refutation.moves[0].uci,
+      concept: conceptOf(chess.fen(), refutation.moves[0].uci, 'me', refutation.motif),
+      lossCp: ctx.loss,
+    };
     if (!this.mode.revealsPlans) {
       // Sparring: a serious moment, but the coach keeps its reply to itself.
       return this.remark(ply, {
         kind: 'mistake',
         text: `Careful: ${san} gives me a chance ${refutation.mate ? 'to checkmate you' : 'to win material'}.`,
         mood: 'concerned',
+        moment,
       });
     }
     await this.analyst.markForced(refutation);
@@ -335,6 +386,7 @@ export class Coach {
       mood: 'concerned',
       offerTakeback: this.mode.takebacks,
       shapes: [{ orig: first.from, dest: first.to, brush: 'red' }],
+      moment,
     });
   }
 

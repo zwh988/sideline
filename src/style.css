@@ -420,3 +420,68 @@ button.primary {
 .board-area.sidelining .material {
   display: none;
 }
+
+/* History: saved games, PGN export and backup */
+.history {
+  width: min(92vw, 560px);
+  max-height: 86vh;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.history::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.history-note {
+  margin: 8px 0;
+  color: var(--muted);
+  min-height: 1.4em;
+}
+
+.history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.history-list li {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.history-list p {
+  margin: 0 0 6px;
+}
+
+.history-buttons,
+.history-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.history-foot {
+  margin-top: 12px;
+}
+
+.history button,
+.history-buttons button {
+  min-height: 44px;
+}

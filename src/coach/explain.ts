@@ -74,3 +74,25 @@ export function conceptNote(fenBefore: string, uci: string, who: 'you' | 'me'): 
   }
   return undefined;
 }
+
+/** The Lichess-style theme name recorded for a moment, from the motif the line was found under. */
+const MOTIF_THEME: Record<string, string | undefined> = {
+  'mate-in-1': 'mateIn1',
+  'mate-in-2': 'mateIn2',
+  mate: 'mate',
+  fork: 'fork',
+  'discovered-attack': 'discoveredAttack',
+  'hanging-piece': 'hangingPiece',
+  'winning-material': undefined,
+};
+
+/**
+ * The concept to record for a move: the one worded by `conceptNote` when a
+ * detector fires, else the motif the line was found under. Undefined when
+ * neither names anything (the record then says "no concept").
+ */
+export function conceptOf(fenBefore: string, uci: string, who: 'you' | 'me', motif?: string): string | undefined {
+  const note = conceptNote(fenBefore, uci, who);
+  if (note) return note.concept === 'loosePiece' ? 'hangingPiece' : note.concept;
+  return motif ? MOTIF_THEME[motif] : undefined;
+}

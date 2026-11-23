@@ -93,11 +93,12 @@ Spec: "Try a sideline".
 - Done: one-level `Branch`, "Try a sideline" button (Lesson only), per-move judging with concept sentences (`explain.ts`, `sideline.ts`), "Show me" after a mistake, "Try it out" at a tactic prompt; the arrow flow, two-deep stack, breadcrumb and "What if?" are gone. UX: one button instead of two, a banner with the line and Undo / Back to game.
 - **Not done from the UX list, moved on:** captured material on each side of the board, the eval bar decision (still undecided; the sideline shows no numbers except in the "can't name a reason" fallback), the bubble above the board on phones (task 1.8). Also open: wording for trapped piece, sacrifice, capturing the defender and the rest once their detectors are good enough (1.6c round 2).
 
-### ⬜ 1.7 Game persistence and PGN
+### ✅ 1.7 Game persistence and PGN
 - Save the game in progress, plus finished games with their sidelines, on the device. Resume after a reload.
 - Export the PGN (copy or download).
 - Store hints used per game (for mastery later).
 - **Moments record:** every flagged moment (mistake, missed tactic, good find) saved with its position, the concept named (or none) and the outcome. This is the input for Review and Practice.
+- Done: `store.ts`, `pgn.ts`, `Moment` in `coach.ts`, resume after reload, History dialog (Copy / Download PGN, Delete), backup file (Back up / Restore). See STATE decisions 22 and 23. Not done: a list of the *moments* themselves and the concept record per player (that is Review, 1.7d); opening a past game on the board (also Review).
 
 ### ⬜ 1.7c Game import
 For Review. Paste or upload a PGN; fetch a player's public games from the Chess.com and Lichess APIs (player-initiated; rule 4 is relaxed for this one request, see STATE decision 17; check cross-origin support first). Imported games go through the same moment-finding as live games.

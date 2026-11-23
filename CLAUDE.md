@@ -29,6 +29,7 @@ npx tsc              # type-check only
 | `src/app/levels.ts` | The 6 levels: Maia rating, max taught line, min gain, mistake threshold, patterns flagged |
 | `src/app/modes.ts` | Lesson / Sparring: switches the coach and game screen read (prompts, small talk, takebacks, reveals plans, sidelines) |
 | `src/app/branches.ts` | A sideline: a line played out from a position, one level deep (state only; the screen is in `ui.ts`) |
+| `src/app/store.ts`, `src/app/pgn.ts` | Saved games on the device (localStorage, backup file) and a game as PGN with comments and sidelines as variations |
 | `src/app/opponent.ts` | Coach's move choice: Maia (human-like), weakened Stockfish fallback |
 | `src/app/theme.ts`, `public/themes/<id>/` | Theme packs: `theme.json` + piece images, no code changes to reskin |
 | `src/engine/stockfish.ts` | UCI wrapper for Stockfish WASM (single-threaded lite build) |
