@@ -7,7 +7,7 @@
 //
 // Output: public/puzzles/sample.json. Nothing here runs in the app; the app
 // only ever loads our own static file (rule 4).
-import { createReadStream, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { createReadStream, mkdirSync, writeFileSync, existsSync, openSync, readSync, closeSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { createZstdDecompress } from 'node:zlib';
 
@@ -16,6 +16,23 @@ const perBucket = Number(process.argv[3] ?? 40);
 if (!existsSync(source)) {
   console.error(`Not found: ${source}\nDownload lichess_db_puzzle.csv.zst from https://database.lichess.org/ first.`);
   process.exit(1);
+}
+
+// The Lichess file starts with a skippable zstd frame (magic 0x184D2A5?) that Node's decoder rejects: skip it.
+function zstdStart(path) {
+  const fd = openSync(path, 'r');
+  const head = Buffer.alloc(8);
+  let pos = 0;
+  try {
+    for (;;) {
+      if (readSync(fd, head, 0, 8, pos) < 8) return pos;
+      const magic = head.readUInt32LE(0);
+      if ((magic & 0xfffffff0) !== 0x184d2a50) return pos;
+      pos += 8 + head.readUInt32LE(4);
+    }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 // Themes that matter below ~1600 (keep in sync with DETECTABLE / NOT_YET in src/coach/concepts.ts).
@@ -41,7 +58,7 @@ const buckets = new Map(); // "theme|band" -> { seen, items }
 const wanted = new Set(THEMES);
 let rows = 0;
 
-const rl = createInterface({ input: createReadStream(source).pipe(createZstdDecompress()), crlfDelay: Infinity });
+const rl = createInterface({ input: createReadStream(source, { start: zstdStart(source) }).pipe(createZstdDecompress()), crlfDelay: Infinity });
 for await (const line of rl) {
   if (!rows++) continue; // header
   const [id, fen, moves, rating, rd, popularity, , themes] = line.split(',');

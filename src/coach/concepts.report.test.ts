@@ -46,10 +46,13 @@ describe.skipIf(!run)('concept detectors vs Lichess puzzle labels', () => {
       });
     }
     // How many puzzles get any named concept at all (the honest "can't name a reason" share is the rest).
-    const named = puzzles.filter((p) => (detected.get(p.id)?.size ?? 0) > 0).length;
-    console.log(`\nSample: ${puzzles.length} puzzles (up to ${perBucket} per theme and rating band; themes over-represented, so precision is only indicative).`);
-    console.table(rows);
-    console.log(`Puzzles with at least one named concept: ${named}/${puzzles.length} (${Math.round((100 * named) / puzzles.length)}%). Crashed: ${crashed}.`);
+    const share = (set: PuzzleRecord[]) => {
+      const n = set.filter((p) => (detected.get(p.id)?.size ?? 0) > 0).length;
+      return `${n}/${set.length} (${Math.round((100 * n) / (set.length || 1))}%)`;
+    };
+    const mates = puzzles.filter((p) => p.themes.includes('mate'));
+    const others = puzzles.filter((p) => !p.themes.includes('mate'));
+    console.log(`Puzzles with at least one named concept: all ${share(puzzles)}; mate puzzles ${share(mates)}; other puzzles ${share(others)}. Crashed: ${crashed}.`);
     expect(crashed).toBe(0);
   });
 });

@@ -71,7 +71,7 @@ Spec: "Explain your idea", "Lines".
 ### ✅ 1.6a Branches: state and UI ("What if?") — superseded
 Built `src/app/branches.ts` (two-deep `BranchStack`), a "What if?" button, breadcrumb, tinted border, Stockfish replies. Play-testing showed it is a sandbox with no teaching value, and it overlaps "Ask about a line" (1.5). **Design reset, Nov 23:** see the spec's "The idea behind the product". The reusable parts (board play in a position, Stockfish replies, undo, tinted border) carry into 1.6d; nested depth, the breadcrumb and merging are dropped.
 
-### ⬜ 1.6b Lichess puzzle sample and concept test harness
+### ✅ 1.6b Lichess puzzle sample and concept test harness
 The concept layer needs ground truth. Lichess puzzles (CC0) carry theme labels.
 - `scripts/build-puzzles.mjs`: streams `lichess_db_puzzle.csv.zst` (~310 MB, downloaded by hand, not committed), keeps the themes that matter below ~1600, samples N puzzles per theme per rating band, writes small JSON files to `public/puzzles/` (git-ignored if large; check size; rule 4: our own static files only).
 - `src/coach/concepts.ts`: the concept list (Lichess theme names), which are detectable today, and a `detect(fen, solution)` that maps our existing facts and motifs to themes.
