@@ -407,3 +407,9 @@ button.primary {
 #new-game {
   min-height: 44px;
 }
+
+.material {
+  margin: 8px 16px 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+}

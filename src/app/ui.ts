@@ -12,6 +12,7 @@ import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { MODES, modeInfo, type Mode, type ModeId } from './modes';
 import { LineInput, MAX_LINE_MOVES, type Line, type LineMove, type TapResult } from './lines-input';
+import { balanceText, materialOf } from './material';
 import { Navigation, RemarkLog, plyLabel } from './navigation';
 import { createOpponent, type Opponent } from './opponent';
 import type { Theme } from './theme';
@@ -117,6 +118,7 @@ export class App {
         <div id="board-area" class="board-area">
           <div id="board" class="cg-wrap"></div>
           <div id="promotion" class="promotion" hidden></div>
+          <p id="material" class="material" aria-label="Captured material"></p>
           <div class="nav" role="group" aria-label="Move navigation">
             <button id="nav-start" aria-label="First position">«</button>
             <button id="nav-back" aria-label="Previous move">‹</button>
@@ -159,7 +161,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'explain', 'explain-bar', 'explain-text', 'explain-undo', 'explain-cancel', 'explain-done']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'explain', 'material', 'explain-bar', 'explain-text', 'explain-undo', 'explain-cancel', 'explain-done']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -291,6 +293,7 @@ export class App {
       this.board.setAutoShapes(this.shapesAt(nav.live));
       this.viewShapes = false;
     }
+    this.renderMaterial(shown.fen);
     this.renderMoves();
     this.renderBubble();
     this.renderNav(shown.lastMove?.san);
@@ -300,6 +303,15 @@ export class App {
     // Explaining a line starts from the live position, on the player's turn.
     (this.el.explain as HTMLButtonElement).disabled = !canMove;
     this.el.portrait.classList.toggle('busy', this.thinking);
+  }
+
+  /** Pieces each side has captured, and the point balance (board only, no engine). */
+  private renderMaterial(fen: string): void {
+    const m = materialOf(fen);
+    const white = this.game.playerColor === 'white';
+    const mine = white ? m.lostByBlack : m.lostByWhite; // what I captured
+    const theirs = white ? m.lostByWhite : m.lostByBlack;
+    this.el.material.textContent = `You took ${mine || '–'} · Coach took ${theirs || '–'} · ${balanceText(m.balance, white ? 'w' : 'b')}`;
   }
 
   private shapesAt(ply: number): DrawShape[] {
