@@ -3,6 +3,7 @@
 A chess app where you play an AI coach who thinks aloud, hints at the right moments and gives feedback on your ideas. Target players: beginner to ~1600. Runs fully in the browser as a static site (no server).
 
 - Product spec: [Sideline — Product Spec.md](./Sideline%20—%20Product%20Spec.md). This is the "what" and "why".
+- The idea behind the product (read before designing any feature): the spec's "The idea behind the product". Every feature is a step in its improvement loop.
 - Where things stand: [docs/STATE.md](docs/STATE.md). Read this first in every session.
 - What to build next: [docs/PLAN.md](docs/PLAN.md). Work on one task from it per session.
 
@@ -33,6 +34,7 @@ npx tsc              # type-check only
 | `src/engine/maia.ts` | Maia3 via maia3-js + ONNX Runtime Web (wasm build) |
 | `src/engine/llm.ts` | WebLLM wrapper (only used by the tests page so far) |
 | `src/coach/facts.ts` | Board facts per move: material, captures, forks, discovered attacks, check/mate |
+| `src/coach/concepts.ts` | Concepts (Lichess theme names) detected in a line; `npm run concepts` scores them against sampled Lichess puzzles |
 | `src/coach/lines.ts` | Cuts engine lines to the taught part, names the motif |
 | `src/coach/analyst.ts` | Second Stockfish: position evals, threats (pass the move), forced replies |
 | `src/coach/narration.ts` | Facts for the coach's own move: threat answered, captures, idea, move quality vs Stockfish |
@@ -45,7 +47,7 @@ npx tsc              # type-check only
 1. **The engine decides what's true.** Every chess claim comes from Stockfish or board code (`facts.ts`, `lines.ts`). Templates only word facts. An AI model may later rephrase, never add facts. Never let text claim something the facts don't contain.
 2. **Honest narration.** The coach plays weaker moves on purpose (Maia). It must never call those moves good.
 3. **The coach mostly stays quiet.** Rules in `coach.ts` decide when it speaks; only flag patterns in the player's level (`levels.ts` `motifs`).
-4. **Static site only.** No server, no API keys, nothing fetched from a CDN at runtime except the WebLLM model download. Must work on GitHub Pages (no COOP/COEP headers, so single-threaded engines).
+4. **Static site only.** No server, no API keys, nothing fetched from a CDN at runtime except the WebLLM model download and, when the player asks, their own public games from the Chess.com/Lichess APIs (game import). Must work on GitHub Pages (no COOP/COEP headers, so single-threaded engines).
 5. **Phone-first UI.** Tap to move (no drag needed), board full width under 760px, 16px gutters.
 
 ## How to work here

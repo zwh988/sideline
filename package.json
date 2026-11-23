@@ -12,7 +12,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "concepts": "node scripts/concepts.mjs",
+    "puzzles": "node scripts/build-puzzles.mjs"
   },
   "dependencies": {
     "@lichess-org/chessground": "^10.5.0",

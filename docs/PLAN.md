@@ -68,31 +68,39 @@ Spec: "Explain your idea", "Lines".
 - **Done when:** this works on the phone viewport, and there are unit tests for line checking.
 - Done: `src/app/lines-input.ts`, `src/coach/linecheck.ts`, `narrateVerdict` in `templates.ts`, `Coach.explainLine`. Explain button + "Show me your idea" at a Lesson tactic prompt; live position only (see STATE decision 15). Asking at other key moments, and plans (free text), are not done.
 
-### ✅ 1.6a Branches: state and UI ("What if?")
-Spec: "Branches: play it out" and its rules. This is large; split it if needed (a: branch state and UI, b: verdict and merge).
-- A branch state stack, at most 2 deep. Always visible: a tinted board border and a breadcrumb (*Game → What if 14.Nxe5*).
-- In a branch the coach plays Stockfish's best replies, not Maia's, and comments as the line goes. It ends the branch using the line rules, or steers the player back if they wander into random moves.
-- **Verdict:** a bad line returns to the branch point; a good line can be merged. Merging plays only the player's first move in the real game. Merging from an earlier position needs a takeback, so it's Lesson mode only.
-- Sources: a "What if?" button, a coach-suggested branch, or a line entered in task 1.5.
-- Save branches as PGN variations.
-- **Done when (1.6 overall):** the branch flow is play-tested end to end, including merge, on the phone viewport.
-- **1.6a done:** `src/app/branches.ts` (`Branch`, `BranchStack`, max 2 deep), a "What if?" button (Lesson only) from the live or a viewed position, a nested "What if?" inside a branch, tinted board border (orange, purple at depth 2), breadcrumb, line text, Undo, Back. The coach answers with Stockfish's best move and says only board facts (start, mate or draw). The game is paused and untouched.
+### ✅ 1.6a Branches: state and UI ("What if?") — superseded
+Built `src/app/branches.ts` (two-deep `BranchStack`), a "What if?" button, breadcrumb, tinted border, Stockfish replies. Play-testing showed it is a sandbox with no teaching value, and it overlaps "Ask about a line" (1.5). **Design reset, Nov 23:** see the spec's "The idea behind the product". The reusable parts (board play in a position, Stockfish replies, undo, tinted border) carry into 1.6d; nested depth, the breadcrumb and merging are dropped.
 
-### ⬜ 1.6b Branches: verdict, merge, comments, PGN
-What is left of the list above: comments as the line goes; ending a branch by the line rules or steering back from random moves; bad line (return to the branch point) and good line (merge, Lesson only, plays only the player's first move); a coach-suggested branch; a branch started from a line entered in 1.5; saving branches as PGN variations (with 1.7).
+### ⬜ 1.6b Lichess puzzle sample and concept test harness
+The concept layer needs ground truth. Lichess puzzles (CC0) carry theme labels.
+- `scripts/build-puzzles.mjs`: streams `lichess_db_puzzle.csv.zst` (~310 MB, downloaded by hand, not committed), keeps the themes that matter below ~1600, samples N puzzles per theme per rating band, writes small JSON files to `public/puzzles/` (git-ignored if large; check size; rule 4: our own static files only).
+- `src/coach/concepts.ts`: the concept list (Lichess theme names), which are detectable today, and a `detect(fen, solution)` that maps our existing facts and motifs to themes.
+- A test harness (`npm run concepts`) scoring each detector against labelled puzzles: precision, recall, and the share of puzzles with no named concept. Vitest tests use a small committed fixture of real puzzles.
+- **Done when:** the sample builds, the harness prints per-theme agreement for the detectors we have (fork, hanging piece, discovered attack, mate in 1/2), and the numbers are recorded in STATE.
 
-### ⬜ 1.6c UX pass (after branches)
-Collected from play-testing 1.5; do it once branches (1.6a/b) exist, since they change the flow.
-- **Ask about a line:** fewer taps (today: button, arrows, "Ask coach", then "Change my line"). Make clear it is a question to the coach: checking a line, confirming understanding, or exploring options. Revisit button and prompt wording.
-- **Captured material:** put what *you* captured on your side of the board and what the coach captured on its side (not one text line under the board); the point balance next to them.
-- **Eval bar:** decide whether to have one at all (it gives away answers; the coach plays weak moves on purpose). Candidate: Review mode only, or an off-by-default setting.
-- **Ideas without replies / general ideas:** see the notes in STATE; belongs with the plans task.
-- Phone: bubble below the board is barely visible (also in 1.8).
+### ⬜ 1.6c Concept detectors: close the gaps
+Add and score detectors, one theme at a time (pin, skewer, back-rank mate, trapped piece, capturing/removing the defender, deflection, attraction, double check, sacrifice, quiet move...), cheapest and most common below 1600 first. Each needs: a detector in board code, an engine check, a test on real puzzles, and wording in `templates.ts` (hand-written; rule 1). Unfound concepts stay honest: "I can't name a reason I can check."
+
+### ⬜ 1.6d Try a sideline (replaces 1.6a's branches and 1.5's arrow flow)
+Spec: "Try a sideline".
+- One level, always visible (tinted border + banner + Back). The player plays a move or short line on the board; the coach answers with Stockfish and judges each move live using the 1.5 line checks, then explains with the concept (1.6b/c). Play it, or go back.
+- Lesson only; open (no limits). Sparring has none.
+- Entry points: a button on the player's turn, "Show me" after a mistake remark (plays the refutation), the tactic prompt.
+- Retire "Ask about a line" arrows and "What if?", dropping the two-level stack and breadcrumb.
+- **UX pass folded in** (from play-testing 1.5 and 1.6a): fewer taps, wording, the bubble visible on a phone, captured material on each side, decide on the eval bar. See the notes in STATE.
+- **Done when:** played end to end on the phone viewport, with tests for the judging and the concept wording.
 
 ### ⬜ 1.7 Game persistence and PGN
-- Save the game in progress, plus finished games with their branches, on the device. Resume after a reload.
+- Save the game in progress, plus finished games with their sidelines, on the device. Resume after a reload.
 - Export the PGN (copy or download).
 - Store hints used per game (for mastery later).
+- **Moments record:** every flagged moment (mistake, missed tactic, good find) saved with its position, the concept named (or none) and the outcome. This is the input for Review and Practice.
+
+### ⬜ 1.7c Game import
+For Review. Paste or upload a PGN; fetch a player's public games from the Chess.com and Lichess APIs (player-initiated; rule 4 is relaxed for this one request, see STATE decision 17; check cross-origin support first). Imported games go through the same moment-finding as live games.
+
+### ⬜ 1.7d Review
+Spec: Modes, Review. Walk through a game's critical moments, ask what the player was thinking, let them try sidelines, name the concept. Saved moments feed Practice (Phase 3).
 
 ### ⬜ 1.7b Known openings and gambits
 Found in play (task 1.4 follow-ups): the Queen's Gambit 2.c4 gets "Bold! c4 offers a pawn…" praise every game, and a known gambit can look like a hung pawn. Standard theory should be named, not praised or warned about.

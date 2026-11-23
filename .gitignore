@@ -10,3 +10,4 @@ Thumbs.db
 .claude/settings.local.json
 public/engine/
 public/models/
+data/

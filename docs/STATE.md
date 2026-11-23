@@ -1,6 +1,6 @@
 # Project state
 
-Last updated: 2026-11-23, after task 1.6a (branch state and UI).
+Last updated: 2026-11-23, after the Nov 23 design reset (product loop, concept layer) and task 1.6b part 1 (detector + puzzle harness code).
 
 ## Summary
 
@@ -23,6 +23,7 @@ Roadmap phase 1 (coached game MVP) is about half done. You can play a full game 
 | (after 1.4b) | Move navigation: `navigation.ts`, remark log in the bubble, tap buttons, move-list taps, keys (87 tests) |
 | (after 1.5) | Explain your idea (lines): `lines-input.ts` (tap-arrow state), `linecheck.ts` (move-by-move check), verdict wording in `templates.ts`, Explain button + arrow bar in the game screen (106 tests) |
 | (after 1.6a) | "What if?" branches: `branches.ts` (`Branch`, `BranchStack`), `resultOf` shared from `game.ts`, `Mode.branches`, branch bar + breadcrumb + tinted border in the game screen (119 tests) |
+| (after 1.6b, part 1) | Concept layer started: `concepts.ts` (detectors named after Lichess puzzle themes), `scripts/build-puzzles.mjs` (samples the CC0 puzzle database), `npm run concepts` (scores detectors against labelled puzzles), spec/plan reworked (129 tests) |
 | (after 1.4) | Praise for a sound sacrifice; hung threshold 0.9 per pawn; the engine's top move is never a mistake (72 tests) |
 
 ## Feasibility results (desktop only so far)
@@ -87,6 +88,10 @@ These should be folded into the spec (see PLAN, task "Spec sync").
 
 16. **Branches (task 1.6a).** `BranchStack` holds at most 2 `Branch`es over chess.js; the game is not touched while one is open (no takebacks, hints, Explain, or navigation inside). Start: the shown position (live, or an earlier one when viewing; the player keeps their colour, so if the opponent is to move there the coach plays first). The coach's reply is Stockfish's top move (analyst, depth 12/10), not Maia. Coach text in a branch is limited to board facts (start, checkmate/draw); it is kept in the branch (`Branch.notes`), not in the game's remark log. Lesson only (`Mode.branches`). No clock exists yet, so "clock pauses" is moot.
 
+17. **Design reset (Nov 23).** The product is one loop: moment → idea or sideline → engine-checked consequence → named concept → record → comes back in practice. Same coach and tools in the live game, Review (imported or saved games) and Practice. The user's gripe with engines (they give the best move, not why) is the core: lines must be translated to **concepts**, detected by board code and confirmed by the engine, never invented; when no detector fires the coach says it can't name a reason. Concept names and test data come from the Lichess puzzle themes. Details in the spec, "The idea behind the product".
+18. **Try a sideline replaces branches and the arrow flow.** One level deep, no merging, no nested branches, no breadcrumb; judged move by move; open (no limits) in Lesson, absent in Sparring (cheating the coach only cheats the learner). Task 1.6a's two-deep `BranchStack` and "What if?" button are a sandbox with no teaching value and get reshaped in 1.6d; the arrow entry of 1.5 is retired there. Decision 16 is superseded.
+19. **Rule 4 relaxed for game import:** a player-started fetch of their own public games from the Chess.com or Lichess API is allowed (the username is sent to that service only). Cross-origin support is to be checked in 1.7c. CLAUDE.md updated.
+
 ## Notes from the user after 1.5 (to do later)
 
 - Wording: "Show me your idea" read as the coach showing its idea (now "Let me show you"); "Explain" felt odd (button now "Show a line"). Still open: the whole flow feels clunky (too many taps: button, arrows, Done, then "Change my line"). Rethink in a UX pass.
@@ -97,6 +102,8 @@ These should be folded into the spec (see PLAN, task "Spec sync").
 - After 1.5: the captured-material line under the board is a stopgap ("You took … · Coach took … · You +3"); wanted: each side's captures on that side of the board. Eval bar undecided. Both are in PLAN task 1.6c. No-tactic hints now name the engine's best move with a board-fact reason (`Coach.hint`), untested in the browser.
 
 ## Known issues and gaps
+
+- **Concept detectors are partial.** `concepts.ts` detects mate in N, fork, discovered attack, hanging piece, back-rank and smothered mate, double check, promotion. Missing: pin, skewer, deflection, attraction, capturing the defender, trapped piece, sacrifice, quiet move and others (`NOT_YET`). Known miss: a discovered attack on a *defended* piece that is attacked more often than defended (`facts.ts` only counts a more valuable or undefended target); marked `it.fails` in `concepts.test.ts`. The harness numbers on real puzzles are not recorded yet (it needs the 310 MB database download).
 
 - Explain: the verdict arrows are drawn on the position before the line, so a piece that moves twice (e.g. a queen) has its second arrow start from an empty square. Plans (free text, AI model structure) are not built, and a line can't yet be played out as a branch (1.6). Promotion inside a line is untested by clicking. An opponent's move that is "worse than best" is reported even when both choices are bad for them but one is much less bad (e.g. +7.8 vs +3.9 for the player): that is true by the engine, but may feel picky at low levels.
 - Foldable / small-tablet widths (760–~900 px) break the two-column layout (board cut off at 790 px wide). Planned in task 1.8.

@@ -6,7 +6,7 @@ Nov 23, 2026 · @zwhao
 
 A chess app where you play against an AI coach who thinks aloud, hints at the right moments and gives feedback on your ideas, so players learn to find tactics and plans, not just answers.
 
-**The name.** Sideline has two meanings: in sports, the sideline is where the coach stands and guides you while you play; in chess, sidelines are the variations you explore, as in the play-it-out branches.
+**The name.** Sideline has two meanings: in sports, the sideline is where the coach stands and guides you while you play; in chess, a sideline is a variation you step into to test an idea. The second meaning is only earned by a feature that teaches: *Try a sideline* (see below) is the tool for testing a move before you commit to it. We don't add features to justify the name.
 
 **Problem.** Beginner and improving players (roughly 400–1600) do puzzles and study openings, but in real games they still miss tactical ideas and don't know what to do in quiet positions. Engines tell them the best move but not how to think, and evaluations like "+2.3, Nf5" mean nothing to them.
 
@@ -37,6 +37,45 @@ Every feature follows how real coaches teach, adapted for an app.
 5. **Playing out positions.** Convert a winning position or hold a draw against the coach.
 6. **Repetition.** Repeat the same exercise sets until the patterns become instant (the Woodpecker approach).
 7. **The engine decides what's true.** Stockfish and board checks supply every fact. The AI model only turns those facts into language and never judges positions itself.
+
+## The idea behind the product
+
+**The coach checks your thinking, not just your moves.** Engines and game-review tools give the best move and a number. The player learns that one move in that one position, not *why*, so nothing carries over to the next game. Everything in Sideline serves one loop:
+
+> A **moment** arises → you give your idea, or **try a move in a sideline** → the coach checks it against engine facts → you see the **consequence** → the coach names the **concept** behind it → you retry or commit → the moment is recorded, so the concept comes back later.
+
+The same loop runs in three places, with the same coach, the same sideline and the same record:
+
+1. **Live game** (the main attraction): moments arise while you play.
+2. **Review:** moments come from games you import (pasted PGN, file, or the Chess.com and Lichess APIs) or from your saved games.
+3. **Practice:** your own recorded moments, and puzzles of the same concept, come back at spaced intervals.
+
+### Concepts: the "why"
+
+Turning an engine line into a concept is the product's main job. For each moment the coach says four things:
+
+1. **What the best move achieves,** as a named concept ("it forks the king and rook", "it defends the loose bishop and attacks something").
+2. **Why your move falls short,** shown by a sideline's concrete consequence ("after Bc4, the knight takes your queen").
+3. **The pattern in general,** with a spotting habit ("a piece attacked by a cheaper piece is in trouble: ask what is undefended").
+4. **More examples** of the same concept, in practice.
+
+Rules for concepts:
+
+- **Board code detects them, the engine confirms them** (principle 7). A concept is named only when a detector found it; templates never invent one.
+- **When no detector fires,** the coach says so honestly: "The engine prefers this by 0.8 pawns, but I can't name a reason I can check." It never makes one up.
+- **Tiers, by how verifiable they are:** (1) tactical motifs (fork, pin, skewer, discovered attack, hanging piece, trapped piece, back-rank mate, removing the defender, deflection and so on); (2) immediate positional reasons (development, king safety, an open file, the centre); (3) long-term plans and structure, which are mostly out of reach for now.
+- **Vocabulary and test data come from the Lichess puzzle themes** (CC0 puzzle database): we use their theme names, run our detectors against their labelled puzzles to measure agreement, and use the puzzles as examples. The explanations are written by us.
+- **The record is measured, not assumed:** every moment is tagged by concept, so the app shows whichever patterns a given player misses most, at any level.
+
+### Try a sideline
+
+On the player's turn, in Lesson mode, "Try a sideline" lets the player play a move or a short line on the board without committing. The coach answers with Stockfish's best replies, says what happens, and names the concept. The player then plays it, or returns to the real position and tries something else.
+
+- **One level deep, always visible:** a tinted board border and a banner ("Trying a sideline · Back to game"). No nested branches and no merging.
+- **It replaces** the separate arrow-entry flow ("Ask about a line") and the "What if?" button: playing the moves on the board is the same question with fewer taps.
+- **Open on purpose in Lesson mode:** the player can test any move. It's a learning tool and the coach doesn't pretend the game is competitive. Sparring has no sideline, no hints unless asked, and no takebacks.
+- **From the coach too:** after a mistake, "Show me" plays the refutation as a sideline; when thinking aloud, "I considered… but look what happens".
+- Sidelines are saved with the game as standard PGN variations.
 
 ## Core feature: the coached game
 
@@ -91,7 +130,7 @@ The player can show what their move is meant to do, and the coach gives feedback
 - **Arrows by tapping:** tap a piece, then a square. No dragging, so it is precise on a phone.
 - **Arrows snap to legal moves;** an illegal arrow shows as invalid immediately.
 - **Automatic order and colors:** arrows are numbered 1, 2, 3, with one color for the player's moves and another for the opponent's replies. Undo removes the last arrow.
-- **Play it out:** for lines longer than 2–3 moves, the player moves pieces in a branch (see Branches below). Every move is legal by construction.
+- **Play it out:** the player moves pieces in a sideline (see "Try a sideline" above). Every move is legal by construction. *Design change (Nov 23):* playing on the board replaces arrow entry, which took too many taps, so the arrow flow built in task 1.5 will be retired once sidelines are judged move by move.
 - Lines are checked move by move against the engine and board code.
 
 **Plans** ("Re1, because the central pawns may be traded and the e-file may open"):
@@ -121,7 +160,9 @@ The coach sometimes plays weaker moves to match the player's level. Its narratio
 - Human-like moves, narrated honestly, mistakes included.
 - Deliberate teaching traps in Lesson mode: "I'm leaving something loose here. Can you spot it?"
 
-### Branches: play it out
+### Branches: play it out (superseded)
+
+> **Superseded Nov 23, 2026** by "Try a sideline" in "The idea behind the product": one level deep, judged move by move, no merging, no nested branches. The text below is the earlier design, kept for reference until the spec sync.
 
 The coach can step off the game into a side line, play it out with the player, explain the result, then return to the game or merge a good line into it.
 
@@ -235,7 +276,7 @@ Puzzle drills and openings reuse the same coach, engine, hints and level system.
 
 ### Puzzle drills
 
-- **Source:** the free Lichess puzzle database, filtered by the player's level (puzzle rating) and by theme (fork, pin, skewer and so on).
+- **Source:** the free Lichess puzzle database (CC0; about 310 MB compressed, so only a sample per theme and rating band is bundled, as static files of our own), filtered by the player's level (puzzle rating) and by theme (fork, pin, skewer and so on).
 - **Coaching:** the same step-by-step hints as in games. The coach can ask the player to explain their idea before moving.
 - **Repetition:** Woodpecker-style sets solved repeatedly, tracking speed and accuracy.
 - **From games:** tactics the player missed in coached games become puzzles in their own set, with spaced repetition (back after 1 day, then 3, then 7).
@@ -326,6 +367,7 @@ Stockfish and board code produce every fact, for the whole line; rules decide wh
   3. **Cloud model (optional, later):** only if small models turn out too weak at explaining ideas.
 - **Puzzle data:** a filtered subset of the Lichess puzzle database, bundled by level and theme.
 - **Progress:** stored on the device; no accounts at first.
+- **Game import:** pasted PGN or a file, and, started by the player, a fetch of their public games from the Chess.com or Lichess API (the only network request besides the model download; the username is sent to that service and nowhere else; the API must allow cross-origin requests from a static site, to be checked).
 
 ### Hosting
 
@@ -376,7 +418,9 @@ Success means players find more of the tactics available to them and make better
 | Older devices without WebGPU | Template comments; everything else works |
 | The coach talks too much and players stop reading | Rule-based triggers, comment budget, Sparring mode, plain-coach setting |
 | The opponent doesn't feel human at low levels | Maia for move choice; tune and test early |
-| Branches confuse players | Visible branch state, breadcrumb trail, at most two levels deep |
+| Sidelines confuse players | One level deep, always-visible banner and tinted border, a single "Back to game" |
+| The "why" is shallow or wrong | Named only when a detector found it and the engine agrees; honest "can't name a reason" otherwise; detectors scored against labelled Lichess puzzles |
+| Features pile up with no common purpose | Each feature must be a step in the improvement loop (moment → idea → consequence → concept → record) |
 | Curriculum quality without expert reviewers | Data-driven ordering, verifiable claims only, lesson-effect tracking, community feedback |
 | Placeholder art licenses | Use CC0, MIT, Apache or CC BY sets; avoid GPL and non-commercial sets for a public release |
 
