@@ -7,7 +7,7 @@ import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key } from '@lichess-org/chessground/types';
 import type { Square } from 'chess.js';
 import { Analyst } from '../coach/analyst';
-import { Coach, type Remark } from '../coach/coach';
+import { Coach, joinRemarks, type Remark } from '../coach/coach';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { createOpponent, type Opponent } from './opponent';
@@ -247,11 +247,19 @@ export class App {
     return id !== this.gameId || this.game.moves.length !== ply;
   }
 
-  private async startPlayerTurn(id: number, statusText = 'Your move.'): Promise<void> {
+  /** `coachMove`: the coach's move just played, so it can think aloud about it. */
+  private async startPlayerTurn(
+    id: number,
+    statusText = 'Your move.',
+    coachMove?: { fenBefore: string; uci: string; lastMove?: { san: string; to: Square } },
+  ): Promise<void> {
     this.status(statusText);
     const ply = this.game.moves.length;
     const coach = await this.coach;
-    const remark = await coach.onPlayerTurn(this.game.fen, ply);
+    const narration = coachMove
+      ? await coach.onCoachMove(coachMove.fenBefore, coachMove.uci, ply, coachMove.lastMove)
+      : undefined;
+    const remark = joinRemarks(narration, await coach.onPlayerTurn(this.game.fen, ply));
     if (!this.stale(id, ply) && remark) this.say(remark);
   }
 
@@ -306,13 +314,20 @@ export class App {
     const [uci] = await Promise.all([reply ?? opponent.chooseMove(this.game), sleep(MIN_THINK_MS)]);
     if (id !== this.gameId) return; // a new game started meanwhile
 
+    const fenBefore = this.game.fen;
+    const prev = this.game.lastMove;
+    const lastMove = prev && prev.color === this.game.playerColor ? { san: prev.san, to: prev.to } : undefined;
     const move = this.game.play(uci);
     this.thinking = false;
     this.board.setAutoShapes([]);
     this.el['bubble-box'].classList.add('stale');
     this.sync();
     if (this.checkGameOver()) return;
-    await this.startPlayerTurn(id, `I played ${move.san}.${this.game.inCheck ? ' Check!' : ''} Your move.`);
+    await this.startPlayerTurn(id, `I played ${move.san}.${this.game.inCheck ? ' Check!' : ''} Your move.`, {
+      fenBefore,
+      uci,
+      lastMove,
+    });
   }
 
   private checkGameOver(): boolean {

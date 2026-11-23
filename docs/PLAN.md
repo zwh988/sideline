@@ -26,7 +26,7 @@ Board, tap-to-move, Maia opponent per level, takeback, promotion, theme pack, ph
 ### ✅ 1.2 Fact extractor and coach triggers
 Facts, line cutting, analyst, trigger rules, hint ladder, `?fen=`, unit tests.
 
-### ⬜ 1.3 Coach thinks aloud on its own moves
+### ✅ 1.3 Coach thinks aloud on its own moves
 Spec: "The coach's three jobs", job 2, and "Honest narration".
 - After the coach moves (Lesson mode), give a short narration built from facts:
   - what the player's last move changed or threatened,
@@ -36,6 +36,7 @@ Spec: "The coach's three jobs", job 2, and "Honest narration".
 - Use the comment budget so it doesn't talk on every move. Prefer moves that teach something: a threat it creates, a capture, a defended threat.
 - New templates in `templates.ts`. A new coach method, for example `onCoachMove(fenBefore, move)`.
 - **Done when:** unit tests cover the narration facts, and a scripted Maia-vs-Maia game shows narration that is accurate, honest about weaker moves, and not on every move.
+- Done: threats answered, captures, quiet-move ideas. Left for later: candidate moves ("I considered…"), and narration in Sparring mode (1.4).
 
 ### ⬜ 1.4 Modes: Lesson and Sparring
 Spec: "Modes" table.

@@ -6,12 +6,26 @@
 //   Player mistake (level's concepts) → explain briefly, offer a takeback
 //   Player found the tactic           → short praise naming the pattern
 //   New phase                         → planning prompt
+//   The coach's own move              → think aloud (narration.ts), under the budget
 //   Nothing important                 → silence
 import { Chess, type Square } from 'chess.js';
 import type { Level } from '../app/levels';
 import type { Analyst, PositionEval } from './analyst';
 import type { TaughtLine } from './lines';
-import { byImportance, capitalize, moveWithWhich, narrateLine, pieceRef, praise, targetList, winsPhrase } from './templates';
+import { coachMoveFacts } from './narration';
+import {
+  byImportance,
+  capitalize,
+  moveWithWhich,
+  narrateCoachMove,
+  narrateLine,
+  pieceRef,
+  praise,
+  targetList,
+  winsPhrase,
+  type Narration,
+  type NarrationPriority,
+} from './templates';
 
 export type Mood = 'neutral' | 'thinking' | 'pleased' | 'concerned' | 'surprised';
 
@@ -22,7 +36,7 @@ export interface Shape {
 }
 
 export interface Remark {
-  kind: 'tactic' | 'threat' | 'mistake' | 'missed-tactic' | 'praise' | 'defended' | 'phase' | 'hint';
+  kind: 'tactic' | 'threat' | 'mistake' | 'missed-tactic' | 'praise' | 'defended' | 'phase' | 'hint' | 'narration';
   text: string;
   mood: Mood;
   offerTakeback?: boolean;
@@ -41,9 +55,20 @@ interface TurnFacts {
 const BUDGET_PLIES = 6;
 /** Moves within this much of the best move count as "found it". */
 const FOUND_CP = 60;
+/**
+ * Thinking aloud waits this many plies after the last remark, by how much
+ * the narration teaches: a threat it answered, a capture, a quiet idea.
+ */
+const NARRATION_GAP: Record<NarrationPriority, number> = { high: 2, medium: 4, low: BUDGET_PLIES };
+/** Quiet-move reasons are said at most this often per game. */
+const TOPIC_LIMIT: Partial<Record<Narration['topic'], number>> = { castle: 1, develop: 2, 'centre-pawn': 1 };
 
 export class Coach {
   private turn?: Promise<TurnFacts>;
+  private turnFen?: string;
+  /** The evaluation after the player's last move, reused to judge the coach's reply. */
+  private afterPlayer?: PositionEval;
+  private topicCount = new Map<Narration['topic'], number>();
   private hintStep = 0;
   private lastRemarkPly = -BUDGET_PLIES;
   private said = new Set<string>();
@@ -70,6 +95,8 @@ export class Coach {
   /** Starts analysing the player's position in the background (hints must feel instant). */
   prepare(fen: string): Promise<TurnFacts> {
     this.hintStep = 0;
+    if (this.turn && this.turnFen === fen) return this.turn; // already analysing this position
+    this.turnFen = fen;
     this.turn = (async () => {
       const ev = await this.analyst.evaluate(fen, 2);
       const cut = this.analyst.taughtLine(ev, this.limits());
@@ -116,6 +143,7 @@ export class Coach {
     if (chess.isCheckmate()) return undefined; // the game screen celebrates
 
     const after = await this.analyst.evaluate(chess.fen(), 1);
+    this.afterPlayer = after;
     const loss = t.ev.bestCp - -after.bestCp;
 
     // Found the tactic (praised once, at its first move).
@@ -160,6 +188,50 @@ export class Coach {
       return this.remark(ply, { kind: 'defended', text: 'Good, you saw my threat.', mood: 'pleased' });
     }
     return undefined;
+  }
+
+  /**
+   * The coach thinks aloud after its own move: what the player's last move
+   * threatened and how this move answers it, its captures, or the idea behind
+   * a quiet move. Honest: it never calls its move good (Maia plays at the
+   * player's level). Call before `onPlayerTurn`, which reuses the analysis.
+   * `lastMove` is the player's move before it, if any.
+   */
+  async onCoachMove(
+    fenBefore: string,
+    uci: string,
+    ply: number,
+    lastMove?: { san: string; to: Square },
+  ): Promise<Remark | undefined> {
+    const chess = new Chess(fenBefore);
+    chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    if (chess.isGameOver()) return undefined; // the game screen announces the result
+
+    // The player's turn analysis goes first in the queue: hints must stay instant.
+    const turn = this.prepare(chess.fen());
+    const before =
+      this.afterPlayer?.fen === fenBefore ? this.afterPlayer : await this.analyst.evaluate(fenBefore, 1);
+    const playerThreat = this.teachable(await this.analyst.threat(fenBefore, this.limits()));
+    const t = await turn;
+    const cut = this.analyst.taughtLine(t.ev, this.limits());
+
+    const facts = coachMoveFacts({
+      fenBefore,
+      uci,
+      lastMove,
+      playerThreat,
+      playerLineAfter: this.teachable(cut.kind === 'line' ? cut.line : undefined),
+      // Scores are from the side to move: the coach's before, the player's after.
+      lossCp: before.bestCp - -t.ev.bestCp,
+      mistakeCp: this.level.mistakeCp,
+      ply: ply - 1,
+    });
+    const n = narrateCoachMove(facts);
+    if (!n || ply - this.lastRemarkPly < NARRATION_GAP[n.priority]) return undefined;
+    const count = this.topicCount.get(n.topic) ?? 0;
+    if (count >= (TOPIC_LIMIT[n.topic] ?? Infinity)) return undefined;
+    this.topicCount.set(n.topic, count + 1);
+    return this.remark(ply, { kind: 'narration', text: n.text, mood: 'thinking' });
   }
 
   /** Step-by-step hints: something is here, where to look, which piece, the answer. */
@@ -291,4 +363,14 @@ function isEndgame(chess: Chess): boolean {
     }
   }
   return (queens === 0 && pieces <= 26) || pieces <= 13;
+}
+
+/** Joins the coach's narration with the remark for the player's turn into one bubble. */
+export function joinRemarks(first: Remark | undefined, second: Remark | undefined): Remark | undefined {
+  if (!first || !second) return first ?? second;
+  return {
+    ...second,
+    text: `${first.text} ${second.text}`,
+    shapes: [...(first.shapes ?? []), ...(second.shapes ?? [])],
+  };
 }

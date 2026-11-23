@@ -34,6 +34,7 @@ npx tsc              # type-check only
 | `src/coach/facts.ts` | Board facts per move: material, captures, forks, discovered attacks, check/mate |
 | `src/coach/lines.ts` | Cuts engine lines to the taught part, names the motif |
 | `src/coach/analyst.ts` | Second Stockfish: position evals, threats (pass the move), forced replies |
+| `src/coach/narration.ts` | Facts for the coach's own move: threat answered, captures, idea, move quality vs Stockfish |
 | `src/coach/coach.ts` | Trigger rules (when the coach speaks), hint ladder, comment budget |
 | `src/coach/templates.ts` | Sentences built from facts. This is the coach's voice |
 | `src/tests/`, `tests.html` | Feasibility test page (Stockfish, Maia, WebLLM benchmarks) |

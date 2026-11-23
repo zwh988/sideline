@@ -4,6 +4,7 @@
 import type { PieceSymbol, Square } from 'chess.js';
 import { PIECE_NAME, VALUE, type MoveFacts, type Target } from './facts';
 import type { Motif, TaughtLine } from './lines';
+import type { CoachMoveFacts, Intent } from './narration';
 
 const a = (p: PieceSymbol) => `a ${PIECE_NAME[p]}`;
 const listAnd = (items: string[]) =>
@@ -127,4 +128,96 @@ export function praise(line: TaughtLine): string {
 
 export function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// --- The coach thinking aloud on its own moves -----------------------------
+// Honest narration (spec): the coach plays human-like moves at the player's
+// level, so it states what its move does and why, never that it is good.
+
+export type NarrationPriority = 'high' | 'medium' | 'low';
+
+export interface Narration {
+  text: string;
+  priority: NarrationPriority;
+  /** What the narration is about, for "say this only once or twice a game" limits. */
+  topic: 'threat' | 'capture' | 'promotion' | Intent;
+}
+
+/**
+ * The coach's own move in words, from facts only. Most important first:
+ * how it answered the player's threat, then captures and promotions, then
+ * the idea behind a quiet move. Returns nothing for moves with nothing to say.
+ */
+export function narrateCoachMove(f: CoachMoveFacts): Narration | undefined {
+  const m = f.move;
+  if (m.mate) return undefined; // the game screen announces the result
+
+  if (f.threat) {
+    return { text: `${threatSentence(f)} ${handledSentence(f)}`, priority: 'high', topic: 'threat' };
+  }
+
+  const sentences: string[] = [];
+  if (m.captured) sentences.push(captureSentence(f));
+  if (m.promotion) sentences.push(`My pawn becomes a ${PIECE_NAME[m.promotion]}.`);
+  if (sentences.length) {
+    return { text: sentences.join(' '), priority: 'medium', topic: m.captured ? 'capture' : 'promotion' };
+  }
+
+  // A purposeful-sounding reason for a clear mistake would read as approval.
+  if (f.intent && f.quality !== 'mistake') {
+    return { text: intentSentence(f.intent, m), priority: 'low', topic: f.intent };
+  }
+  return undefined;
+}
+
+function threatSentence(f: CoachMoveFacts): string {
+  const line = f.threat!.line;
+  const first = line.moves[0];
+  // The threat is in the position; the last move didn't necessarily create it.
+  const who = f.lastMove ? `After your ${f.lastMove.san}, you were` : 'You were';
+  if (line.mate) {
+    return line.motif === 'mate-in-1'
+      ? `${who} threatening checkmate with ${first.san}.`
+      : `${who} threatening a mating attack, starting with ${first.san}.`;
+  }
+  return `${who} threatening to win ${winsPhrase(line)} with ${first.san}.`;
+}
+
+function handledSentence(f: CoachMoveFacts): string {
+  const { handled, victim, line } = f.threat!;
+  const first = line.moves[0];
+  const san = f.move.san;
+  switch (handled) {
+    case 'took-attacker':
+      return `So I took your ${PIECE_NAME[first.piece]} on ${first.from} first.`;
+    case 'moved':
+      return `${san} moves my ${PIECE_NAME[victim!.piece]} out of danger.`;
+    case 'defended':
+      return `${san} defends my ${PIECE_NAME[victim!.piece]} on ${victim!.square}.`;
+    case 'blocked':
+      return `${san} blocks it.`;
+    case 'other':
+      return `${san} stops that.`;
+  }
+}
+
+function captureSentence(f: CoachMoveFacts): string {
+  const m = f.move;
+  const check = m.check ? ', with check' : '';
+  if (f.recapture) return `I take back on ${m.to}${check}.`;
+  if (f.capturedOn && f.capturedOn !== m.to) return `I take your pawn on ${f.capturedOn} en passant${check}.`;
+  const what = `your ${PIECE_NAME[m.captured!]} on ${f.capturedOn ?? m.to}`;
+  if (m.capturedUndefended) return `${capitalize(what)} wasn't defended, so I took it${check}.`;
+  return `I take ${what}${check}.`;
+}
+
+function intentSentence(intent: Intent, m: MoveFacts): string {
+  switch (intent) {
+    case 'castle':
+      return "I'm castling, so my king leaves the centre.";
+    case 'develop':
+      return `I'm bringing my ${PIECE_NAME[m.piece]} out to ${m.to}.`;
+    case 'centre-pawn':
+      return `I'm putting a pawn in the centre, on ${m.to}.`;
+  }
 }
