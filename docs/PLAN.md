@@ -79,6 +79,18 @@ Spec: "Branches: play it out" and its rules. This is large; split it if needed (
 - Export the PGN (copy or download).
 - Store hints used per game (for mastery later).
 
+### ⬜ 1.7b Known openings and gambits
+Found in play (task 1.4 follow-ups): the Queen's Gambit 2.c4 gets "Bold! c4 offers a pawn…" praise every game, and a known gambit can look like a hung pawn. Standard theory should be named, not praised or warned about.
+- Data: the Lichess opening names (`lichess-org/chess-openings`, CC0; ~3,000+ named lines with ECO codes and positions). A small script builds a lookup by position (EPD, so transpositions match) into a file committed to the repo; nothing fetched at runtime (rule 4). Check its size; at most a few hundred KB.
+- Recognition after every move, **by either side**: the named opening of the current position, and whether this move entered a *gambit* (its name contains "Gambit" and the previous position's opening isn't already that gambit).
+- Coach, Lesson:
+  - the player plays a gambit: name it instead of the sacrifice praise, e.g. "That's the Queen's Gambit, a known opening: you offer the c-pawn." The name and the offered material are facts; add the engine's view only from the evaluation (e.g. a gambit the engine dislikes, like the Englund). No "why it works" text: that is hand-written content for Phase 6.
+  - the coach plays a gambit: say so when thinking aloud ("I'm playing the Evans Gambit: I offer a pawn on b4."). Fine in Lesson; Sparring stays silent (decision 11).
+  - while the position is in the book, no sacrifice praise and no hung-material warning (below the level's mistake size). Real mistakes within the level are still flagged.
+  - point ahead: "We'll look at this one in openings training." until Phase 6 exists, then link to it.
+- Store the openings met per game on the device (with task 1.7's persistence), as input for Phase 6 (start the repertoire from openings the player actually meets).
+- **Done when:** unit tests cover lookup by position (including a transposition), gambit entry by each side, and the suppressed praise/warning; a browser check plays the Queen's Gambit and the Evans Gambit from both sides.
+
 ### ⬜ 1.8 MVP hardening and phone pass
 - Run all feasibility tests and a full game on a real phone (`npm run dev:phone`). Record the numbers in STATE.
 - Fix: file letters under the pieces; test the promotion picker and the end-of-game screen by clicking.
@@ -125,7 +137,7 @@ Feasibility: Qwen3.5 2B is close but slow on integrated GPUs; templates stay the
 - ⬜ 5.2 Your own theme packs and portraits with expressions (the asset list is in the spec).
 
 ## Phase 6: Openings
-- ⬜ 6.1 Small idea-based repertoire, drills with spaced repetition, starting games from repertoire positions (builds on `?fen=` / `Game.startFen`).
+- ⬜ 6.1 Small idea-based repertoire, drills with spaced repetition, starting games from repertoire positions (builds on `?fen=` / `Game.startFen`), and on the openings met in games (task 1.7b).
 
 ## Phase 7: Higher levels
 - ⬜ 7.1 Levels 4–6 content and patterns, with input from stronger players.

@@ -70,7 +70,7 @@ These should be folded into the spec (see PLAN, task "Spec sync").
 ## Known issues and gaps
 
 - Foldable / small-tablet widths (760–~900 px) break the two-column layout (board cut off at 790 px wide). Planned in task 1.8.
-- The Queen's Gambit (2.c4) gets "Bold!" praise every game: true by the facts, but it's standard theory, not daring. Maybe say it once per opening, or name known gambits.
+- The Queen's Gambit (2.c4) gets "Bold!" praise every game: true by the facts, but it's standard theory, not daring. Planned: task 1.7b names known openings and gambits (for either side) instead.
 - Sacrifice praise only looks at the moved piece; a move that leaves a *different* piece to be taken on purpose isn't praised.
 - Hung material uses only the engine's best line: if the best reply is something else stronger, a hung pawn isn't named (the bigger problem may be, if it's within the level).
 - **Phone not tested yet** for any engine or the UI on a real device (only the emulated phone viewport).
