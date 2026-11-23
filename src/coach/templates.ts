@@ -289,7 +289,7 @@ export function narrateVerdict(rootFen: string, v: LineVerdict): string {
           ? `It wins ${winsPhrase(v.won)}, and the engine rates the end position ${evalPhrase(v.endCp)}.`
           : `The engine rates the end position ${evalPhrase(v.endCp)}.`;
       const weaker = v.weaker
-        ? ` The engine would pick ${moveWithWhich(v.weaker.best)} instead of ${v.checks[v.weaker.index].facts.san} at move ${v.weaker.index + 1}, but yours keeps an edge too.`
+        ? ` The engine would pick ${moveWithWhich(v.weaker.best)} instead of ${v.checks[v.weaker.index].facts.san} at move ${v.weaker.index + 1}, but yours holds up too.`
         : '';
       return `Good line! ${agree} ${outcome}${weaker}`;
     }

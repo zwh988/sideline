@@ -27,6 +27,8 @@ const WINNING_CP = 500;
  * line holds up, and the coach just mentions the stronger move.
  */
 const STILL_AHEAD_CP = 100;
+/** A move worth this much less than the best one is mentioned, even though the line holds up. */
+const NOTE_CP = 60;
 /** A mate score. */
 const MATE_CP = 90000;
 
@@ -149,6 +151,10 @@ export async function checkLine(analyst: LineEvaluator, line: Line, opts: LineCh
   let weaker: { index: number; best: MoveFacts } | undefined;
   for (let k = 0; k < checks.length; k++) {
     const c = checks[k];
+    if (c.mine && !weaker && !c.top && c.lossCp >= NOTE_CP && c.lossCp < threshold) {
+      const bestUci = evals[k].lines[0]?.pv[0];
+      if (bestUci) weaker = { index: k, best: playAndDescribe(new Chess(evals[k].fen), bestUci) };
+    }
     if (c.lossCp < threshold) continue;
     if (c.mine && c.valueCp >= STILL_AHEAD_CP) {
       // Weaker than the engine's move, but the edge is kept: the line holds up.

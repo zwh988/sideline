@@ -150,7 +150,7 @@ export class App {
           <p id="status" class="status"></p>
           <div class="actions">
             <button id="hint">Hint</button>
-            <button id="explain">Explain</button>
+            <button id="explain">Show a line</button>
             <button id="takeback">Take back</button>
             <button id="flip">Flip board</button>
           </div>
@@ -541,7 +541,7 @@ export class App {
   // --- Explain your idea: lines with tap-arrows ---------------------------
 
   /** A button in the bubble that opens arrow mode (the coach asks, e.g. at a tactic). */
-  private offerExplain(label = 'Show me your idea'): void {
+  private offerExplain(label = 'Let me show you'): void {
     const box = this.el.choices;
     box.innerHTML = `<button data-choice="explain" class="primary">${label}</button>`;
     box.hidden = false;

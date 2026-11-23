@@ -142,7 +142,7 @@ describe('checkLine', () => {
     expect(v).toMatchObject({ kind: 'good', allTop: false, weaker: { index: 0 } });
     expect(narrateVerdict(FORK, v)).toBe(
       'Good line! It holds up against the engine, and the replies you expect are good ones. The engine rates the end position +3.0 for you. ' +
-        'The engine would pick Nxc7+, which attacks the king and the rook at once instead of Rb1 at move 1, but yours keeps an edge too.',
+        'The engine would pick Nxc7+, which attacks the king and the rook at once instead of Rb1 at move 1, but yours holds up too.',
     );
   });
 

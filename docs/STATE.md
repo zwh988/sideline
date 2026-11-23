@@ -82,6 +82,13 @@ These should be folded into the spec (see PLAN, task "Spec sync").
     - **Lesson:** a tactic prompt also shows a "Show me your idea" button (`Remark.offerExplain`); the Explain button is always there (also in Sparring: the player asks for it, so it isn't unasked talk). Not done: asking for an explanation at other key moments.
     - Arrows: green = your move, blue = their reply, numbered; after a verdict the board keeps the arrows up to the failing move, with the better reply in red.
 
+## Notes from the user after 1.5 (to do later)
+
+- Wording: "Show me your idea" read as the coach showing its idea (now "Let me show you"); "Explain" felt odd (button now "Show a line"). Still open: the whole flow feels clunky (too many taps: button, arrows, Done, then "Change my line"). Rethink in a UX pass.
+- A fine line that has a better alternative should say so (done for losses of 0.6 pawns or more; `NOTE_CP`).
+- Later: general idea explanation (plans, free text) beyond exact lines.
+- Open question: ideas that ignore the opponent's replies (a player move or two with no replies). Probably allow "what I want to do" as a plan, checked as threats/plans, not as a line; decide with the plans task.
+
 ## Known issues and gaps
 
 - Explain: the verdict arrows are drawn on the position before the line, so a piece that moves twice (e.g. a queen) has its second arrow start from an empty square. Plans (free text, AI model structure) are not built, and a line can't yet be played out as a branch (1.6). Promotion inside a line is untested by clicking. An opponent's move that is "worse than best" is reported even when both choices are bad for them but one is much less bad (e.g. +7.8 vs +3.9 for the player): that is true by the engine, but may feel picky at low levels.
