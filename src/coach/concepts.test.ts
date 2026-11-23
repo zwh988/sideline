@@ -144,3 +144,26 @@ describe('detectConcepts: deflection and intermezzo (Lichess puzzles with those 
     expect(found.has('intermezzo')).toBe(false);
   });
 });
+
+describe('detectConcepts: attraction (a Lichess puzzle with that label)', () => {
+  const p: PuzzleRecord = {
+    id: '0va8T',
+    fen: 'rn3r1k/6pp/p2pBq2/1p3P1Q/4bR2/2P5/P1P3PP/R5K1 b - - 1 17',
+    moves: 'f6c3 h5h7 h8h7 f4h4'.split(' '),
+    rating: 1310,
+    themes: ['attraction', 'mate', 'mateIn2', 'sacrifice'],
+  };
+
+  it('Qxh7+ lures the king onto h7, and Rh4# mates', () => {
+    const s = puzzleStart(p);
+    const found = detectConcepts(s.fen, s.solution, { fen: p.fen, uci: p.moves[0] });
+    expect(found.has('attraction')).toBe(true);
+    expect(found.has('mateIn2')).toBe(true);
+  });
+
+  it('not when the piece offered is taken by something other than the king', () => {
+    // Qxd5+ Rxd5 (a rook takes), then Rxd5: a plain exchange, no lure of the king.
+    const found = detectConcepts('3r2k1/8/8/3q4/8/8/8/3QK3 w - - 0 1', ['d1d5', 'd8d5', 'e1e2']);
+    expect(found.has('attraction')).toBe(false);
+  });
+});

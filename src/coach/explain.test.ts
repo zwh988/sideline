@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { conceptNote } from './explain';
+import { conceptNote, lineConceptOf } from './explain';
 
 describe('conceptNote', () => {
   it('fork, from the player\'s side: the targets are the coach\'s pieces', () => {
@@ -81,5 +81,33 @@ describe('conceptNote: trapped piece, capturing the defender, sacrifice', () => 
 
   it('an even trade is not a sacrifice', () => {
     expect(conceptNote('4k3/8/2p5/3q4/8/8/8/3QK3 w - - 0 1', 'd1d5', 'you')?.concept).not.toBe('sacrifice');
+  });
+});
+
+describe('lineConceptOf (what a moment records for a whole line)', () => {
+  it('prefers the lure to the mate it leads to', () => {
+    const fen = 'rn3r1k/6pp/p2pBq2/1p3P1Q/4bR2/2P5/P1P3PP/R5K1 b - - 1 17';
+    // After Black's ...Qxc3 (the setup move), White plays Qxh7+ Kxh7 Rh4#.
+    const after = 'rn3r1k/6pp/p2pBq2/1p3P1Q/4bR2/2P5/P1P3PP/R5K1 b - - 1 17';
+    void after;
+    expect(
+      lineConceptOf('rn3r1k/6pp/p2pBq2/1p3P1Q/4bR2/2q5/P1P3PP/R5K1 w - - 0 18', ['h5h7', 'h8h7', 'f4h4'], { fen, uci: 'f6c3' }),
+    ).toBe('attraction');
+  });
+
+  it('a loose-piece line keeps that name when only a weak side concept is also present', () => {
+    // 5.Bc4?? Nxd4: the knight takes the queen, which also guarded the bishop on c4.
+    const after = 'r1bqkbnr/ppp2ppp/2np4/8/2BQP3/5N2/PPP2PPP/RNB1K2R b KQkq - 2 5';
+    expect(lineConceptOf(after, ['c6d4', 'f3d4'], undefined, 'hanging-piece')).toBe('hangingPiece');
+    expect(lineConceptOf(after, ['c6d4', 'f3d4'], undefined, 'winning-material')).toBe('capturingDefender');
+  });
+
+  it('a back-rank mate in one is recorded as the pattern, not the count', () => {
+    expect(lineConceptOf('6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1', ['a1a8'])).toBe('backRankMate');
+  });
+
+  it('falls back to the first move, then to the motif, then to nothing', () => {
+    expect(lineConceptOf('4k3/8/8/3q4/8/8/8/3QK3 w - - 0 1', ['d1d5'], undefined, 'hanging-piece')).toBe('hangingPiece');
+    expect(lineConceptOf('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', ['e2e4'])).toBeUndefined();
   });
 });

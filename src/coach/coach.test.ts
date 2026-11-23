@@ -91,6 +91,9 @@ describe('Coach modes: the player move', () => {
     expect(r?.kind).toBe('mistake');
     expect(r?.offerTakeback).toBe(true);
     expect(r?.text).toBe('Careful: after Bc4, I can play Nxd4, which takes the queen. That would win a queen for a knight. Want to take it back?');
+    // The moment saved with the game: where the player decided, what they played, what the coach found.
+    expect(r?.moment).toMatchObject({ kind: 'mistake', fen: SCOTCH, played: 'f1c4', better: 'c6d4' });
+    expect(typeof r?.moment?.lossCp).toBe('number');
   });
 
   it('Sparring flags the mistake without the refutation or a takeback', async () => {

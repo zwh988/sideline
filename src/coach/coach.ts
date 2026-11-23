@@ -18,7 +18,7 @@ import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
 import type { TaughtLine } from './lines';
 import { checkLine, type LineEvaluator, type LineMove } from './linecheck';
-import { conceptOf, offeredMaterial, type NoteConcept } from './explain';
+import { lineConceptOf, offeredMaterial, type NoteConcept } from './explain';
 import { narrateSidelineMove, sidelineReplyText } from './sideline';
 import { failedRecapture, PIECE_NAME, playAndDescribe, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
@@ -202,7 +202,7 @@ export class Coach {
         kind: 'praise',
         text: praise(t.tactic),
         mood: 'pleased',
-        moment: { kind: 'found-tactic', fen: fenBefore, played: uci, concept: conceptOf(fenBefore, uci, 'you', t.tactic.motif) },
+        moment: { kind: 'found-tactic', fen: fenBefore, played: uci, concept: lineConceptOf(fenBefore, t.tactic.moves.map((m) => m.uci), undefined, t.tactic.motif) },
       });
     }
 
@@ -225,7 +225,7 @@ export class Coach {
             fen: fenBefore,
             played: uci,
             better: t.tactic.moves[0].uci,
-            concept: conceptOf(fenBefore, t.tactic.moves[0].uci, 'you', t.tactic.motif),
+            concept: lineConceptOf(fenBefore, t.tactic.moves.map((m) => m.uci), undefined, t.tactic.motif),
             lossCp: loss,
           },
         });
@@ -346,7 +346,7 @@ export class Coach {
       fen: ctx.fenBefore,
       played: ctx.uci,
       better: refutation.moves[0].uci,
-      concept: conceptOf(chess.fen(), refutation.moves[0].uci, 'me', refutation.motif),
+      concept: lineConceptOf(chess.fen(), refutation.moves.map((m) => m.uci), { fen: ctx.fenBefore, uci: ctx.uci }, refutation.motif),
       lossCp: ctx.loss,
     };
     if (!this.mode.revealsPlans) {

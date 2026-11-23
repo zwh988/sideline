@@ -6,8 +6,8 @@
 // the coach's ("me").
 import { Chess, type Color, type PieceSymbol } from 'chess.js';
 import { PIECE_NAME, VALUE, other, playAndDescribe } from './facts';
+import { detectConcepts, type PreviousMove } from './concepts';
 import { defendedBy, lineUps, trappedPieces } from './motifs';
-import { detectConcepts } from './concepts';
 import { pieceRef, targetList } from './templates';
 
 export type NoteConcept =
@@ -156,4 +156,50 @@ export function offeredMaterial(fenBefore: string, uci: string): { offered: Piec
   const back = takesOn().length ? VALUE[take.piece] : 0;
   if ((won ? VALUE[won] : 0) - VALUE[offered] + back > -1) return undefined;
   return { offered, won };
+}
+
+/** Which concept to record when a line shows several: the most specific first. */
+const RECORD_ORDER = [
+  'smotheredMate',
+  'backRankMate',
+  'attraction',
+  'deflection',
+  'skewer',
+  'pin',
+  'intermezzo',
+  'fork',
+  'discoveredAttack',
+  'doubleCheck',
+  'trappedPiece',
+  'capturingDefender',
+  'mateIn1',
+  'mateIn2',
+  'mateIn3',
+  'mateIn4',
+  'mateIn5',
+  'sacrifice',
+  'hangingPiece',
+  'promotion',
+] as const;
+
+/**
+ * The concept to record for a whole line (a refutation, or a tactic the
+ * player found or missed): the most specific one the detectors find in it,
+ * else what `conceptOf` says about its first move. `ucis` start with the
+ * move of the side to move at `fen`; `previous` is the opponent's last move
+ * when known.
+ */
+export function lineConceptOf(fen: string, ucis: string[], previous?: PreviousMove, motif?: string): string | undefined {
+  // A line found as a loose-piece win (a capture the opponent can't answer) is recorded as that, unless a
+  // more specific tactic is in it: the weak "side" concepts would hide the lesson.
+  const weak = ['trappedPiece', 'capturingDefender', 'sacrifice', 'loosePiece'];
+  const keepLoose = (c: string | undefined) => (motif === 'hanging-piece' && (!c || weak.includes(c)) ? 'hangingPiece' : c);
+  try {
+    const found = detectConcepts(fen, ucis, previous);
+    const pick = RECORD_ORDER.find((c) => found.has(c));
+    if (pick) return keepLoose(pick);
+  } catch {
+    /* an unreadable line: fall back to the first move */
+  }
+  return keepLoose(ucis.length ? conceptOf(fen, ucis[0], 'you', motif) : undefined);
 }

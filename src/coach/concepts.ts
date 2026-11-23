@@ -29,6 +29,7 @@ export const DETECTABLE = [
   'sacrifice',
   'intermezzo',
   'deflection',
+  'attraction',
 ] as const;
 
 export type Concept = (typeof DETECTABLE)[number];
@@ -38,13 +39,12 @@ export type Concept = (typeof DETECTABLE)[number];
  * The harness reports them as "not detected" so the gap is visible.
  */
 export const NOT_YET = [
+  'xRayAttack',
+  'interference',
+  'exposedKing',
   'clearance',
-  'attraction',
   'quietMove',
   'defensiveMove',
-  'interference',
-  'xRayAttack',
-  'exposedKing',
   'zugzwang',
 ] as const;
 
@@ -204,6 +204,14 @@ export function detectConcepts(fen: string, solution: string[], previous?: Previ
         next.facts.to === d.square,
     );
     if (stranded) found.add('deflection');
+  });
+
+  // Attraction: a piece offered to the enemy king, which takes it; the player then gives check or mates.
+  early.forEach((s, i) => {
+    const r = s.reply;
+    const next = steps[i + 1];
+    if (!r?.captured || r.to !== s.facts.to || r.piece !== 'k' || !next) return;
+    if (next.facts.check || next.facts.mate) found.add('attraction');
   });
 
   if (mated && matingMove) {
