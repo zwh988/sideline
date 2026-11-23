@@ -8,7 +8,28 @@ body {
   padding: 16px;
 }
 
-pre {
-  font-size: 1.1rem;
-  line-height: 1.3;
+button {
+  font-size: 1rem;
+  padding: 8px 16px;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  border: 1px solid #8884;
+  padding: 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.err {
+  color: #d33;
 }
