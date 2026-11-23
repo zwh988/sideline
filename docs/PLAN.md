@@ -46,6 +46,14 @@ Spec: "Modes" table.
 - Trigger rules read the mode. The takeback button and the mistake offer are hidden in Sparring.
 - **Done when:** both modes are play-tested in the browser, and there are tests for the trigger differences.
 
+### ⬜ 1.4b Move navigation: view earlier positions
+Comes before branches (1.6), which can start from a position the player is looking at.
+- Buttons for start, back, forward and live (back and forward large enough to tap on a phone). Arrow keys on desktop. Tapping a move in the move list jumps to that position.
+- While viewing an earlier position: the board is read-only, the last-move highlight shows the move that led there, and a clear "Viewing move 12 · Back to game" bar is shown. Hints and takeback are disabled.
+- When the coach moves while the player is looking back, stay on the viewed position but show that a new move came in. Any move made in the live game returns to the live position.
+- Keep the coach's remark with the ply it was said at, and show it again when viewing that position (a first step toward Review mode).
+- **Done when:** it works by tapping on the phone viewport and by keyboard on desktop, and there are unit tests for the navigation state (clamping at the ends, snapping back to live, the viewed position after a takeback).
+
 ### ⬜ 1.5 Explain your idea: lines with tap-arrows
 Spec: "Explain your idea", "Lines".
 - An "Explain" button enters arrow mode:
@@ -73,6 +81,12 @@ Spec: "Branches: play it out" and its rules. This is large; split it if needed (
 ### ⬜ 1.8 MVP hardening and phone pass
 - Run all feasibility tests and a full game on a real phone (`npm run dev:phone`). Record the numbers in STATE.
 - Fix: file letters under the pieces; test the promotion picker and the end-of-game screen by clicking.
+- Phone layout (spec: "Phone layout"). Today the page is one column: header controls, then the board, then the coach bubble, buttons and move list. On a ~375×650 screen the bubble is barely visible without scrolling. Change it to:
+  - the coach bubble **above** the board, where an opponent's name usually sits, with a fixed height (about 3 lines, tap to expand) so the board doesn't jump when the text changes,
+  - Hint, Take back, Flip (and the 1.4b navigation buttons) directly **below** the board, within thumb reach, with the status line in that row,
+  - level, colour and new game moved out of the header into a menu, so the board moves up,
+  - the move list as a horizontal scrolling strip, or behind a tap.
+  - Done when the bubble, the board and the buttons all fit on one phone screen without scrolling.
 - Pins and skewers in `facts.ts` (needed for Level 3).
 - Check the coach's analysis depth is fine on a phone.
 

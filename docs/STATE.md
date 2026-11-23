@@ -61,6 +61,8 @@ These should be folded into the spec (see PLAN, task "Spec sync").
 - The coach doesn't narrate candidate moves or longer plans yet (spec: "its candidates"); needs Sparring/Lesson modes (1.4) to decide how much it reveals.
 - Hints used are counted (`Coach.hintsUsed`) but not stored anywhere.
 - No game persistence: a reload loses the game.
+- No way to view earlier positions (planned as task 1.4b).
+- Phone layout: the coach bubble sits below the full-width board and is barely visible without scrolling (planned in task 1.8).
 - Maia3 weights' license is unstated (code is AGPL-3.0; maia3-js is MIT by an individual). Ask CSSLab before a public release.
 - The spec doesn't yet reflect the decisions above.
 - `npm warn install-scripts` appears on install; harmless so far.
