@@ -8,8 +8,13 @@
 //   New phase                         → planning prompt
 //   The coach's own move              → think aloud (narration.ts), under the budget
 //   Nothing important                 → silence
+//
+// The mode (src/app/modes.ts) trims this: Sparring drops the unasked prompts,
+// small talk, takeback offers and thinking aloud, and flags a mistake without
+// saying how the coach would punish it.
 import { Chess, type Square } from 'chess.js';
 import type { Level } from '../app/levels';
+import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
 import type { TaughtLine } from './lines';
 import { coachMoveFacts } from './narration';
@@ -82,6 +87,7 @@ export class Coach {
     private analyst: Analyst,
     private level: Level,
     private playerColor: 'w' | 'b',
+    private mode: Mode = MODES[0],
   ) {}
 
   private limits() {
@@ -116,6 +122,7 @@ export class Coach {
     this.continuing = !!t.tactic && ownLater.some((m) => m.uci === t.tactic!.moves[0].uci);
     if (!this.continuing) this.combination = undefined;
     if (this.continuing) return undefined;
+    if (!this.mode.prompts) return undefined; // Sparring: hints only on request, no prompts
 
     if (t.tactic) {
       this.hintStep = 1; // this remark is hint step 1
@@ -157,6 +164,14 @@ export class Coach {
       // The move lets the coach win something the player has learned to see.
       const cut = this.analyst.taughtLine(after, this.limits());
       const refutation = this.teachable(cut.kind === 'line' ? cut.line : undefined);
+      if (refutation && !this.mode.revealsPlans) {
+        // Sparring: a serious moment, but the coach keeps its reply to itself.
+        return this.remark(ply, {
+          kind: 'mistake',
+          text: `Careful: ${move.san} gives me a chance ${refutation.mate ? 'to checkmate you' : 'to win material'}.`,
+          mood: 'concerned',
+        });
+      }
       if (refutation) {
         await this.analyst.markForced(refutation);
         const first = refutation.moves[0];
@@ -166,7 +181,7 @@ export class Coach {
             refutation.mate ? '' : `That would win ${winsPhrase(refutation)}. `
           }Want to take it back?`,
           mood: 'concerned',
-          offerTakeback: true,
+          offerTakeback: this.mode.takebacks,
           shapes: [{ orig: first.from, dest: first.to, brush: 'red' }],
         });
       }
@@ -174,9 +189,11 @@ export class Coach {
       if (t.tactic) {
         return this.remark(ply, {
           kind: 'missed-tactic',
-          text: `You had something stronger than ${move.san} here. Want to take it back and look again?`,
+          text: this.mode.takebacks
+            ? `You had something stronger than ${move.san} here. Want to take it back and look again?`
+            : `You had something stronger than ${move.san} here.`,
           mood: 'concerned',
-          offerTakeback: true,
+          offerTakeback: this.mode.takebacks,
         });
       }
       // Otherwise the mistake is beyond the player's concepts: stay quiet.
@@ -184,7 +201,7 @@ export class Coach {
     }
 
     // Dealt with the coach's threat (a low-priority remark).
-    if (t.threat && loss < FOUND_CP && this.budgetAllows(ply)) {
+    if (this.mode.smallTalk && t.threat && loss < FOUND_CP && this.budgetAllows(ply)) {
       return this.remark(ply, { kind: 'defended', text: 'Good, you saw my threat.', mood: 'pleased' });
     }
     return undefined;
@@ -195,7 +212,8 @@ export class Coach {
    * threatened and how this move answers it, its captures, or the idea behind
    * a quiet move. Honest: it never calls its move good (Maia plays at the
    * player's level). Call before `onPlayerTurn`, which reuses the analysis.
-   * `lastMove` is the player's move before it, if any.
+   * `lastMove` is the player's move before it, if any. Silent in Sparring
+   * (no plans revealed), though it still starts the player's turn analysis.
    */
   async onCoachMove(
     fenBefore: string,
@@ -209,6 +227,7 @@ export class Coach {
 
     // The player's turn analysis goes first in the queue: hints must stay instant.
     const turn = this.prepare(chess.fen());
+    if (!this.mode.revealsPlans) return undefined;
     const before =
       this.afterPlayer?.fen === fenBefore ? this.afterPlayer : await this.analyst.evaluate(fenBefore, 1);
     const playerThreat = this.teachable(await this.analyst.threat(fenBefore, this.limits()));
@@ -306,7 +325,7 @@ export class Coach {
   }
 
   private phaseRemark(fen: string, ply: number): Remark | undefined {
-    if (!this.budgetAllows(ply)) return undefined;
+    if (!this.mode.smallTalk || !this.budgetAllows(ply)) return undefined;
     const chess = new Chess(fen);
     if (isEndgame(chess) && !this.said.has('endgame')) {
       this.said.add('endgame');

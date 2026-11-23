@@ -38,13 +38,14 @@ Spec: "The coach's three jobs", job 2, and "Honest narration".
 - **Done when:** unit tests cover the narration facts, and a scripted Maia-vs-Maia game shows narration that is accurate, honest about weaker moves, and not on every move.
 - Done: threats answered, captures, quiet-move ideas. Left for later: candidate moves ("I considered…"), and narration in Sparring mode (1.4).
 
-### ⬜ 1.4 Modes: Lesson and Sparring
+### ✅ 1.4 Modes: Lesson and Sparring
 Spec: "Modes" table.
 - Add a mode setting, remembered on the device.
   - **Lesson:** frequent talk, hints offered, takebacks allowed, reveals its own plans.
   - **Sparring:** serious moments only, hints only on request, no takebacks, no plans revealed.
 - Trigger rules read the mode. The takeback button and the mistake offer are hidden in Sparring.
 - **Done when:** both modes are play-tested in the browser, and there are tests for the trigger differences.
+- Done: `src/app/modes.ts` (switches: prompts, small talk, takebacks, reveals plans), `Coach` takes the mode, a Mode select in the header (applies from the next game). Sparring keeps: mistakes flagged without the refutation, missed tactics, praise. Thinking aloud is silent in Sparring.
 
 ### ⬜ 1.4b Move navigation: view earlier positions
 Comes before branches (1.6), which can start from a position the player is looking at.

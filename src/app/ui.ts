@@ -10,6 +10,7 @@ import { Analyst } from '../coach/analyst';
 import { Coach, joinRemarks, type Remark } from '../coach/coach';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
+import { MODES, modeInfo, type Mode, type ModeId } from './modes';
 import { createOpponent, type Opponent } from './opponent';
 import type { Theme } from './theme';
 
@@ -18,6 +19,7 @@ type ColorChoice = Color | 'random';
 interface Settings {
   level: number;
   color: ColorChoice;
+  mode: ModeId;
 }
 
 const SETTINGS_KEY = 'sideline.settings';
@@ -27,11 +29,11 @@ const MIN_THINK_MS = 600; // the coach shouldn't reply instantly
 function loadSettings(): Settings {
   try {
     const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null');
-    if (saved && typeof saved.level === 'number') return saved;
+    if (saved && typeof saved.level === 'number') return { ...saved, mode: modeInfo(saved.mode).id };
   } catch {
     /* storage unavailable: use defaults */
   }
-  return { level: 2, color: 'white' };
+  return { level: 2, color: 'white', mode: 'lesson' };
 }
 
 function saveSettings(s: Settings): void {
@@ -51,6 +53,8 @@ export class App {
   private opponent: Promise<Opponent>;
   private analyst: Promise<Analyst>;
   private coach!: Promise<Coach>;
+  /** The mode of the game in progress (a new setting applies from the next game). */
+  private mode: Mode = MODES[0];
   /** Bumped on every new game, so work for an old game is dropped. */
   private gameId = 0;
   private thinking = false;
@@ -78,6 +82,9 @@ export class App {
             <select id="level">${LEVELS.map(
               (l) => `<option value="${l.level}">${l.level} · Chess.com ${l.chessCom}</option>`,
             ).join('')}</select>
+          </label>
+          <label>Mode
+            <select id="mode">${MODES.map((m) => `<option value="${m.id}">${m.name}</option>`).join('')}</select>
           </label>
           <label>Play as
             <select id="color">
@@ -116,15 +123,18 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'color', 'takeback', 'hint']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
+    const mode = this.el.mode as HTMLSelectElement;
     const color = this.el.color as HTMLSelectElement;
     level.value = String(this.settings.level);
+    mode.value = this.settings.mode;
     color.value = this.settings.color;
 
     level.addEventListener('change', () => this.updateSettings({ level: Number(level.value) }));
+    mode.addEventListener('change', () => this.updateSettings({ mode: modeInfo(mode.value).id }));
     color.addEventListener('change', () => this.updateSettings({ color: color.value as ColorChoice }));
     this.root.querySelector('#new-game')!.addEventListener('click', () => void this.newGame());
     this.root.querySelector('#flip')!.addEventListener('click', () => this.board.toggleOrientation());
@@ -149,6 +159,7 @@ export class App {
     this.settings = { ...this.settings, ...change };
     saveSettings(this.settings);
     if (change.level !== undefined) this.status('New level set. It applies from your next game.');
+    if (change.mode !== undefined) this.status(`${modeInfo(change.mode).name} mode set. It applies from your next game.`);
   }
 
   private async newGame(): Promise<void> {
@@ -167,12 +178,13 @@ export class App {
           : 'black'
         : this.settings.color;
     const level = levelInfo(this.settings.level);
+    const mode = (this.mode = modeInfo(this.settings.mode));
     try {
       this.game = new Game(color, startFen);
     } catch {
       this.game = new Game(color); // invalid FEN: normal start
     }
-    this.coach = this.analyst.then((a) => new Coach(a, level, color === 'white' ? 'w' : 'b'));
+    this.coach = this.analyst.then((a) => new Coach(a, level, color === 'white' ? 'w' : 'b', mode));
     this.board.set({ orientation: color, lastMove: undefined });
     this.board.setAutoShapes([]);
     this.el.choices.hidden = true;
@@ -205,6 +217,7 @@ export class App {
       movable: { color: canMove ? g.playerColor : undefined, dests: canMove ? (g.dests as Map<Key, Key[]>) : new Map() },
     });
     this.renderMoves();
+    this.el.takeback.hidden = !this.mode.takebacks;
     (this.el.takeback as HTMLButtonElement).disabled = this.thinking || !g.moves.some((m) => m.color === g.playerColor);
     (this.el.hint as HTMLButtonElement).disabled = !canMove;
     this.el.portrait.classList.toggle('busy', this.thinking);
@@ -290,7 +303,7 @@ export class App {
 
     if (remark) {
       this.say(remark);
-      if (remark.offerTakeback && (await this.askTakeback()) === 'takeback') {
+      if (remark.offerTakeback && this.mode.takebacks && (await this.askTakeback()) === 'takeback') {
         if (this.stale(id, ply)) return;
         this.game.takeback();
         this.thinking = false;
@@ -334,7 +347,10 @@ export class App {
     const r = this.game.result;
     if (!r.over) return false;
     if (r.winner === this.game.playerColor) this.say({ kind: 'praise', text: 'Checkmate. You win, well played!', mood: 'pleased' });
-    else if (r.winner) this.say({ kind: 'phase', text: 'Checkmate, I win this one. Take back to see what happened, or start a new game.', mood: 'concerned' });
+    else if (r.winner) {
+      const next = this.mode.takebacks ? 'Take back to see what happened, or start a new game.' : 'Start a new game when you’re ready.';
+      this.say({ kind: 'phase', text: `Checkmate, I win this one. ${next}`, mood: 'concerned' });
+    }
     else this.say({ kind: 'phase', text: `It's a draw by ${r.reason}.`, mood: 'neutral' });
     this.status('Game over.');
     this.thinking = false;
@@ -343,7 +359,7 @@ export class App {
   }
 
   private async takeback(): Promise<void> {
-    if (this.thinking || !this.game.takeback()) return;
+    if (this.thinking || !this.mode.takebacks || !this.game.takeback()) return;
     this.board.setAutoShapes([]);
     this.sync();
     this.say({ kind: 'phase', text: 'Sure, take it back. Try another move.', mood: 'neutral' });
