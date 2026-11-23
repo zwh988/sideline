@@ -4,13 +4,23 @@
 // nothing it didn't (rule 1). Whether the move is good is the engine's call
 // and is said elsewhere. `who` is whose move it is: the player's ("you") or
 // the coach's ("me").
-import { Chess, type Color } from 'chess.js';
-import { PIECE_NAME, VALUE, playAndDescribe } from './facts';
-import { lineUps } from './motifs';
+import { Chess, type Color, type PieceSymbol } from 'chess.js';
+import { PIECE_NAME, VALUE, other, playAndDescribe } from './facts';
+import { defendedBy, lineUps, trappedPieces } from './motifs';
 import { detectConcepts } from './concepts';
 import { pieceRef, targetList } from './templates';
 
-export type NoteConcept = 'fork' | 'discoveredAttack' | 'pin' | 'skewer' | 'backRankMate' | 'smotheredMate' | 'loosePiece';
+export type NoteConcept =
+  | 'fork'
+  | 'discoveredAttack'
+  | 'pin'
+  | 'skewer'
+  | 'backRankMate'
+  | 'smotheredMate'
+  | 'loosePiece'
+  | 'trappedPiece'
+  | 'capturingDefender'
+  | 'sacrifice';
 
 export interface ConceptNote {
   concept: NoteConcept;
@@ -27,6 +37,9 @@ export const HABIT: Record<NoteConcept, string> = {
   backRankMate: 'Habit: check that your king has a square to escape to.',
   smotheredMate: 'Habit: a king surrounded by its own pieces is in danger from a knight check.',
   loosePiece: 'Habit: before every move, ask what is undefended.',
+  trappedPiece: 'Habit: look for enemy pieces with no safe square to go to, then attack them.',
+  capturingDefender: 'Habit: when a piece is guarded, ask what happens if you take its guard.',
+  sacrifice: 'Habit: when you offer material, know exactly what you get for it.',
 };
 
 /** The concept the move shows, worded; nothing when no detector fires. `fenBefore` is the position before `uci`. */
@@ -69,6 +82,34 @@ export function conceptNote(fenBefore: string, uci: string, who: 'you' | 'me'): 
       return { concept: 'pin', text: `That's a pin: ${piece} attacks ${front}, and moving it would expose ${back}.` };
     }
   }
+  // A piece that is attacked and has nowhere safe to go (the board shows it; whether it is won is the engine's call).
+  const trapped = trappedPieces(chess, color).sort((x, y) => VALUE[y.type] - VALUE[x.type])[0];
+  if (trapped) {
+    return {
+      concept: 'trappedPiece',
+      text: `That traps ${pieceRef(trapped.type, trapped.square, !mine)}: it is attacked and has no safe square to go to.`,
+    };
+  }
+  // Taking a guard: the captured piece defended another, which is now undefended.
+  if (m.captured) {
+    const enemy = other(color);
+    const left = defendedBy(before, m.to, enemy).find((d) => VALUE[d.type] >= 3 && chess.attackers(d.square, enemy).length === 0);
+    if (left) {
+      return {
+        concept: 'capturingDefender',
+        text: `That takes the only defender of ${pieceRef(left.type, left.square, !mine)}: it is now undefended.`,
+      };
+    }
+  }
+  // Offering material: the moved piece can be taken at once and is worth at least two pawns more than what it took.
+  const offer = offeredMaterial(fenBefore, uci);
+  if (offer) {
+    const worth = offer.won ? `, and it is worth more than the ${PIECE_NAME[offer.won]} it takes` : '';
+    return {
+      concept: 'sacrifice',
+      text: `That offers material: ${pieceRef(offer.offered, m.to, mine)} can be taken${worth}.`,
+    };
+  }
   if (m.captured && m.capturedUndefended && !m.mate) {
     return { concept: 'loosePiece', text: `That ${PIECE_NAME[m.captured]} was a loose piece: nothing defended it.` };
   }
@@ -95,4 +136,24 @@ export function conceptOf(fenBefore: string, uci: string, who: 'you' | 'me', mot
   const note = conceptNote(fenBefore, uci, who);
   if (note) return note.concept === 'loosePiece' ? 'hangingPiece' : note.concept;
   return motif ? MOTIF_THEME[motif] : undefined;
+}
+
+/**
+ * The move offers material (board facts only): the other side can take the
+ * moved piece, and the mover can't win back as much on that square (counting
+ * the move's own capture, and at most one recapture of the taker). Whether the
+ * taker should take is the engine's business.
+ */
+export function offeredMaterial(fenBefore: string, uci: string): { offered: PieceSymbol; won?: PieceSymbol } | undefined {
+  const chess = new Chess(fenBefore);
+  const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+  const takesOn = () => chess.moves({ verbose: true }).filter((m) => m.to === move.to && m.captured);
+  const take = takesOn().sort((x, y) => VALUE[x.piece] - VALUE[y.piece])[0];
+  if (!take) return undefined;
+  const offered = (move.promotion ?? move.piece) as PieceSymbol;
+  const won = move.captured as PieceSymbol | undefined;
+  chess.move(take);
+  const back = takesOn().length ? VALUE[take.piece] : 0;
+  if ((won ? VALUE[won] : 0) - VALUE[offered] + back > -1) return undefined;
+  return { offered, won };
 }

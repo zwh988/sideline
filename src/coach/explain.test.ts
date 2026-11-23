@@ -48,3 +48,38 @@ describe('conceptNote', () => {
     expect(conceptNote('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', 'e2e4', 'you')).toBeUndefined();
   });
 });
+
+describe('conceptNote: trapped piece, capturing the defender, sacrifice', () => {
+  it('traps a knight in the corner: attacked, nowhere safe to go', () => {
+    // 1.a5 and the Bh1 attacks the Na8; b6 is covered by the pawn and c7 is its own pawn.
+    const n = conceptNote('n3k3/2p5/8/8/P7/8/8/4K2B w - - 0 1', 'a4a5', 'you');
+    expect(n).toEqual({ concept: 'trappedPiece', text: 'That traps my knight on a8: it is attacked and has no safe square to go to.' });
+  });
+
+  it('does not say a piece is trapped when it has a safe square', () => {
+    expect(conceptNote('n3k3/8/8/8/P7/8/8/4K2B w - - 0 1', 'a4a5', 'you')?.concept).not.toBe('trappedPiece');
+  });
+
+  it('taking the only defender', () => {
+    const n = conceptNote('6k1/3b4/4n3/8/8/8/8/3RR1K1 w - - 0 1', 'd1d7', 'you');
+    expect(n).toEqual({ concept: 'capturingDefender', text: 'That takes the only defender of my knight on e6: it is now undefended.' });
+  });
+
+  it('not when the piece keeps another defender', () => {
+    // The knight on e6 is also guarded by the pawn on f7.
+    const n = conceptNote('6k1/3b1p2/4n3/8/8/8/8/3RR1K1 w - - 0 1', 'd1d7', 'you');
+    expect(n?.concept).not.toBe('capturingDefender');
+  });
+
+  it('a sacrifice: the Greek gift Bxh7+ offers the bishop for a pawn', () => {
+    const n = conceptNote('rnbq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 7', 'd3h7', 'you');
+    expect(n).toEqual({
+      concept: 'sacrifice',
+      text: 'That offers material: your bishop on h7 can be taken, and it is worth more than the pawn it takes.',
+    });
+  });
+
+  it('an even trade is not a sacrifice', () => {
+    expect(conceptNote('4k3/8/2p5/3q4/8/8/8/3QK3 w - - 0 1', 'd1d5', 'you')?.concept).not.toBe('sacrifice');
+  });
+});

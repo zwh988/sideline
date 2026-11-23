@@ -16,7 +16,7 @@ describe.skipIf(!run)('concept detectors vs Lichess puzzle labels', () => {
     for (const p of puzzles) {
       try {
         const s = puzzleStart(p);
-        detected.set(p.id, detectConcepts(s.fen, s.solution));
+        detected.set(p.id, detectConcepts(s.fen, s.solution, { fen: p.fen, uci: p.moves[0] }));
       } catch {
         crashed++;
       }

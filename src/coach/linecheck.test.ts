@@ -206,7 +206,11 @@ describe('sidelineReplyText (the coach moves first, "Show me")', () => {
     const after = new Chess(root);
     after.move('Bc4');
     const f = playAndDescribe(new Chess(after.fen()), 'c6d4');
-    expect(sidelineReplyText(after.fen(), f, new Set())).toBe("I'd play Nxd4, which takes the queen.");
+    // The queen on d4 was the only guard of the bishop on c4, so the capture also leaves it loose (true on the board).
+    expect(sidelineReplyText(after.fen(), f, new Set())).toBe(
+      "I'd play Nxd4, which takes the queen. That takes the only defender of your bishop on c4: it is now undefended. " +
+        'Habit: when a piece is guarded, ask what happens if you take its guard.',
+    );
   });
 
   it('adds the concept and the habit for a fork by the coach', () => {

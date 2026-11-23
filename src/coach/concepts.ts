@@ -27,6 +27,8 @@ export const DETECTABLE = [
   'capturingDefender',
   'trappedPiece',
   'sacrifice',
+  'intermezzo',
+  'deflection',
 ] as const;
 
 export type Concept = (typeof DETECTABLE)[number];
@@ -36,13 +38,11 @@ export type Concept = (typeof DETECTABLE)[number];
  * The harness reports them as "not detected" so the gap is visible.
  */
 export const NOT_YET = [
-  'deflection',
+  'clearance',
   'attraction',
   'quietMove',
   'defensiveMove',
   'interference',
-  'clearance',
-  'intermezzo',
   'xRayAttack',
   'exposedKing',
   'zugzwang',
@@ -68,17 +68,25 @@ function uciMove(uci: string) {
   return { from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] };
 }
 
+/** The move the opponent just made, and the position before it (to see what it captured). */
+export interface PreviousMove {
+  fen: string;
+  uci: string;
+}
+
 /**
  * The concepts in a solution line. `solution[0]` is the player's move from
  * `fen`; the replies alternate. Only the player's moves are described.
+ * `previous`: the opponent's move that led to `fen`, when known (an
+ * intermezzo is judged against it).
  */
-export function detectConcepts(fen: string, solution: string[]): Set<Concept> {
+export function detectConcepts(fen: string, solution: string[], previous?: PreviousMove): Set<Concept> {
   const found = new Set<Concept>();
   const chess = new Chess(fen);
   const player = chess.turn();
   const start = materialBalance(chess, player);
   // One step per move of the player's: the position before and after it.
-  const steps: { before: Chess; after: Chess; facts: MoveFacts; discovered: boolean; reply?: { from: Square; to: Square; captured?: PieceSymbol } }[] = [];
+  const steps: Step[] = [];
   let mated: Chess | undefined;
   let matingMove: MoveFacts | undefined;
 
@@ -96,7 +104,10 @@ export function detectConcepts(fen: string, solution: string[]): Set<Concept> {
     } else {
       const m = chess.move(uciMove(solution[i]));
       const last = steps.at(-1);
-      if (last) last.reply = { from: m.from, to: m.to, captured: m.captured };
+      if (last) {
+        last.reply = { from: m.from, to: m.to, captured: m.captured, piece: m.piece };
+        last.afterReply = new Chess(chess.fen());
+      }
     }
   }
   const facts = steps.map((s) => s.facts);
@@ -155,6 +166,46 @@ export function detectConcepts(fen: string, solution: string[]): Set<Concept> {
     found.add('sacrifice');
   }
 
+  // What the opponent's last move captured, if we know it.
+  let lastCapture: { to: Square } | undefined;
+  if (previous) {
+    try {
+      const m = new Chess(previous.fen).move(uciMove(previous.uci));
+      if (m.captured) lastCapture = { to: m.to };
+    } catch {
+      /* an unusable previous move: no intermezzo check for the first move */
+    }
+  }
+
+  // An intermezzo: a piece was just taken and could be taken back, but the player first plays a move
+  // with tempo (a check, or a capture elsewhere), and takes back afterwards.
+  steps.forEach((s, j) => {
+    const taken = j > 0 ? (steps[j - 1].reply?.captured ? { to: steps[j - 1].reply!.to } : undefined) : lastCapture;
+    if (!taken || s.facts.to === taken.to) return;
+    const canTakeBack = s.before.moves({ verbose: true }).some((m) => m.to === taken.to && m.captured);
+    const takesBackLater = steps.slice(j + 1).some((t) => t.facts.captured && t.facts.to === taken.to);
+    if (canTakeBack && (s.facts.check || s.facts.captured) && takesBackLater) found.add('intermezzo');
+  });
+
+  // Deflection: a forcing move (check, capture or a threat) makes a piece leave its post, and the piece
+  // it was defending is left without a defender and taken.
+  early.forEach((s, i) => {
+    const r = s.reply;
+    const next = steps[i + 1];
+    if (!r || !next || !s.afterReply) return;
+    if (!(s.facts.check || s.facts.captured || s.facts.attacks.length)) return;
+    const enemy = other(player);
+    const stranded = defendedBy(s.after, r.from, enemy).some(
+      (d) =>
+        VALUE[d.type] >= 3 &&
+        s.afterReply!.get(d.square)?.color === enemy &&
+        s.afterReply!.attackers(d.square, enemy).length === 0 &&
+        next.facts.captured &&
+        next.facts.to === d.square,
+    );
+    if (stranded) found.add('deflection');
+  });
+
   if (mated && matingMove) {
     found.add('mate');
     const n = facts.length;
@@ -163,6 +214,16 @@ export function detectConcepts(fen: string, solution: string[]): Set<Concept> {
     if (isSmotheredMate(mated, matingMove)) found.add('smotheredMate');
   }
   return found;
+}
+
+interface Step {
+  before: Chess;
+  after: Chess;
+  facts: MoveFacts;
+  discovered: boolean;
+  reply?: { from: Square; to: Square; captured?: PieceSymbol; piece: PieceSymbol };
+  /** The position after the opponent's reply. */
+  afterReply?: Chess;
 }
 
 function kingSquare(chess: Chess, color: 'w' | 'b'): Square {

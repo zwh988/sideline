@@ -12,15 +12,15 @@
 // The mode (src/app/modes.ts) trims this: Sparring drops the unasked prompts,
 // small talk, takeback offers and thinking aloud, and flags a mistake without
 // saying how the coach would punish it.
-import { Chess, type PieceSymbol, type Square } from 'chess.js';
+import { Chess, type Square } from 'chess.js';
 import type { Level } from '../app/levels';
 import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
 import type { TaughtLine } from './lines';
 import { checkLine, type LineEvaluator, type LineMove } from './linecheck';
-import { conceptOf, type NoteConcept } from './explain';
+import { conceptOf, offeredMaterial, type NoteConcept } from './explain';
 import { narrateSidelineMove, sidelineReplyText } from './sideline';
-import { failedRecapture, PIECE_NAME, playAndDescribe, VALUE, type FailedRecapture } from './facts';
+import { failedRecapture, PIECE_NAME, playAndDescribe, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
 import {
   byImportance,
@@ -326,17 +326,9 @@ export class Coach {
    * "a pawn" / "your bishop for a pawn".
    */
   private sacrifice(fenBefore: string, uci: string): string | undefined {
-    const chess = new Chess(fenBefore);
-    const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
-    const takesOn = () => chess.moves({ verbose: true }).filter((m) => m.to === move.to && m.captured);
-    const take = takesOn().sort((x, y) => VALUE[x.piece] - VALUE[y.piece])[0];
-    if (!take) return undefined;
-    const offered = (move.promotion ?? move.piece) as PieceSymbol;
-    const won = move.captured as PieceSymbol | undefined;
-    chess.move(take);
-    const back = takesOn().length ? VALUE[take.piece] : 0;
-    if ((won ? VALUE[won] : 0) - VALUE[offered] + back > -1) return undefined;
-    return won ? `your ${PIECE_NAME[offered]} for a ${PIECE_NAME[won]}` : `a ${PIECE_NAME[offered]}`;
+    const offer = offeredMaterial(fenBefore, uci);
+    if (!offer) return undefined;
+    return offer.won ? `your ${PIECE_NAME[offer.offered]} for a ${PIECE_NAME[offer.won]}` : `a ${PIECE_NAME[offer.offered]}`;
   }
 
   /** "Careful: after Bc4, I can play Nxd4…" (Lesson), or a plain warning (Sparring). */

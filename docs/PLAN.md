@@ -80,7 +80,8 @@ The concept layer needs ground truth. Lichess puzzles (CC0) carry theme labels.
 
 ### ✅ 1.6c Concept detectors: close the gaps (first round)
 Add and score detectors, one theme at a time (pin, skewer, back-rank mate, trapped piece, capturing/removing the defender, deflection, attraction, double check, sacrifice, quiet move...), cheapest and most common below 1600 first. Each needs: a detector in board code, an engine check, a test on real puzzles, and wording in `templates.ts` (hand-written; rule 1). Unfound concepts stay honest: "I can't name a reason I can check."
-- Done (first round): pin (absolute), skewer, capturing the defender, trapped piece, sacrifice, better discovered attack; numbers in STATE. Still open: deflection, attraction, quiet move and the rest of `NOT_YET`, relative pins, x-ray batteries; raising fork, hanging-piece and sacrifice precision. Do these as needed once 1.6d shows which concepts the coach actually says.
+- Done (second round): intermezzo, deflection; wording for trapped piece, capturing the defender, sacrifice. Dropped for now after measuring: clearance, attraction, quiet move, defensive move. See STATE.
+- Done (first round): pin (absolute), skewer, capturing the defender, trapped piece, sacrifice, better discovered attack; numbers in STATE. Still open: deflection, attraction, quiet move and the rest of `NOT_YET`, relative pins, x-ray batteries; raising fork, hanging-piece and sacrifice precision. Do these as needed once 1.6d shows which concepts the coach actually says.
 
 ### ✅ 1.6d Try a sideline (replaces 1.6a's branches and 1.5's arrow flow)
 Spec: "Try a sideline".

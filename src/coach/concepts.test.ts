@@ -108,3 +108,39 @@ describe('detectConcepts: pins, skewers, trapped pieces, defenders, discovered a
     expect(found.has('discoveredAttack')).toBe(true);
   });
 });
+
+describe('detectConcepts: deflection and intermezzo (Lichess puzzles with those labels)', () => {
+  it('deflection: Qc7+ drags the king off the bishop it guarded, then Qxc8#', () => {
+    const p: PuzzleRecord = {
+      id: '0MUjp',
+      fen: 'NQ1k1b1r/1p1bpppp/8/4P3/2P2q2/5n2/PP4PP/R1n2K1R b - - 1 18',
+      moves: 'd7c8 b8c7 d8e8 c7c8'.split(' '),
+      rating: 953,
+      themes: ['deflection', 'mate', 'mateIn2'],
+    };
+    const s = puzzleStart(p);
+    const found = detectConcepts(s.fen, s.solution, { fen: p.fen, uci: p.moves[0] });
+    expect(found.has('deflection')).toBe(true);
+    expect(found.has('mateIn2')).toBe(true);
+  });
+
+  it('intermezzo: after ...Qxc2 White plays Nxe7+ first and takes back on c2 afterwards', () => {
+    const p: PuzzleRecord = {
+      id: '1F0sM',
+      fen: '3r1rk1/ppq1bpp1/5n1p/3Nnb2/4pN1P/1P2P3/PBQR1PP1/4KB1R b K - 7 17',
+      moves: 'c7c2 d5e7 g8h7 d2c2'.split(' '),
+      rating: 1614,
+      themes: ['intermezzo'],
+    };
+    const s = puzzleStart(p);
+    expect(detectConcepts(s.fen, s.solution, { fen: p.fen, uci: p.moves[0] }).has('intermezzo')).toBe(true);
+    // Without knowing the previous move, the first move can't be judged an intermezzo.
+    expect(detectConcepts(s.fen, s.solution).has('intermezzo')).toBe(false);
+  });
+
+  it('a plain recapture is not an intermezzo', () => {
+    // 1.Qxd5 Qxd5: taking back at once, no tempo move in between.
+    const found = detectConcepts('4k3/8/8/3q4/8/8/8/3QK3 b - - 0 1', ['d5d1', 'e1d1'], { fen: '4k3/8/8/3q4/8/8/8/3QK3 w - - 0 1', uci: 'd1d5' });
+    expect(found.has('intermezzo')).toBe(false);
+  });
+});
