@@ -5,12 +5,13 @@ import { Chessground } from '@lichess-org/chessground';
 import type { Api } from '@lichess-org/chessground/api';
 import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key } from '@lichess-org/chessground/types';
-import type { Square } from 'chess.js';
+import { Chess, SQUARES, type Square } from 'chess.js';
 import { Analyst } from '../coach/analyst';
-import { Coach, joinRemarks, type Remark } from '../coach/coach';
+import { Coach, joinRemarks, type Remark, type Shape } from '../coach/coach';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { MODES, modeInfo, type Mode, type ModeId } from './modes';
+import { LineInput, MAX_LINE_MOVES, type Line, type LineMove, type TapResult } from './lines-input';
 import { Navigation, RemarkLog, plyLabel } from './navigation';
 import { createOpponent, type Opponent } from './opponent';
 import type { Theme } from './theme';
@@ -45,6 +46,11 @@ function saveSettings(s: Settings): void {
   }
 }
 
+/** A coach shape in chessground's form (a numbered arrow carries its label). */
+function drawShape(s: Shape): DrawShape {
+  return { orig: s.orig as Key, dest: s.dest as Key | undefined, brush: s.brush, label: s.label ? { text: s.label } : undefined };
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class App {
@@ -63,6 +69,12 @@ export class App {
   private log = new RemarkLog();
   /** True while the board shows arrows from a viewed position's remark. */
   private viewShapes = false;
+  /** The line being entered with tap-arrows (Explain mode), if any. Live position only. */
+  private input?: LineInput;
+  /** The line last explained, so the player can change it. */
+  private lastLine?: Line;
+  /** A rejected arrow, shown for a moment so the player sees why nothing happened. */
+  private invalid?: { from: Square; to: Square };
   private el: Record<string, HTMLElement> = {};
 
   constructor(
@@ -111,6 +123,14 @@ export class App {
             <button id="nav-forward" aria-label="Next move">›</button>
             <button id="nav-live" aria-label="Latest position">»</button>
           </div>
+          <div id="explain-bar" class="explainbar" hidden>
+            <p id="explain-text" class="explain-text" aria-live="polite"></p>
+            <div class="explain-buttons">
+              <button id="explain-undo">Undo</button>
+              <button id="explain-cancel">Cancel</button>
+              <button id="explain-done" class="primary">Done</button>
+            </div>
+          </div>
           <div id="viewbar" class="viewbar" hidden>
             <span id="viewtext"></span>
             <button id="back-to-game" class="primary">Back to game</button>
@@ -130,6 +150,7 @@ export class App {
           <p id="status" class="status"></p>
           <div class="actions">
             <button id="hint">Hint</button>
+            <button id="explain">Explain</button>
             <button id="takeback">Take back</button>
             <button id="flip">Flip board</button>
           </div>
@@ -138,7 +159,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'explain', 'explain-bar', 'explain-text', 'explain-undo', 'explain-cancel', 'explain-done']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -155,6 +176,11 @@ export class App {
     this.root.querySelector('#flip')!.addEventListener('click', () => this.board.toggleOrientation());
     this.el.takeback.addEventListener('click', () => void this.takeback());
     this.el.hint.addEventListener('click', () => void this.hint());
+    this.el.explain.addEventListener('click', () => this.startExplain());
+    this.el['explain-undo'].addEventListener('click', () => this.explainUndo());
+    this.el['explain-cancel'].addEventListener('click', () => this.endExplain());
+    this.el['explain-done'].addEventListener('click', () => void this.explainDone());
+    this.el.board.addEventListener('click', (e) => this.onBoardTap(e));
 
     this.el['nav-start'].addEventListener('click', () => this.navigate(() => this.nav.start()));
     this.el['nav-back'].addEventListener('click', () => this.navigate(() => this.nav.back()));
@@ -191,6 +217,9 @@ export class App {
   private async newGame(): Promise<void> {
     const id = ++this.gameId;
     this.thinking = false;
+    this.input = undefined;
+    this.lastLine = undefined;
+    this.invalid = undefined;
     // `?fen=` starts from a position, playing the side to move (for testing,
     // and later for starting games from repertoire positions).
     const startFen = new URLSearchParams(location.search).get('fen') ?? undefined;
@@ -237,7 +266,11 @@ export class App {
   private sync(): void {
     const g = this.game;
     const nav = this.nav;
+    this.el['board-area'].classList.toggle('exploring', !!this.input);
+    this.el['explain-bar'].hidden = !this.input;
     nav.setLive(g.moves.length);
+    if (this.input) return this.renderExplain();
+    this.board.set({ viewOnly: false });
     const view = nav.viewing ? g.positionAt(nav.ply) : undefined;
     const shown = view ?? { fen: g.fen, turn: g.turn, inCheck: g.inCheck, lastMove: g.lastMove };
     const last = shown.lastMove;
@@ -264,6 +297,8 @@ export class App {
     this.el.takeback.hidden = !this.mode.takebacks;
     (this.el.takeback as HTMLButtonElement).disabled = nav.viewing || this.thinking || !g.moves.some((m) => m.color === g.playerColor);
     (this.el.hint as HTMLButtonElement).disabled = !canMove;
+    // Explaining a line starts from the live position, on the player's turn.
+    (this.el.explain as HTMLButtonElement).disabled = !canMove;
     this.el.portrait.classList.toggle('busy', this.thinking);
   }
 
@@ -271,7 +306,7 @@ export class App {
     return this.log
       .at(ply)
       .flatMap((e) => e.remark.shapes ?? [])
-      .map((s): DrawShape => ({ orig: s.orig as Key, dest: s.dest as Key | undefined, brush: s.brush }));
+      .map(drawShape);
   }
 
   /** Buttons, the "Viewing…" bar and the highlighted move. */
@@ -298,7 +333,11 @@ export class App {
 
   private onKey(e: KeyboardEvent): void {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    if ((e.target as HTMLElement | null)?.closest('select, input, textarea')) return;
+    if (e.target instanceof Element && e.target.closest('select, input, textarea')) return;
+    if (this.input) {
+      if (e.key === 'Escape') this.endExplain();
+      return; // no move navigation while a line is being entered
+    }
     const actions: Record<string, () => void> = {
       ArrowLeft: () => this.nav.back(),
       ArrowRight: () => this.nav.forward(),
@@ -359,10 +398,9 @@ export class App {
     this.log.add(this.game.moves.length, r);
     this.el['bubble-box'].classList.remove('stale');
     // While looking at the past, the new remark waits in the log (arrows too).
-    if (!this.nav.viewing) {
-      this.board.setAutoShapes(
-        (r.shapes ?? []).map((s): DrawShape => ({ orig: s.orig as Key, dest: s.dest as Key | undefined, brush: s.brush })),
-      );
+    // (or entering a line: the arrows on the board are the player's).
+    if (!this.nav.viewing && !this.input) {
+      this.board.setAutoShapes((r.shapes ?? []).map(drawShape));
     }
     this.renderBubble();
   }
@@ -390,7 +428,10 @@ export class App {
       ? await coach.onCoachMove(coachMove.fenBefore, coachMove.uci, ply, coachMove.lastMove)
       : undefined;
     const remark = joinRemarks(narration, await coach.onPlayerTurn(this.game.fen, ply));
-    if (!this.stale(id, ply) && remark) this.say(remark);
+    if (!this.stale(id, ply) && remark) {
+      this.say(remark);
+      if (remark.offerExplain && this.mode.prompts) this.offerExplain();
+    }
   }
 
   private async onPlayerMove(from: Square, to: Square): Promise<void> {
@@ -400,6 +441,7 @@ export class App {
       promotion = await this.askPromotion(this.game.playerColor);
       if (id !== this.gameId) return;
     }
+    this.el.choices.hidden = true;
     const fenBefore = this.game.fen;
     const move = this.game.play(from + to + promotion);
     const ply = this.game.moves.length;
@@ -477,7 +519,7 @@ export class App {
   }
 
   private async takeback(): Promise<void> {
-    if (this.thinking || this.nav.viewing || !this.mode.takebacks || !this.game.takeback()) return;
+    if (this.input || this.thinking || this.nav.viewing || !this.mode.takebacks || !this.game.takeback()) return;
     this.log.truncate(this.game.moves.length);
     this.board.setAutoShapes([]);
     this.sync();
@@ -488,12 +530,177 @@ export class App {
   }
 
   private async hint(): Promise<void> {
-    if (this.nav.viewing) return;
+    if (this.nav.viewing || this.input) return;
     const id = this.gameId;
     const ply = this.game.moves.length;
     const coach = await this.coach;
     const remark = await coach.hint();
     if (!this.stale(id, ply)) this.say(remark);
+  }
+
+  // --- Explain your idea: lines with tap-arrows ---------------------------
+
+  /** A button in the bubble that opens arrow mode (the coach asks, e.g. at a tactic). */
+  private offerExplain(label = 'Show me your idea'): void {
+    const box = this.el.choices;
+    box.innerHTML = `<button data-choice="explain" class="primary">${label}</button>`;
+    box.hidden = false;
+    box.onclick = (e) => {
+      if (!(e.target as HTMLElement).closest('button')) return;
+      box.hidden = true;
+      this.startExplain(label === 'Change my line' ? this.lastLine?.moves : undefined);
+    };
+  }
+
+  private startExplain(prefill?: readonly LineMove[]): void {
+    const g = this.game;
+    if (this.input || this.nav.viewing || this.thinking || g.result.over || !g.isPlayerTurn) return;
+    this.el.choices.hidden = true;
+    this.input = new LineInput(g.fen, true);
+    if (prefill) this.input.load(prefill);
+    this.board.setAutoShapes([]);
+    this.viewShapes = false;
+    this.sync();
+  }
+
+  /** Leaves arrow mode without checking anything. */
+  private endExplain(): void {
+    if (!this.input) return;
+    this.input = undefined;
+    this.invalid = undefined;
+    this.board.setAutoShapes(this.shapesAt(this.nav.live));
+    this.sync();
+  }
+
+  private explainUndo(): void {
+    if (!this.input?.undo()) return;
+    this.invalid = undefined;
+    this.renderExplain();
+  }
+
+  /** Redraws the board and the bar: the line so far, the selection, a rejected arrow. */
+  private renderExplain(): void {
+    const input = this.input!;
+    const last = input.moves.at(-1);
+    const turn = input.fen.split(' ')[1] === 'w' ? 'white' : 'black';
+    this.board.set({
+      fen: input.fen,
+      turnColor: turn,
+      check: new Chess(input.fen).inCheck() ? turn : false,
+      lastMove: last ? [last.from as Key, last.to as Key] : undefined,
+      viewOnly: true,
+      movable: { color: undefined, dests: new Map() },
+    });
+    const shapes: DrawShape[] = input.moves.map((m, i) => ({
+      orig: m.from as Key,
+      dest: m.to as Key,
+      brush: m.mine ? 'green' : 'blue',
+      label: { text: String(i + 1) },
+    }));
+    if (input.selected) {
+      shapes.push({ orig: input.selected as Key, brush: 'yellow' });
+      for (const d of input.dests) shapes.push({ orig: d as Key, brush: 'paleGrey' });
+    }
+    if (this.invalid) shapes.push({ orig: this.invalid.from as Key, dest: this.invalid.to as Key, brush: 'red' });
+    this.board.setAutoShapes(shapes);
+
+    (this.el['explain-undo'] as HTMLButtonElement).disabled = input.isEmpty;
+    (this.el['explain-done'] as HTMLButtonElement).disabled = input.isEmpty;
+    if (!this.el['explain-text'].dataset.msg) this.explainText(this.explainPrompt());
+    delete this.el['explain-text'].dataset.msg;
+  }
+
+  private explainPrompt(): string {
+    const input = this.input!;
+    if (input.isFull) return `That's ${MAX_LINE_MOVES} moves, the most I can check. Tap Done.`;
+    if (input.ended) return 'The game ends here. Tap Done.';
+    const n = input.moves.length + 1;
+    return input.nextIsMine
+      ? `Move ${n}: tap one of your pieces, then where it goes.`
+      : `Move ${n}: their reply. Tap one of their pieces, then where it goes.`;
+  }
+
+  private explainText(text: string, keep = false): void {
+    this.el['explain-text'].textContent = text;
+    if (keep) this.el['explain-text'].dataset.msg = '1';
+  }
+
+  /** Taps on the board while entering a line: piece, then square. */
+  private onBoardTap(e: MouseEvent): void {
+    const input = this.input;
+    if (!input) return;
+    const rect = this.el.board.getBoundingClientRect();
+    const col = Math.min(7, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * 8)));
+    const row = Math.min(7, Math.max(0, Math.floor(((e.clientY - rect.top) / rect.height) * 8)));
+    const white = this.board.state.orientation === 'white';
+    const sq = ('abcdefgh'[white ? col : 7 - col] + (white ? 8 - row : row + 1)) as Square;
+    if (!SQUARES.includes(sq)) return;
+    void this.applyTap(input.tap(sq));
+  }
+
+  private async applyTap(r: TapResult): Promise<void> {
+    const input = this.input!;
+    this.invalid = undefined;
+    let message: string | undefined;
+    switch (r.kind) {
+      case 'invalid':
+        this.invalid = { from: r.from, to: r.to };
+        message = r.why;
+        setTimeout(() => {
+          if (this.input === input && this.invalid) {
+            this.invalid = undefined;
+            this.renderExplain();
+          }
+        }, 1200);
+        break;
+      case 'ignored':
+        message = r.why;
+        break;
+      case 'full':
+        message = `That's ${MAX_LINE_MOVES} moves, the most I can check. Tap Done.`;
+        break;
+      case 'needs-promotion': {
+        const piece = await this.askPromotion(this.game.playerColor);
+        if (this.input !== input) return;
+        input.add(r.from, r.to, piece as LineMove['promotion']);
+        break;
+      }
+    }
+    if (message) this.explainText(message, true);
+    this.renderExplain();
+  }
+
+  /** Done: leaves arrow mode and asks the coach to check the line against the engine. */
+  private async explainDone(): Promise<void> {
+    const input = this.input;
+    if (!input || input.isEmpty) return;
+    const line = input.line;
+    const id = this.gameId;
+    const ply = this.game.moves.length;
+    this.input = undefined;
+    this.invalid = undefined;
+    this.lastLine = line;
+    this.thinking = true;
+    this.board.setAutoShapes([]);
+    this.sync();
+    this.status('Checking your line…');
+    const coach = await this.coach;
+    let remark: Remark | undefined;
+    try {
+      remark = await coach.explainLine(line);
+    } catch {
+      /* engine trouble: say so below */
+    }
+    if (this.stale(id, ply)) return;
+    this.thinking = false;
+    this.sync();
+    this.status('Your move.');
+    if (!remark) {
+      this.say({ kind: 'line', text: "I couldn't check that line. Try again.", mood: 'concerned' });
+      return;
+    }
+    this.say(remark);
+    this.offerExplain('Change my line');
   }
 
   /** Shows "Take back" / "Play on" in the bubble and waits for a choice. */

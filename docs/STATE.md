@@ -1,10 +1,10 @@
 # Project state
 
-Last updated: 2026-11-23, after task 1.4b (move navigation).
+Last updated: 2026-11-23, after task 1.5 (Explain your idea: lines).
 
 ## Summary
 
-Roadmap phase 1 (coached game MVP) is about half done. You can play a full game against a Maia opponent at your level. The coach speaks on rule-based triggers (tactic available, threat, mistake with takeback offer, praise, phase prompts) and gives 4-step hints, all from board-checked facts. The coach also thinks aloud on its own moves (how it answered your threat, its captures, the idea behind a quiet move), honestly and under the comment budget. Two modes: Lesson (all of the above, takebacks) and Sparring (serious moments only, hints on request, no takebacks, no thinking aloud). You can view earlier positions. Not yet built: "Explain your idea", branches.
+Roadmap phase 1 (coached game MVP) is about half done. You can play a full game against a Maia opponent at your level. The coach speaks on rule-based triggers (tactic available, threat, mistake with takeback offer, praise, phase prompts) and gives 4-step hints, all from board-checked facts. The coach also thinks aloud on its own moves (how it answered your threat, its captures, the idea behind a quiet move), honestly and under the comment budget. Two modes: Lesson (all of the above, takebacks) and Sparring (serious moments only, hints on request, no takebacks, no thinking aloud). You can view earlier positions. You can show a line with tap-arrows ("Explain") and the coach checks it against Stockfish. Not yet built: plans (free text), branches.
 
 ## Done
 
@@ -21,6 +21,7 @@ Roadmap phase 1 (coached game MVP) is about half done. You can play a full game 
 | `a424f47` | Hung pawns and pieces below the level's mistake size are flagged in Lesson, when the evaluation confirms the loss (58 tests) |
 | `08f8738` | Mistake remarks say why taking back fails (`failedRecapture`) (64 tests) |
 | (after 1.4b) | Move navigation: `navigation.ts`, remark log in the bubble, tap buttons, move-list taps, keys (87 tests) |
+| (after 1.5) | Explain your idea (lines): `lines-input.ts` (tap-arrow state), `linecheck.ts` (move-by-move check), verdict wording in `templates.ts`, Explain button + arrow bar in the game screen (106 tests) |
 | (after 1.4) | Praise for a sound sacrifice; hung threshold 0.9 per pawn; the engine's top move is never a mistake (72 tests) |
 
 ## Feasibility results (desktop only so far)
@@ -46,6 +47,8 @@ Measured on the developer's PC (16 cores, Intel Iris Xe-class integrated GPU).
 
 - Task 1.4b: 15 unit tests in `navigation.test.ts` (clamping, snap to live, new move while viewing, takeback while viewing, ply labels incl. the Greek-gift FEN, remark log). Browser, Greek gift in Lesson (`?fen=rnbq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 7`, Bxh7+): "Bold!…" stays in the bubble after Kxh7; « ‹ buttons, Home key and a tap on a move-list cell show the position with "Viewing 7.Bxh7+" bar, check highlight, Hint/Take back disabled; tapping the last move returns to live. A case where the coach narrates after a remark (two entries in the log) is only covered by unit tests, and a coach move arriving while viewing was not tried live. Not tried on a real Galaxy Z Fold 7: all controls are buttons (48px tall), the emulated 390px phone viewport looked right.
 
+- Task 1.5: 10 tests in `lines-input.test.ts` (select/move/invalid/reselect/undo/promotion/full/game over/load+truncate) and 9 in `linecheck.test.ts` (scripted engine over real positions: knight fork good line, 5.Bc4?? refuted with Nxd4, refuted at a later move, a better opponent reply, "both already lost" and slower-mate cases, a weaker move that keeps the edge, labels). Browser (real engine), emulated 390px phone and 600px: the knight fork entered by real taps (illegal d6 shows a red arrow + "That's not a legal move for the knight."; numbered green/blue arrows; Done → "Good line!… +6.9"); Greek gift (`?fen=rnbq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 7`): good line 1.Bxh7+ Kxh7 2.Ng5+ Kg6 3.h4 (all engine top moves, +6.2); refuted 3.Qg4 ("I'd answer with f5, … -3.8 for me"); better reply (expecting Kg8: "Kg6 is a better reply… +7.8 … but only +3.9"); 7.Ba6 refuted ("Nxa6, winning a bishop"); 7.O-O + Bxc3 flagged as a better reply (f6). Black orientation taps checked on a flipped board. Navigation: Explain is disabled while viewing an earlier position, the « ‹ › » buttons are hidden and arrow keys ignored in arrow mode, Esc cancels. Checking a 5-move line takes about 3 s on desktop. Not tried on a real Galaxy Z Fold 7; no console errors seen.
+
 ## Decisions (differ from or add to the spec)
 
 These should be folded into the spec (see PLAN, task "Spec sync").
@@ -70,8 +73,18 @@ These should be folded into the spec (see PLAN, task "Spec sync").
 13. **Why taking back fails.** When the refutation is a single capture of a defended piece, the mistake remark says why the player can't just take back, if board code shows it (`failedRecapture` in `facts.ts`): exactly one legal recapture, the coach takes the recapturing piece on the same square, the player can't take again, and the recapturing piece is worth more than what it won. "That would win a pawn: if you recapture with Qxd4, I take your queen with Qxd4." Longer exchanges, two ways to take back, or reasons elsewhere on the board get no "why" (attacker/defender counting is a possible next step).
 14. **Praise for a sound sacrifice (Lesson).** So the player learns when a move that gives material is good. Two checks: (a) board facts: the move *offers* material, i.e. the coach can legally take the moved piece and the player can't win back as much on that square (their own capture plus at most one recapture of the taker), at least a pawn net; (b) the engine: the move is its top move or within 0.6 pawns of it (`FOUND_CP`). "Bold! Bxh7+ offers your bishop for a pawn, but the engine rates it among the best moves here. Can you see what you get for it?" Whether the engine would accept the offer doesn't matter (for the Greek gift it sometimes declines with Kh8). Found tactics within the level keep their own praise. Pawn breaks retaken at once (Italian 5.d4 exd4 cxd4, Morra 3.c3 dxc3 Nxc3) and gambits worth less than the best move (Evans, King's Gambit) get nothing.
 
+15. **Explain your idea (task 1.5).**
+    - **Live position only.** Explain is disabled while viewing an earlier position, and arrow mode blocks move navigation. `LineInput` takes any `rootFen`, so 1.6 can lift this and start a line (or branch) from a viewed position.
+    - **Line state = `Line { rootFen, moves: LineMove[] }`** (`lines-input.ts`); each `LineMove` has from/to/promotion/uci/san and `mine`. The player's moves are the ones at even index (the player moves first); the opponent's replies are entered by tapping their pieces too. `LineInput` has `undo`, `truncate(n)` and `load(moves)`, which is what branches need (keep a prefix, fork). The game screen keeps the last checked line (`lastLine`) for "Change my line". For 1.6: a branch can start from `input.line`; the verdict is a pure function of the line (`checkLine`), so a branch can reuse it per move.
+    - **Max 8 moves** per line (checking costs one search per position; the longer "play it out" case is the branch of 1.6).
+    - **Verdict rules** (`linecheck.ts`, one Stockfish search per position, the value of a move = the negated score after it, compared with the best move's score): first problem along the line decides. (a) *Refuted at move N*: the player's move is worth ≥1.5 pawns less than the best move **and** leaves them under +1.0 (a weaker move that keeps an edge isn't "refuted"; the good-line text mentions the stronger move instead). The "why" is the opponent's best reply, with what it wins (taught line, `winsPhrase`) or else the engine score. (b) *The opponent has a better reply*: their move in the line is worth ≥1.5 pawns less than their best, so the line doesn't force it; the better reply and both scores are given. (c) *Good line*: nothing above; says what it wins/mates and the engine score. Ignored on purpose: a mate that is only slower, and differences when both moves leave a side at +5.0 or worse.
+    - **Honesty:** wording says "the engine agrees / rates", never "correct". Scores are always labelled for whom (`+1.4 for you`).
+    - **Lesson:** a tactic prompt also shows a "Show me your idea" button (`Remark.offerExplain`); the Explain button is always there (also in Sparring: the player asks for it, so it isn't unasked talk). Not done: asking for an explanation at other key moments.
+    - Arrows: green = your move, blue = their reply, numbered; after a verdict the board keeps the arrows up to the failing move, with the better reply in red.
+
 ## Known issues and gaps
 
+- Explain: the verdict arrows are drawn on the position before the line, so a piece that moves twice (e.g. a queen) has its second arrow start from an empty square. Plans (free text, AI model structure) are not built, and a line can't yet be played out as a branch (1.6). Promotion inside a line is untested by clicking. An opponent's move that is "worse than best" is reported even when both choices are bad for them but one is much less bad (e.g. +7.8 vs +3.9 for the player): that is true by the engine, but may feel picky at low levels.
 - Foldable / small-tablet widths (760–~900 px) break the two-column layout (board cut off at 790 px wide). Planned in task 1.8.
 - The Queen's Gambit (2.c4) gets "Bold!" praise every game: true by the facts, but it's standard theory, not daring. Planned: task 1.7b names known openings and gambits (for either side) instead.
 - Sacrifice praise only looks at the moved piece; a move that leaves a *different* piece to be taken on purpose isn't praised.
@@ -88,7 +101,6 @@ These should be folded into the spec (see PLAN, task "Spec sync").
 - Changing the mode mid-game has no effect until "New game"; a player may expect it to apply at once.
 - Hints used are counted (`Coach.hintsUsed`) but not stored anywhere.
 - No game persistence: a reload loses the game.
-- No way to view earlier positions (planned as task 1.4b).
 - Phone layout: the coach bubble sits below the full-width board and is barely visible without scrolling (planned in task 1.8).
 - Maia3 weights' license is unstated (code is AGPL-3.0; maia3-js is MIT by an individual). Ask CSSLab before a public release.
 - The spec doesn't yet reflect the decisions above.

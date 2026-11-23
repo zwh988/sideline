@@ -16,7 +16,9 @@ import { Chess, type PieceSymbol, type Square } from 'chess.js';
 import type { Level } from '../app/levels';
 import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
+import type { Line } from '../app/lines-input';
 import type { TaughtLine } from './lines';
+import { checkLine, type LineVerdict } from './linecheck';
 import { failedRecapture, PIECE_NAME, VALUE, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
 import {
@@ -26,6 +28,7 @@ import {
   moveWithWhich,
   narrateCoachMove,
   narrateLine,
+  narrateVerdict,
   pieceRef,
   praise,
   targetList,
@@ -39,14 +42,18 @@ export type Mood = 'neutral' | 'thinking' | 'pleased' | 'concerned' | 'surprised
 export interface Shape {
   orig: Square;
   dest?: Square;
-  brush: 'green' | 'red' | 'blue' | 'yellow';
+  brush: 'green' | 'red' | 'blue' | 'yellow' | 'paleGrey' | 'paleRed';
+  /** Text on the arrow: the step number of a line. */
+  label?: string;
 }
 
 export interface Remark {
-  kind: 'tactic' | 'threat' | 'mistake' | 'missed-tactic' | 'praise' | 'defended' | 'phase' | 'hint' | 'narration';
+  kind: 'tactic' | 'threat' | 'mistake' | 'missed-tactic' | 'praise' | 'defended' | 'phase' | 'hint' | 'narration' | 'line';
   text: string;
   mood: Mood;
   offerTakeback?: boolean;
+  /** Lesson: invite the player to show their idea with the Explain button. */
+  offerExplain?: boolean;
   shapes?: Shape[];
 }
 
@@ -139,6 +146,7 @@ export class Coach {
         kind: 'tactic',
         text: "There's something strong here. Take your time.",
         mood: 'pleased',
+        offerExplain: true,
       });
     }
     if (t.threat) {
@@ -330,6 +338,21 @@ export class Coach {
     });
   }
 
+  /**
+   * "Explain your idea": checks the line the player entered against the
+   * engine, move by move, and answers with the verdict. The line's arrows
+   * stay up to the move that fails; the opponent's better answer is red.
+   */
+  async explainLine(line: Line): Promise<Remark> {
+    const verdict = await checkLine(this.analyst, line, { maxPlies: Math.max(this.level.maxPlies, line.moves.length) });
+    return {
+      kind: 'line',
+      text: narrateVerdict(line.rootFen, verdict),
+      mood: verdict.kind === 'good' ? 'pleased' : verdict.kind === 'empty' ? 'neutral' : 'concerned',
+      shapes: verdictShapes(line, verdict),
+    };
+  }
+
   /** Step-by-step hints: something is here, where to look, which piece, the answer. */
   async hint(): Promise<Remark> {
     const t = await this.turn!;
@@ -469,4 +492,25 @@ export function joinRemarks(first: Remark | undefined, second: Remark | undefine
     text: `${first.text} ${second.text}`,
     shapes: [...(first.shapes ?? []), ...(second.shapes ?? [])],
   };
+}
+
+/** The line's numbered arrows (mine green, theirs blue) up to the problem, then the better reply in red. */
+export function verdictShapes(line: Line, v: LineVerdict): Shape[] {
+  if (v.kind === 'empty') return [];
+  const upTo = v.kind === 'good' ? line.moves.length : v.index + 1;
+  const shapes: Shape[] = line.moves.slice(0, upTo).map((m, i) => ({
+    orig: m.from,
+    dest: m.to,
+    brush: m.mine ? 'green' : 'blue',
+    label: String(i + 1),
+  }));
+  if (v.kind === 'refuted' && v.reply) {
+    shapes.push({ orig: v.reply.from, dest: v.reply.to, brush: 'red', label: String(v.index + 2) });
+  }
+  if (v.kind === 'better-reply') {
+    // Their better move replaces the one in the line.
+    shapes.pop();
+    shapes.push({ orig: v.best.from, dest: v.best.to, brush: 'red', label: String(v.index + 1) });
+  }
+  return shapes;
 }

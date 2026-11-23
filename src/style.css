@@ -347,3 +347,63 @@ button.primary {
   background: var(--coach-accent);
   color: #fff;
 }
+
+/* Actions: tap targets of 44px or more, wrapping on narrow screens */
+.actions {
+  flex-wrap: wrap;
+}
+
+.actions button {
+  min-height: 44px;
+}
+
+/* Explain mode: the arrow-entry bar replaces the move navigation under the board */
+.explainbar {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--coach-accent);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.explainbar[hidden] {
+  display: none;
+}
+
+.explain-text {
+  margin: 0 0 8px;
+  min-height: 2.6em;
+}
+
+.explain-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.explain-buttons button {
+  flex: 1;
+  min-height: 48px;
+}
+
+.board-area.exploring #board {
+  outline: 3px dashed var(--coach-accent);
+  outline-offset: -3px;
+}
+
+.board-area.exploring .nav {
+  display: none;
+}
+
+#board {
+  touch-action: manipulation;
+}
+
+/* chessground's file letters poke out of the board by a few pixels, which made the page scroll sideways at 390px */
+.board-area {
+  overflow-x: clip;
+}
+
+.choices button,
+#new-game {
+  min-height: 44px;
+}

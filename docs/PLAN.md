@@ -57,7 +57,7 @@ Comes before branches (1.6), which can start from a position the player is looki
 - **Done when:** it works by tapping on the phone viewport and by keyboard on desktop, and there are unit tests for the navigation state (clamping at the ends, snapping back to live, the viewed position after a takeback), and a remark on the player's move is still readable after the coach replies.
 - Done: `src/app/navigation.ts` (`Navigation`, `RemarkLog`, `plyLabel`), 4 tap buttons under the board (« ‹ › »), tappable move list, Home/End/arrow keys, a "Viewing … · Back to game" bar. The bubble is a log of the player-move remark and the coach reply.
 
-### ⬜ 1.5 Explain your idea: lines with tap-arrows
+### ✅ 1.5 Explain your idea: lines with tap-arrows
 Spec: "Explain your idea", "Lines".
 - An "Explain" button enters arrow mode:
   - tap a piece, then a square; arrows snap to legal moves, and an illegal arrow shows as invalid right away,
@@ -66,6 +66,7 @@ Spec: "Explain your idea", "Lines".
 - The coach checks the line move by move against Stockfish and board code. Feedback uses the spec's categories for lines (good line, refuted at move N and why, the opponent has a better reply).
 - The coach asks for an explanation at key moments, e.g. when a tactic is available in Lesson mode.
 - **Done when:** this works on the phone viewport, and there are unit tests for line checking.
+- Done: `src/app/lines-input.ts`, `src/coach/linecheck.ts`, `narrateVerdict` in `templates.ts`, `Coach.explainLine`. Explain button + "Show me your idea" at a Lesson tactic prompt; live position only (see STATE decision 15). Asking at other key moments, and plans (free text), are not done.
 
 ### ⬜ 1.6 Branches: "What if?"
 Spec: "Branches: play it out" and its rules. This is large; split it if needed (a: branch state and UI, b: verdict and merge).
