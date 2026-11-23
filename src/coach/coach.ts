@@ -1,0 +1,294 @@
+// When the coach speaks (spec): rules, not the AI model, decide. The coach
+// mostly stays quiet, and every fact it states comes from the analyst.
+//
+//   Tactic available to the player   → "There's something strong here, take your time."
+//   Opponent threat the player may miss → "Before you move, what does my last move want?"
+//   Player mistake (level's concepts) → explain briefly, offer a takeback
+//   Player found the tactic           → short praise naming the pattern
+//   New phase                         → planning prompt
+//   Nothing important                 → silence
+import { Chess, type Square } from 'chess.js';
+import type { Level } from '../app/levels';
+import type { Analyst, PositionEval } from './analyst';
+import type { TaughtLine } from './lines';
+import { byImportance, capitalize, moveWithWhich, narrateLine, pieceRef, praise, targetList, winsPhrase } from './templates';
+
+export type Mood = 'neutral' | 'thinking' | 'pleased' | 'concerned' | 'surprised';
+
+export interface Shape {
+  orig: Square;
+  dest?: Square;
+  brush: 'green' | 'red' | 'blue' | 'yellow';
+}
+
+export interface Remark {
+  kind: 'tactic' | 'threat' | 'mistake' | 'missed-tactic' | 'praise' | 'defended' | 'phase' | 'hint';
+  text: string;
+  mood: Mood;
+  offerTakeback?: boolean;
+  shapes?: Shape[];
+}
+
+/** What the coach knows about the position on the player's turn. */
+interface TurnFacts {
+  fen: string;
+  ev: PositionEval;
+  tactic?: TaughtLine; // the player can win something (within their level)
+  threat?: TaughtLine; // the opponent threatens something (within their level)
+}
+
+/** Low-priority remarks wait at least this many plies after the last remark. */
+const BUDGET_PLIES = 6;
+/** Moves within this much of the best move count as "found it". */
+const FOUND_CP = 60;
+
+export class Coach {
+  private turn?: Promise<TurnFacts>;
+  private hintStep = 0;
+  private lastRemarkPly = -BUDGET_PLIES;
+  private said = new Set<string>();
+  /** The tactic the player started (and was praised for), while they carry it out. */
+  private combination?: TaughtLine;
+  private continuing = false;
+  /** Hints used this game, for later mastery tracking. */
+  hintsUsed = 0;
+
+  constructor(
+    private analyst: Analyst,
+    private level: Level,
+    private playerColor: 'w' | 'b',
+  ) {}
+
+  private limits() {
+    return { maxPlies: this.level.maxPlies, minGain: this.level.minGain };
+  }
+
+  private teachable(line: TaughtLine | undefined): TaughtLine | undefined {
+    return line && this.level.motifs.includes(line.motif) ? line : undefined;
+  }
+
+  /** Starts analysing the player's position in the background (hints must feel instant). */
+  prepare(fen: string): Promise<TurnFacts> {
+    this.hintStep = 0;
+    this.turn = (async () => {
+      const ev = await this.analyst.evaluate(fen, 2);
+      const cut = this.analyst.taughtLine(ev, this.limits());
+      const tactic = this.teachable(cut.kind === 'line' ? cut.line : undefined);
+      const threat = this.teachable(await this.analyst.threat(fen, this.limits()));
+      if (tactic) await this.analyst.markForced(tactic);
+      return { fen, ev, tactic, threat };
+    })();
+    return this.turn;
+  }
+
+  /** Called when it becomes the player's turn. Returns what to say, or nothing. */
+  async onPlayerTurn(fen: string, ply: number): Promise<Remark | undefined> {
+    const t = await this.prepare(fen);
+    // Mid-combination: the follow-up is part of what the player already found.
+    const ownLater = this.combination?.moves.filter((m) => m.color === this.playerColor).slice(1) ?? [];
+    this.continuing = !!t.tactic && ownLater.some((m) => m.uci === t.tactic!.moves[0].uci);
+    if (!this.continuing) this.combination = undefined;
+    if (this.continuing) return undefined;
+
+    if (t.tactic) {
+      this.hintStep = 1; // this remark is hint step 1
+      return this.remark(ply, {
+        kind: 'tactic',
+        text: "There's something strong here. Take your time.",
+        mood: 'pleased',
+      });
+    }
+    if (t.threat) {
+      return this.remark(ply, {
+        kind: 'threat',
+        text: 'Before you move: what does my last move want?',
+        mood: 'thinking',
+      });
+    }
+    return this.phaseRemark(fen, ply);
+  }
+
+  /** Judges the player's move (before the opponent replies). */
+  async onPlayerMove(fenBefore: string, uci: string, ply: number): Promise<Remark | undefined> {
+    const t = this.turn ? await this.turn : await this.prepare(fenBefore);
+    const chess = new Chess(fenBefore);
+    const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    if (chess.isCheckmate()) return undefined; // the game screen celebrates
+
+    const after = await this.analyst.evaluate(chess.fen(), 1);
+    const loss = t.ev.bestCp - -after.bestCp;
+
+    // Found the tactic (praised once, at its first move).
+    if (t.tactic && uci === t.tactic.moves[0].uci) {
+      if (this.continuing) return undefined;
+      this.combination = t.tactic;
+      return this.remark(ply, { kind: 'praise', text: praise(t.tactic), mood: 'pleased' });
+    }
+
+    if (loss >= this.level.mistakeCp) {
+      // The move lets the coach win something the player has learned to see.
+      const cut = this.analyst.taughtLine(after, this.limits());
+      const refutation = this.teachable(cut.kind === 'line' ? cut.line : undefined);
+      if (refutation) {
+        await this.analyst.markForced(refutation);
+        const first = refutation.moves[0];
+        return this.remark(ply, {
+          kind: 'mistake',
+          text: `Careful: after ${move.san}, I can play ${moveWithWhich(first)}. ${
+            refutation.mate ? '' : `That would win ${winsPhrase(refutation)}. `
+          }Want to take it back?`,
+          mood: 'concerned',
+          offerTakeback: true,
+          shapes: [{ orig: first.from, dest: first.to, brush: 'red' }],
+        });
+      }
+      // The player missed their own tactic.
+      if (t.tactic) {
+        return this.remark(ply, {
+          kind: 'missed-tactic',
+          text: `You had something stronger than ${move.san} here. Want to take it back and look again?`,
+          mood: 'concerned',
+          offerTakeback: true,
+        });
+      }
+      // Otherwise the mistake is beyond the player's concepts: stay quiet.
+      return undefined;
+    }
+
+    // Dealt with the coach's threat (a low-priority remark).
+    if (t.threat && loss < FOUND_CP && this.budgetAllows(ply)) {
+      return this.remark(ply, { kind: 'defended', text: 'Good, you saw my threat.', mood: 'pleased' });
+    }
+    return undefined;
+  }
+
+  /** Step-by-step hints: something is here, where to look, which piece, the answer. */
+  async hint(): Promise<Remark> {
+    const t = await this.turn!;
+    this.hintsUsed++;
+    this.hintStep = Math.min(this.hintStep + 1, 4);
+    const step = this.hintStep;
+
+    if (t.tactic) {
+      const line = t.tactic;
+      const first = line.moves[0];
+      const mine = true;
+      const targets = line.mate
+        ? kingOf(t.fen, line.side === 'w' ? 'b' : 'w')
+        : first.doubleAttack
+          ? byImportance(first.attacks)
+          : first.discovered
+            ? [first.discovered.target]
+            : first.captured
+              ? [{ square: first.to, piece: first.captured }]
+              : capturedTargets(line);
+      const texts = [
+        line.mate ? "There's a checkmate in this position." : "There's a tactic in this position.",
+        `Look at ${targetList(targets, !mine)}.`,
+        `${capitalize(pieceRef(first.piece, first.from, mine))} can do something.`,
+        `${narrateLine(line)}`,
+      ];
+      const shapes: Shape[] =
+        step === 2
+          ? targets.map((x) => ({ orig: x.square, brush: 'yellow' as const }))
+          : step === 3
+            ? [{ orig: first.from, brush: 'green' }]
+            : step === 4
+              ? [{ orig: first.from, dest: first.to, brush: 'green' }]
+              : [];
+      return { kind: 'hint', text: texts[step - 1], mood: 'thinking', shapes };
+    }
+
+    if (t.threat) {
+      const line = t.threat;
+      const first = line.moves[0];
+      const victims = line.mate
+        ? kingOf(t.fen, this.playerColor)
+        : first.captured
+          ? [{ square: first.to, piece: first.captured }]
+          : first.doubleAttack
+            ? byImportance(first.attacks)
+            : capturedTargets(line);
+      const texts = [
+        'Something of yours is in danger. What does my last move want?',
+        `Look at ${targetList(victims, true)}.`,
+        `${capitalize(pieceRef(first.piece, first.from, false))} is the attacker.`,
+        `I'm threatening ${moveWithWhich(first)}${line.mate ? '' : `, winning ${winsPhrase(line)}`}. Protect it, move it, or block.`,
+      ];
+      const shapes: Shape[] =
+        step === 2
+          ? victims.map((x) => ({ orig: x.square, brush: 'yellow' as const }))
+          : step === 3
+            ? [{ orig: first.from, brush: 'red' }]
+            : step === 4
+              ? [{ orig: first.from, dest: first.to, brush: 'red' }]
+              : [];
+      return { kind: 'hint', text: texts[step - 1], mood: 'thinking', shapes };
+    }
+
+    return {
+      kind: 'hint',
+      text: "No tactic here for either side. Which of your pieces isn't doing much? Find it a better square.",
+      mood: 'neutral',
+    };
+  }
+
+  private phaseRemark(fen: string, ply: number): Remark | undefined {
+    if (!this.budgetAllows(ply)) return undefined;
+    const chess = new Chess(fen);
+    if (isEndgame(chess) && !this.said.has('endgame')) {
+      this.said.add('endgame');
+      return this.remark(ply, {
+        kind: 'phase',
+        text: "We're in the endgame now. Kings become fighters here: bring yours toward the middle.",
+        mood: 'neutral',
+      });
+    }
+    if (ply >= 16 && !this.said.has('opening') && !isEndgame(chess)) {
+      this.said.add('opening');
+      return this.remark(ply, {
+        kind: 'phase',
+        text: "The opening's done. Which of your pieces isn't doing anything yet?",
+        mood: 'thinking',
+      });
+    }
+    return undefined;
+  }
+
+  private budgetAllows(ply: number): boolean {
+    return ply - this.lastRemarkPly >= BUDGET_PLIES;
+  }
+
+  private remark(ply: number, r: Remark): Remark {
+    this.lastRemarkPly = ply;
+    return r;
+  }
+}
+
+function kingOf(fen: string, color: 'w' | 'b') {
+  const chess = new Chess(fen);
+  for (const row of chess.board()) {
+    for (const sq of row) if (sq?.type === 'k' && sq.color === color) return [{ square: sq.square, piece: sq.type }];
+  }
+  return [];
+}
+
+function capturedTargets(line: TaughtLine) {
+  return line.moves
+    .filter((m) => m.color === line.side && m.captured)
+    .map((m) => ({ square: m.to, piece: m.captured! }));
+}
+
+/** No queens, or very little material left besides kings and pawns. */
+function isEndgame(chess: Chess): boolean {
+  let queens = 0;
+  let pieces = 0;
+  for (const row of chess.board()) {
+    for (const sq of row) {
+      if (!sq || sq.type === 'k' || sq.type === 'p') continue;
+      if (sq.type === 'q') queens++;
+      pieces += { n: 3, b: 3, r: 5, q: 9 }[sq.type];
+    }
+  }
+  return (queens === 0 && pieces <= 26) || pieces <= 13;
+}

@@ -23,7 +23,13 @@ class MaiaOpponent implements Opponent {
 
   async chooseMove(game: Game): Promise<string> {
     // History lets Maia see the last few moves, as a human would.
-    const [policy] = await movePolicies(this.maia, game.fen, [this.elo], game.moves.map((m) => m.uci));
+    const [policy] = await movePolicies(
+      this.maia,
+      game.fen,
+      [this.elo],
+      game.moves.map((m) => m.uci),
+      game.startFen,
+    );
     const likely = new Map([...policy].filter(([, p]) => p >= MIN_PROBABILITY));
     return sampleMove(likely.size ? likely : policy);
   }

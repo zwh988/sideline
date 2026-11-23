@@ -142,9 +142,6 @@ button:disabled {
   transition: transform 0.2s;
 }
 
-.portrait[data-mood='thinking'] {
-  animation: think 1.2s ease-in-out infinite;
-}
 
 @keyframes think {
   50% {
@@ -246,4 +243,36 @@ button:disabled {
   font-size: 11px;
   font-weight: 600;
   color: rgb(0 0 0 / 0.55);
+}
+
+/* Coach states */
+.portrait.busy {
+  animation: think 1.2s ease-in-out infinite;
+}
+
+.bubble.stale {
+  opacity: 0.55;
+}
+
+.choices {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.choices[hidden] {
+  display: none;
+}
+
+button.primary {
+  background: var(--coach-accent);
+  border-color: var(--coach-accent);
+  color: #fff;
+}
+
+.status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  min-height: 1.3em;
 }

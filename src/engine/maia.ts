@@ -21,18 +21,18 @@ export async function loadMaia(onProgress?: (loaded: number, total: number) => v
 
 /**
  * Probability Maia gives to each legal move (UCI) for a player of `elo`,
- * for several ratings at once. `priorMoves` are the game's UCI moves so far,
- * which Maia uses as history (up to 8 positions).
+ * for several ratings at once. `priorMoves` are the game's UCI moves so far
+ * (played from `baseFen`, default the start), which Maia uses as history.
  */
 export async function movePolicies(
   maia: Maia3,
   fen: string,
   elos: number[],
   priorMoves: string[] = [],
+  baseFen?: string,
 ): Promise<Map<string, number>[]> {
-  const results = await maia.predictBatch(
-    elos.map((elo) => ({ fen, selfElo: elo, priorMoves: priorMoves.length ? priorMoves : undefined })),
-  );
+  const history = priorMoves.length ? { priorMoves, baseFen } : {};
+  const results = await maia.predictBatch(elos.map((elo) => ({ fen, selfElo: elo, ...history })));
   return results.map((r) => r.moves);
 }
 

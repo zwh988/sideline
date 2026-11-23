@@ -28,11 +28,7 @@ export function lineToSan(fen: string, pv: string[], max = 6): string {
   return san.join(' ');
 }
 
-/** Score as centipawns, with mates mapped to large values, for comparing moves. */
-export function scoreToCp(s: Score): number {
-  if (s.kind === 'cp') return s.value;
-  return s.value > 0 ? 100000 - s.value : -100000 - s.value;
-}
+export { scoreToCp } from '../engine/stockfish';
 
 export function formatScore(s: Score): string {
   return s.kind === 'mate' ? `mate in ${s.value}` : (s.value / 100).toFixed(2);

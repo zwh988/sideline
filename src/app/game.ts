@@ -17,11 +17,15 @@ export type Result =
   | { over: true; winner: Color | null; reason: string };
 
 export class Game {
-  private chess = new Chess();
+  private chess: Chess;
   readonly playerColor: Color;
+  /** Position the game started from (the normal start unless given). */
+  readonly startFen: string;
 
-  constructor(playerColor: Color) {
+  constructor(playerColor: Color, startFen?: string) {
     this.playerColor = playerColor;
+    this.chess = new Chess(startFen);
+    this.startFen = this.chess.fen();
   }
 
   get fen(): string {

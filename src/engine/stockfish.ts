@@ -3,6 +3,12 @@
 
 export type Score = { kind: 'cp'; value: number } | { kind: 'mate'; value: number };
 
+/** Score as centipawns, with mates mapped to large values, for comparing moves. */
+export function scoreToCp(s: Score): number {
+  if (s.kind === 'cp') return s.value;
+  return s.value > 0 ? 100000 - s.value : -100000 - s.value;
+}
+
 export interface Line {
   multipv: number;
   depth: number;
