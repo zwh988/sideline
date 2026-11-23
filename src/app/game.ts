@@ -58,6 +58,15 @@ export class Game {
     return this.moves.at(-1);
   }
 
+  /** The position after `ply` moves (0 = the start position), for viewing the past. */
+  positionAt(ply: number): { fen: string; turn: Color; inCheck: boolean; lastMove?: PlayedMove } {
+    const moves = this.moves;
+    const p = Math.min(Math.max(ply, 0), moves.length);
+    const c = new Chess(this.startFen);
+    for (const m of moves.slice(0, p)) c.move({ from: m.from, to: m.to, promotion: m.uci[4] });
+    return { fen: c.fen(), turn: c.turn() === 'w' ? 'white' : 'black', inCheck: c.inCheck(), lastMove: moves[p - 1] };
+  }
+
   /** Legal destinations per square, in the shape the board wants. */
   get dests(): Map<Square, Square[]> {
     const dests = new Map<Square, Square[]>();

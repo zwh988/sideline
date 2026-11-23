@@ -47,7 +47,7 @@ Spec: "Modes" table.
 - **Done when:** both modes are play-tested in the browser, and there are tests for the trigger differences.
 - Done: `src/app/modes.ts` (switches: prompts, small talk, takebacks, reveals plans), `Coach` takes the mode, a Mode select in the header (applies from the next game). Sparring keeps: mistakes flagged without the refutation, missed tactics, praise. Thinking aloud is silent in Sparring.
 
-### ⬜ 1.4b Move navigation: view earlier positions
+### ✅ 1.4b Move navigation: view earlier positions
 Comes before branches (1.6), which can start from a position the player is looking at.
 - Buttons for start, back, forward and live (back and forward large enough to tap on a phone). Arrow keys on desktop. Tapping a move in the move list jumps to that position.
 - While viewing an earlier position: the board is read-only, the last-move highlight shows the move that led there, and a clear "Viewing move 12 · Back to game" bar is shown. Hints and takeback are disabled.
@@ -55,6 +55,7 @@ Comes before branches (1.6), which can start from a position the player is looki
 - Keep the coach's remark with the ply it was said at, and show it again when viewing that position (a first step toward Review mode).
 - **Don't lose remarks** (found in play): a remark on the player's move that doesn't wait for an answer (praise, "Bold!…", "Good, you saw my threat") is replaced about 0.6 s later by the coach's narration on its own move, before it can be read. Keep the turn's remarks together: the bubble shows the remark on the player's move and adds the coach's narration under it, as a short log (newest at the bottom, older ones dimmed, scrollable), not a replacement. The fixed-height bubble in task 1.8 must fit this (tap to expand).
 - **Done when:** it works by tapping on the phone viewport and by keyboard on desktop, and there are unit tests for the navigation state (clamping at the ends, snapping back to live, the viewed position after a takeback), and a remark on the player's move is still readable after the coach replies.
+- Done: `src/app/navigation.ts` (`Navigation`, `RemarkLog`, `plyLabel`), 4 tap buttons under the board (« ‹ › »), tappable move list, Home/End/arrow keys, a "Viewing … · Back to game" bar. The bubble is a log of the player-move remark and the coach reply.
 
 ### ⬜ 1.5 Explain your idea: lines with tap-arrows
 Spec: "Explain your idea", "Lines".

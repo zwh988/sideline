@@ -276,3 +276,74 @@ button.primary {
   font-size: 0.9rem;
   min-height: 1.3em;
 }
+
+/* Move navigation: big tap targets under the board */
+.nav {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.nav button {
+  flex: 1;
+  min-height: 48px;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.viewbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--coach-accent);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.viewbar[hidden] {
+  display: none;
+}
+
+.viewbar button {
+  min-height: 44px;
+}
+
+.board-area.viewing #board {
+  outline: 3px solid var(--coach-accent);
+  outline-offset: -3px;
+}
+
+/* Coach log: newest at the bottom, older remarks dimmed, scrollable */
+.log {
+  max-height: 9.5em;
+  overflow-y: auto;
+}
+
+.log .entry {
+  margin: 4px 0 0;
+}
+
+.log .entry + .entry {
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.log .entry.old {
+  opacity: 0.6;
+}
+
+/* Move list: each move is a tap target */
+.moves .mv {
+  all: unset;
+  cursor: pointer;
+  padding: 6px 4px;
+  border-radius: 6px;
+}
+
+.moves .mv.cur {
+  background: var(--coach-accent);
+  color: #fff;
+}

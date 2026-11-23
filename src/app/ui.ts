@@ -11,6 +11,7 @@ import { Coach, joinRemarks, type Remark } from '../coach/coach';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { MODES, modeInfo, type Mode, type ModeId } from './modes';
+import { Navigation, RemarkLog, plyLabel } from './navigation';
 import { createOpponent, type Opponent } from './opponent';
 import type { Theme } from './theme';
 
@@ -58,6 +59,10 @@ export class App {
   /** Bumped on every new game, so work for an old game is dropped. */
   private gameId = 0;
   private thinking = false;
+  private nav = new Navigation();
+  private log = new RemarkLog();
+  /** True while the board shows arrows from a viewed position's remark. */
+  private viewShapes = false;
   private el: Record<string, HTMLElement> = {};
 
   constructor(
@@ -97,9 +102,19 @@ export class App {
         </div>
       </header>
       <main class="layout">
-        <div class="board-area">
+        <div id="board-area" class="board-area">
           <div id="board" class="cg-wrap"></div>
           <div id="promotion" class="promotion" hidden></div>
+          <div class="nav" role="group" aria-label="Move navigation">
+            <button id="nav-start" aria-label="First position">«</button>
+            <button id="nav-back" aria-label="Previous move">‹</button>
+            <button id="nav-forward" aria-label="Next move">›</button>
+            <button id="nav-live" aria-label="Latest position">»</button>
+          </div>
+          <div id="viewbar" class="viewbar" hidden>
+            <span id="viewtext"></span>
+            <button id="back-to-game" class="primary">Back to game</button>
+          </div>
         </div>
         <aside class="side">
           <div class="coach">
@@ -108,7 +123,7 @@ export class App {
             </div>
             <div id="bubble-box" class="bubble">
               <div class="coach-name">${COACH_NAME} <span id="mood" class="mood"></span></div>
-              <p id="bubble" aria-live="polite"></p>
+              <div id="bubble" class="log" aria-live="polite"></div>
               <div id="choices" class="choices" hidden></div>
             </div>
           </div>
@@ -123,7 +138,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -140,6 +155,17 @@ export class App {
     this.root.querySelector('#flip')!.addEventListener('click', () => this.board.toggleOrientation());
     this.el.takeback.addEventListener('click', () => void this.takeback());
     this.el.hint.addEventListener('click', () => void this.hint());
+
+    this.el['nav-start'].addEventListener('click', () => this.navigate(() => this.nav.start()));
+    this.el['nav-back'].addEventListener('click', () => this.navigate(() => this.nav.back()));
+    this.el['nav-forward'].addEventListener('click', () => this.navigate(() => this.nav.forward()));
+    this.el['nav-live'].addEventListener('click', () => this.navigate(() => this.nav.goLive()));
+    this.el['back-to-game'].addEventListener('click', () => this.navigate(() => this.nav.goLive()));
+    this.el.moves.addEventListener('click', (e) => {
+      const cell = (e.target as HTMLElement).closest<HTMLElement>('[data-ply]');
+      if (cell) this.navigate(() => this.nav.goTo(Number(cell.dataset.ply)));
+    });
+    document.addEventListener('keydown', (e) => this.onKey(e));
 
     this.board = Chessground(this.el.board, {
       coordinates: true,
@@ -185,6 +211,9 @@ export class App {
       this.game = new Game(color); // invalid FEN: normal start
     }
     this.coach = this.analyst.then((a) => new Coach(a, level, color === 'white' ? 'w' : 'b', mode));
+    this.nav.reset(0);
+    this.log.clear();
+    this.viewShapes = false;
     this.board.set({ orientation: color, lastMove: undefined });
     this.board.setAutoShapes([]);
     this.el.choices.hidden = true;
@@ -207,47 +236,135 @@ export class App {
   /** Pushes the game state to the board and controls. */
   private sync(): void {
     const g = this.game;
-    const last = g.lastMove;
-    const canMove = g.isPlayerTurn && !g.result.over && !this.thinking;
+    const nav = this.nav;
+    nav.setLive(g.moves.length);
+    const view = nav.viewing ? g.positionAt(nav.ply) : undefined;
+    const shown = view ?? { fen: g.fen, turn: g.turn, inCheck: g.inCheck, lastMove: g.lastMove };
+    const last = shown.lastMove;
+    // Viewing the past: the board is read-only.
+    const canMove = !nav.viewing && g.isPlayerTurn && !g.result.over && !this.thinking;
     this.board.set({
-      fen: g.fen,
-      turnColor: g.turn,
-      check: g.inCheck ? g.turn : false,
+      fen: shown.fen,
+      turnColor: shown.turn,
+      check: shown.inCheck ? shown.turn : false,
       lastMove: last ? [last.from as Key, last.to as Key] : undefined,
       movable: { color: canMove ? g.playerColor : undefined, dests: canMove ? (g.dests as Map<Key, Key[]>) : new Map() },
     });
+    // Arrows from the remark said at a viewed position; back to the live ones after.
+    if (nav.viewing) {
+      this.board.setAutoShapes(this.shapesAt(nav.ply));
+      this.viewShapes = true;
+    } else if (this.viewShapes) {
+      this.board.setAutoShapes(this.shapesAt(nav.live));
+      this.viewShapes = false;
+    }
     this.renderMoves();
+    this.renderBubble();
+    this.renderNav(shown.lastMove?.san);
     this.el.takeback.hidden = !this.mode.takebacks;
-    (this.el.takeback as HTMLButtonElement).disabled = this.thinking || !g.moves.some((m) => m.color === g.playerColor);
+    (this.el.takeback as HTMLButtonElement).disabled = nav.viewing || this.thinking || !g.moves.some((m) => m.color === g.playerColor);
     (this.el.hint as HTMLButtonElement).disabled = !canMove;
     this.el.portrait.classList.toggle('busy', this.thinking);
+  }
+
+  private shapesAt(ply: number): DrawShape[] {
+    return this.log
+      .at(ply)
+      .flatMap((e) => e.remark.shapes ?? [])
+      .map((s): DrawShape => ({ orig: s.orig as Key, dest: s.dest as Key | undefined, brush: s.brush }));
+  }
+
+  /** Buttons, the "Viewing…" bar and the highlighted move. */
+  private renderNav(san: string | undefined): void {
+    const nav = this.nav;
+    (this.el['nav-start'] as HTMLButtonElement).disabled = !nav.canBack;
+    (this.el['nav-back'] as HTMLButtonElement).disabled = !nav.canBack;
+    (this.el['nav-forward'] as HTMLButtonElement).disabled = !nav.canForward;
+    (this.el['nav-live'] as HTMLButtonElement).disabled = !nav.canForward;
+    this.el.viewbar.hidden = !nav.viewing;
+    this.el['board-area'].classList.toggle('viewing', nav.viewing);
+    this.el.viewtext.textContent = nav.viewing
+      ? `Viewing ${plyLabel(this.game.startFen, nav.ply, san)}${nav.hasNewMove ? ' · new move played' : ''}`
+      : '';
+    this.el.moves.querySelector('.cur')?.classList.remove('cur');
+    this.el.moves.querySelector(`[data-ply="${nav.ply}"]`)?.classList.add('cur');
+  }
+
+  /** Runs a navigation change, then redraws. */
+  private navigate(change: () => void): void {
+    change();
+    this.sync();
+  }
+
+  private onKey(e: KeyboardEvent): void {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if ((e.target as HTMLElement | null)?.closest('select, input, textarea')) return;
+    const actions: Record<string, () => void> = {
+      ArrowLeft: () => this.nav.back(),
+      ArrowRight: () => this.nav.forward(),
+      Home: () => this.nav.start(),
+      End: () => this.nav.goLive(),
+    };
+    const action = actions[e.key];
+    if (!action || !this.game) return;
+    e.preventDefault();
+    this.navigate(action);
   }
 
   private renderMoves(): void {
     // Games can start mid-game (from a position), possibly with Black to move.
     const [, turn, , , , full] = this.game.startFen.split(' ');
-    const sans = this.game.moves.map((m) => m.san);
-    if (turn === 'b') sans.unshift('…');
+    // Each cell is a button: tapping it shows the position after that move.
+    const cells = this.game.moves.map((m, i) => ({ san: m.san, ply: i + 1 }));
+    if (turn === 'b') cells.unshift({ san: '…', ply: 0 });
+    const cell = (c?: { san: string; ply: number }) =>
+      !c ? '<span></span>' : c.ply === 0 ? `<span>${c.san}</span>` : `<button data-ply="${c.ply}" class="mv">${c.san}</button>`;
     const first = Number(full) || 1;
     const rows: string[] = [];
-    for (let i = 0; i < sans.length; i += 2) {
-      rows.push(
-        `<li><span class="num">${first + i / 2}.</span><span>${sans[i]}</span><span>${sans[i + 1] ?? ''}</span></li>`,
-      );
+    for (let i = 0; i < cells.length; i += 2) {
+      rows.push(`<li><span class="num">${first + i / 2}.</span>${cell(cells[i])}${cell(cells[i + 1])}</li>`);
     }
     this.el.moves.innerHTML = rows.join('');
-    this.el.moves.scrollTop = this.el.moves.scrollHeight;
+    if (!this.nav.viewing) this.el.moves.scrollTop = this.el.moves.scrollHeight;
+  }
+
+  /** The bubble: the coach's remarks for the position, newest at the bottom. */
+  private renderBubble(): void {
+    const nav = this.nav;
+    const entries = nav.viewing ? this.log.at(nav.ply) : this.log.recent(nav.live);
+    const bubble = this.el.bubble;
+    bubble.replaceChildren();
+    if (!entries.length) {
+      const p = document.createElement('p');
+      p.className = 'entry none';
+      p.textContent = nav.viewing ? 'I didn’t say anything at this move.' : '';
+      bubble.append(p);
+    }
+    entries.forEach((e, i) => {
+      const p = document.createElement('p');
+      p.className = !nav.viewing && i < entries.length - 1 ? 'entry old' : 'entry';
+      p.textContent = e.remark.text;
+      bubble.append(p);
+    });
+    const newest = entries.at(-1)?.remark;
+    this.el.mood.textContent = !newest || newest.mood === 'neutral' ? '' : newest.mood;
+    this.el.portrait.dataset.mood = newest?.mood ?? 'neutral';
+    bubble.scrollTop = nav.viewing ? 0 : bubble.scrollHeight;
   }
 
   /** The coach speaks: new text in the bubble, with arrows or circles on the board. */
   private say(r: Remark): void {
-    this.el.bubble.textContent = r.text;
-    this.el.mood.textContent = r.mood === 'neutral' ? '' : r.mood;
-    this.el.portrait.dataset.mood = r.mood;
+    // Kept with its ply: it stays readable after the coach moves, and shows
+    // again when that position is viewed.
+    this.log.add(this.game.moves.length, r);
     this.el['bubble-box'].classList.remove('stale');
-    this.board.setAutoShapes(
-      (r.shapes ?? []).map((s): DrawShape => ({ orig: s.orig as Key, dest: s.dest as Key | undefined, brush: s.brush })),
-    );
+    // While looking at the past, the new remark waits in the log (arrows too).
+    if (!this.nav.viewing) {
+      this.board.setAutoShapes(
+        (r.shapes ?? []).map((s): DrawShape => ({ orig: s.orig as Key, dest: s.dest as Key | undefined, brush: s.brush })),
+      );
+    }
+    this.renderBubble();
   }
 
   /** Routine game information, outside the coach's bubble. */
@@ -306,6 +423,7 @@ export class App {
       if (remark.offerTakeback && this.mode.takebacks && (await this.askTakeback()) === 'takeback') {
         if (this.stale(id, ply)) return;
         this.game.takeback();
+        this.log.truncate(this.game.moves.length);
         this.thinking = false;
         this.board.setAutoShapes([]);
         this.sync();
@@ -359,7 +477,8 @@ export class App {
   }
 
   private async takeback(): Promise<void> {
-    if (this.thinking || !this.mode.takebacks || !this.game.takeback()) return;
+    if (this.thinking || this.nav.viewing || !this.mode.takebacks || !this.game.takeback()) return;
+    this.log.truncate(this.game.moves.length);
     this.board.setAutoShapes([]);
     this.sync();
     this.say({ kind: 'phase', text: 'Sure, take it back. Try another move.', mood: 'neutral' });
@@ -369,6 +488,7 @@ export class App {
   }
 
   private async hint(): Promise<void> {
+    if (this.nav.viewing) return;
     const id = this.gameId;
     const ply = this.game.moves.length;
     const coach = await this.coach;

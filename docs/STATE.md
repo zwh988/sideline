@@ -1,10 +1,10 @@
 # Project state
 
-Last updated: 2026-11-23, after task 1.4 (Lesson and Sparring modes).
+Last updated: 2026-11-23, after task 1.4b (move navigation).
 
 ## Summary
 
-Roadmap phase 1 (coached game MVP) is about half done. You can play a full game against a Maia opponent at your level. The coach speaks on rule-based triggers (tactic available, threat, mistake with takeback offer, praise, phase prompts) and gives 4-step hints, all from board-checked facts. The coach also thinks aloud on its own moves (how it answered your threat, its captures, the idea behind a quiet move), honestly and under the comment budget. Two modes: Lesson (all of the above, takebacks) and Sparring (serious moments only, hints on request, no takebacks, no thinking aloud). Not yet built: move navigation, "Explain your idea", branches.
+Roadmap phase 1 (coached game MVP) is about half done. You can play a full game against a Maia opponent at your level. The coach speaks on rule-based triggers (tactic available, threat, mistake with takeback offer, praise, phase prompts) and gives 4-step hints, all from board-checked facts. The coach also thinks aloud on its own moves (how it answered your threat, its captures, the idea behind a quiet move), honestly and under the comment budget. Two modes: Lesson (all of the above, takebacks) and Sparring (serious moments only, hints on request, no takebacks, no thinking aloud). You can view earlier positions. Not yet built: "Explain your idea", branches.
 
 ## Done
 
@@ -20,6 +20,7 @@ Roadmap phase 1 (coached game MVP) is about half done. You can play a full game 
 | `3ea2002` | Lesson and Sparring modes: `modes.ts`, mode passed to `Coach`, Mode select remembered in `sideline.settings`, Take back hidden in Sparring (53 tests) |
 | `a424f47` | Hung pawns and pieces below the level's mistake size are flagged in Lesson, when the evaluation confirms the loss (58 tests) |
 | `08f8738` | Mistake remarks say why taking back fails (`failedRecapture`) (64 tests) |
+| (after 1.4b) | Move navigation: `navigation.ts`, remark log in the bubble, tap buttons, move-list taps, keys (87 tests) |
 | (after 1.4) | Praise for a sound sacrifice; hung threshold 0.9 per pawn; the engine's top move is never a mistake (72 tests) |
 
 ## Feasibility results (desktop only so far)
@@ -42,6 +43,8 @@ Measured on the developer's PC (16 cores, Intel Iris Xe-class integrated GPU).
 - Task 1.4: 10 unit tests in `coach.test.ts` run the real trigger rules on hand-checked positions with a scripted fake analyst (knight fork, 5.Bc4?? in the Scotch losing the queen to Nxd4, a bishop threatening a loose knight, the opening): each trigger compared between Lesson and Sparring.
 - Task 1.4 in the browser: Sparring with the fork FEN (`r3kb1r/ppp2ppp/8/3N4/8/8/PPP2PPP/R3KB1R w KQkq - 0 1`): no prompt, no Take back button, Hint gave step 1 ("There's a tactic in this position."). Sparring with `r1bqkbnr/ppp2ppp/2np4/8/3QP3/5N2/PPP2PPP/RNB1KB1R w KQkq - 1 5`, 5.Bc4: "Careful: Bc4 gives me a chance to win material.", no arrow, no takeback offer, the coach played Nxd4 without narrating. Switched to Lesson in the select (status "Lesson mode set. It applies from your next game.", saved in `localStorage`), new game, same move: full explanation with arrow, Take back / Play on, Take back button shown. No console errors.
 - Task 1.3 in the game screen: after 1.e4 the coach said "I'm putting a pawn in the centre, on e5."; with `?fen=4k3/p7/5n2/8/8/8/2P1K3/2B5 w - - 0 1`, after Bb2 Ne4: "After your Bb2, you were threatening to win a knight with Bxf6. Ne4 moves my knight out of danger." No console errors.
+
+- Task 1.4b: 15 unit tests in `navigation.test.ts` (clamping, snap to live, new move while viewing, takeback while viewing, ply labels incl. the Greek-gift FEN, remark log). Browser, Greek gift in Lesson (`?fen=rnbq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 7`, Bxh7+): "Bold!…" stays in the bubble after Kxh7; « ‹ buttons, Home key and a tap on a move-list cell show the position with "Viewing 7.Bxh7+" bar, check highlight, Hint/Take back disabled; tapping the last move returns to live. A case where the coach narrates after a remark (two entries in the log) is only covered by unit tests, and a coach move arriving while viewing was not tried live. Not tried on a real Galaxy Z Fold 7: all controls are buttons (48px tall), the emulated 390px phone viewport looked right.
 
 ## Decisions (differ from or add to the spec)
 
