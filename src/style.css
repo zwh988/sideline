@@ -1,56 +1,249 @@
 :root {
   color-scheme: light dark;
+  --bg: #f6f4ef;
+  --text: #1f2421;
+  --muted: #66706a;
+  --panel: #ffffff;
+  --border: #dcd8cf;
   font-family: system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171a19;
+    --text: #e8ebe9;
+    --muted: #9aa39e;
+    --panel: #222725;
+    --border: #343b38;
+  }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  padding: 16px;
+  background: var(--bg);
+  color: var(--text);
 }
 
-button {
-  font-size: 1rem;
+button,
+select {
+  font: inherit;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+/* Header */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
   padding: 8px 16px;
 }
 
-.scroll {
-  overflow-x: auto;
+.top h1 {
+  margin: 0;
+  font-size: 1.3rem;
 }
 
-table {
-  border-collapse: collapse;
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.controls label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
-th,
-td {
-  border: 1px solid #8884;
-  padding: 4px 8px;
-  text-align: left;
-  white-space: nowrap;
+/* Board + side panel: side by side on wide screens, stacked on phones. */
+.layout {
+  display: flex;
+  gap: 16px;
+  padding: 0 16px 16px;
+  align-items: flex-start;
+  justify-content: center;
 }
 
-.err {
-  color: #d33;
+.board-area {
+  position: relative;
+  width: min(calc(100vh - 90px), 640px);
+  flex-shrink: 0;
 }
 
-select {
-  font-size: 1rem;
-  padding: 6px;
+#board {
+  width: 100%;
+  aspect-ratio: 1;
 }
 
-.task blockquote {
-  margin: 8px 0;
+.side {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (max-width: 760px) {
+  .layout {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 0 16px;
+  }
+
+  /* The board takes the full width on phones. */
+  .board-area {
+    width: 100%;
+  }
+
+  .side {
+    width: auto;
+    padding: 0 16px;
+  }
+}
+
+/* Coach: portrait placeholder (initial in a circle) and speech bubble */
+.coach {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.portrait {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--coach-accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  font-weight: 700;
+  transition: transform 0.2s;
+}
+
+.portrait[data-mood='thinking'] {
+  animation: think 1.2s ease-in-out infinite;
+}
+
+@keyframes think {
+  50% {
+    transform: scale(0.94);
+  }
+}
+
+.bubble {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--coach-accent);
+  border-radius: 10px;
   padding: 8px 12px;
-  border-left: 4px solid #8888;
-  max-width: 70ch;
+  min-height: 56px;
 }
 
-.goal {
-  opacity: 0.7;
-  font-size: 0.9rem;
+.coach-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--coach-accent);
 }
 
-.ok {
-  color: #2a2;
+.mood {
+  font-weight: 400;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.bubble p {
+  margin: 4px 0 0;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Move list: two columns, numbered by the <ol> */
+.moves {
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  max-height: 240px;
+  min-height: 60px;
+  overflow-y: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.moves li {
+  display: grid;
+  grid-template-columns: 2.5em 1fr 1fr;
+  padding: 1px 0;
+}
+
+.moves .num {
+  color: var(--muted);
+}
+
+.credits {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Promotion picker over the board */
+.promotion {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgb(0 0 0 / 0.45);
+}
+
+.promotion[hidden] {
+  display: none;
+}
+
+.promotion button {
+  width: 18%;
+  aspect-ratio: 1;
+  padding: 6px;
+  background: var(--board-light);
+}
+
+.promotion img {
+  width: 100%;
+  height: 100%;
+}
+
+/* Board coordinates: readable on both square colors */
+.cg-wrap coords {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(0 0 0 / 0.55);
 }

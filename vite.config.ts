@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -13,5 +14,13 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['onnxruntime-web'],
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(import.meta.dirname, 'index.html'), // the app
+        tests: resolve(import.meta.dirname, 'tests.html'), // feasibility tests
+      },
+    },
   },
 });

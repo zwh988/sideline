@@ -1,47 +1,17 @@
-// Feasibility tests. Open on desktop and on a phone (npm run dev:phone) and compare.
-import { MODELS } from './engine/llm';
-import { runLlmTest } from './tests/llm-test';
-import { runMaiaTest } from './tests/maia-test';
-import { runStockfishTest } from './tests/stockfish-test';
+import '@lichess-org/chessground/assets/chessground.base.css';
 import './style.css';
+import { App } from './app/ui';
+import { loadTheme } from './app/theme';
 
-const app = document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML = `
-  <h1>Sideline · feasibility tests</h1>
-  <p class="buttons">
-    <button data-test="stockfish">Stockfish test</button>
-    <button data-test="maia">Maia test</button>
-  </p>
-  <p class="buttons">
-    <select id="model">${MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('')}</select>
-    <button data-test="llm">Coach voice test</button>
-  </p>
-  <p id="device"></p>
-  <div id="out"></div>
-`;
-const out = document.querySelector<HTMLDivElement>('#out')!;
-const modelSelect = document.querySelector<HTMLSelectElement>('#model')!;
-document.querySelector('#device')!.textContent =
-  `${navigator.userAgent} · ${navigator.hardwareConcurrency ?? '?'} cores`;
+const THEME_ID = 'default';
 
-const tests: Record<string, (out: HTMLElement) => Promise<void>> = {
-  stockfish: runStockfishTest,
-  maia: runMaiaTest,
-  llm: (o) => runLlmTest(o, modelSelect.value),
-};
-const controls = [...document.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button, select')];
-
-for (const btn of document.querySelectorAll<HTMLButtonElement>('button[data-test]')) {
-  btn.addEventListener('click', async () => {
-    controls.forEach((c) => (c.disabled = true));
-    out.innerHTML = '';
-    try {
-      await tests[btn.dataset.test!](out);
-    } catch (err) {
-      out.insertAdjacentHTML('beforeend', `<p class="err">Error: ${err}</p>`);
-      console.error(err);
-    } finally {
-      controls.forEach((c) => (c.disabled = false));
-    }
-  });
+async function start() {
+  const root = document.querySelector<HTMLDivElement>('#app')!;
+  const theme = await loadTheme(THEME_ID);
+  new App(root, theme, `${import.meta.env.BASE_URL}themes/${THEME_ID}/`);
 }
+
+start().catch((err) => {
+  document.body.textContent = `Sideline failed to start: ${err}`;
+  console.error(err);
+});
