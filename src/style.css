@@ -33,3 +33,24 @@ td {
 .err {
   color: #d33;
 }
+
+select {
+  font-size: 1rem;
+  padding: 6px;
+}
+
+.task blockquote {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 4px solid #8888;
+  max-width: 70ch;
+}
+
+.goal {
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+
+.ok {
+  color: #2a2;
+}

@@ -1,4 +1,6 @@
 // Feasibility tests. Open on desktop and on a phone (npm run dev:phone) and compare.
+import { MODELS } from './engine/llm';
+import { runLlmTest } from './tests/llm-test';
 import { runMaiaTest } from './tests/maia-test';
 import { runStockfishTest } from './tests/stockfish-test';
 import './style.css';
@@ -10,22 +12,28 @@ app.innerHTML = `
     <button data-test="stockfish">Stockfish test</button>
     <button data-test="maia">Maia test</button>
   </p>
+  <p class="buttons">
+    <select id="model">${MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('')}</select>
+    <button data-test="llm">Coach voice test</button>
+  </p>
   <p id="device"></p>
   <div id="out"></div>
 `;
 const out = document.querySelector<HTMLDivElement>('#out')!;
+const modelSelect = document.querySelector<HTMLSelectElement>('#model')!;
 document.querySelector('#device')!.textContent =
   `${navigator.userAgent} · ${navigator.hardwareConcurrency ?? '?'} cores`;
 
 const tests: Record<string, (out: HTMLElement) => Promise<void>> = {
   stockfish: runStockfishTest,
   maia: runMaiaTest,
+  llm: (o) => runLlmTest(o, modelSelect.value),
 };
-const buttons = [...document.querySelectorAll<HTMLButtonElement>('button[data-test]')];
+const controls = [...document.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button, select')];
 
-for (const btn of buttons) {
+for (const btn of document.querySelectorAll<HTMLButtonElement>('button[data-test]')) {
   btn.addEventListener('click', async () => {
-    buttons.forEach((b) => (b.disabled = true));
+    controls.forEach((c) => (c.disabled = true));
     out.innerHTML = '';
     try {
       await tests[btn.dataset.test!](out);
@@ -33,7 +41,7 @@ for (const btn of buttons) {
       out.insertAdjacentHTML('beforeend', `<p class="err">Error: ${err}</p>`);
       console.error(err);
     } finally {
-      buttons.forEach((b) => (b.disabled = false));
+      controls.forEach((c) => (c.disabled = false));
     }
   });
 }
