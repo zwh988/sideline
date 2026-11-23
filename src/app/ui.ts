@@ -128,7 +128,7 @@ export class App {
             <div class="explain-buttons">
               <button id="explain-undo">Undo</button>
               <button id="explain-cancel">Cancel</button>
-              <button id="explain-done" class="primary">Done</button>
+              <button id="explain-done" class="primary">Ask coach</button>
             </div>
           </div>
           <div id="viewbar" class="viewbar" hidden>
@@ -150,7 +150,7 @@ export class App {
           <p id="status" class="status"></p>
           <div class="actions">
             <button id="hint">Hint</button>
-            <button id="explain">Show a line</button>
+            <button id="explain">Ask about a line</button>
             <button id="takeback">Take back</button>
             <button id="flip">Flip board</button>
           </div>
@@ -541,7 +541,7 @@ export class App {
   // --- Explain your idea: lines with tap-arrows ---------------------------
 
   /** A button in the bubble that opens arrow mode (the coach asks, e.g. at a tactic). */
-  private offerExplain(label = 'Let me show you'): void {
+  private offerExplain(label = 'Check my idea'): void {
     const box = this.el.choices;
     box.innerHTML = `<button data-choice="explain" class="primary">${label}</button>`;
     box.hidden = false;
@@ -612,8 +612,8 @@ export class App {
 
   private explainPrompt(): string {
     const input = this.input!;
-    if (input.isFull) return `That's ${MAX_LINE_MOVES} moves, the most I can check. Tap Done.`;
-    if (input.ended) return 'The game ends here. Tap Done.';
+    if (input.isFull) return `That's ${MAX_LINE_MOVES} moves, the most I can check. Tap Ask coach.`;
+    if (input.ended) return 'The game ends here. Tap Ask coach.';
     const n = input.moves.length + 1;
     return input.nextIsMine
       ? `Move ${n}: tap one of your pieces, then where it goes.`
@@ -657,7 +657,7 @@ export class App {
         message = r.why;
         break;
       case 'full':
-        message = `That's ${MAX_LINE_MOVES} moves, the most I can check. Tap Done.`;
+        message = `That's ${MAX_LINE_MOVES} moves, the most I can check. Tap Ask coach.`;
         break;
       case 'needs-promotion': {
         const piece = await this.askPromotion(this.game.playerColor);

@@ -19,7 +19,7 @@ import type { Analyst, PositionEval } from './analyst';
 import type { Line } from '../app/lines-input';
 import type { TaughtLine } from './lines';
 import { checkLine, type LineVerdict } from './linecheck';
-import { failedRecapture, PIECE_NAME, VALUE, type FailedRecapture } from './facts';
+import { failedRecapture, PIECE_NAME, playAndDescribe, VALUE, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
 import {
   byImportance,
@@ -417,11 +417,35 @@ export class Coach {
       return { kind: 'hint', text: texts[step - 1], mood: 'thinking', shapes };
     }
 
-    return {
-      kind: 'hint',
-      text: "No tactic here for either side. Which of your pieces isn't doing much? Find it a better square.",
-      mood: 'neutral',
-    };
+    // No tactic: point at the engine's best move and say why, from board facts only.
+    const bestUci = t.ev.lines[0]?.pv[0];
+    if (!bestUci) return { kind: 'hint', text: 'No tactic here. Which of your pieces is doing the least? Find it a better square.', mood: 'neutral' };
+    const chess = new Chess(t.fen);
+    const m = playAndDescribe(chess, bestUci);
+    const full = Number(t.fen.split(' ')[5]) || 1;
+    const home = this.playerColor === 'w' ? '1' : '8';
+    const why = m.san.startsWith('O-O')
+      ? 'It tucks your king away and brings a rook toward the centre.'
+      : m.mate
+        ? 'It is checkmate.'
+        : m.captured
+          ? `It takes the ${PIECE_NAME[m.captured]}.`
+          : m.check
+            ? 'It gives check.'
+            : full <= 12 && (m.piece === 'n' || m.piece === 'b') && m.from[1] === home
+              ? 'It brings a piece into the game.'
+              : full <= 12 && m.piece === 'p' && ['d4', 'e4', 'd5', 'e5'].includes(m.to)
+                ? 'It claims space in the centre.'
+                : 'The engine rates it highest, though other sensible moves are close.';
+    const texts = [
+      'No tactic here for either side. Look for a quiet move that improves your position.',
+      `${capitalize(pieceRef(m.piece, m.from, true))} could do better.`,
+      `The engine's choice is ${m.san}. ${why}`,
+    ];
+    const s = Math.min(step, 3);
+    const shapes: Shape[] =
+      s === 2 ? [{ orig: m.from, brush: 'green' }] : s === 3 ? [{ orig: m.from, dest: m.to, brush: 'green' }] : [];
+    return { kind: 'hint', text: texts[s - 1], mood: 'thinking', shapes };
   }
 
   private phaseRemark(fen: string, ply: number): Remark | undefined {
