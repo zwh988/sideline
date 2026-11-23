@@ -52,6 +52,11 @@ describe.skipIf(!run)('concept detectors vs Lichess puzzle labels', () => {
     };
     const mates = puzzles.filter((p) => p.themes.includes('mate'));
     const others = puzzles.filter((p) => !p.themes.includes('mate'));
+    // Stricter: a detected concept that Lichess also labelled the puzzle with (an agreed explanation).
+    const agreed = others.filter((p) => [...(detected.get(p.id) ?? [])].some((c) => p.themes.includes(c))).length;
+    console.log(`\nSample: ${puzzles.length} puzzles (up to ${perBucket} per theme and rating band; themes over-represented, so precision is only indicative).`);
+    console.table(rows);
+    console.log(`Non-mate puzzles where a detected concept matches a Lichess label: ${agreed}/${others.length} (${Math.round((100 * agreed) / others.length)}%).`);
     console.log(`Puzzles with at least one named concept: all ${share(puzzles)}; mate puzzles ${share(mates)}; other puzzles ${share(others)}. Crashed: ${crashed}.`);
     expect(crashed).toBe(0);
   });

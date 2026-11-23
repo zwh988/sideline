@@ -33,8 +33,8 @@ describe('detectConcepts on Lichess puzzles', () => {
     expect(detect(LICHESS[1]).has('fork')).toBe(true);
   });
 
-  // Known gap (task 1.6c): the bishop move uncovers the f1 rook against a *defended* rook of equal value
-  // that is attacked twice. Our discovered-attack rule wants a more valuable or undefended target.
+  // Known gap: the bishop move uncovers the f1 rook against a defended rook of equal value; it wins only because
+  // the h1 rook stands behind the f1 rook (an x-ray battery), which attackers() does not count.
   it.fails('finds a discovered attack on a defended piece attacked more often than defended', () => {
     expect(detect(LICHESS[2]).has('discoveredAttack')).toBe(true);
   });
@@ -78,5 +78,33 @@ describe('detectConcepts on hand-checked positions', () => {
   it('promotion', () => {
     const found = detectConcepts('8/P6k/8/8/8/8/8/K7 w - - 0 1', ['a7a8q']);
     expect(found.has('promotion')).toBe(true);
+  });
+});
+
+describe('detectConcepts: pins, skewers, trapped pieces, defenders, discovered attacks', () => {
+  it('skewer: Re1+ drives the king off the file and the queen behind it falls', () => {
+    const found = detectConcepts('4q3/8/8/8/4k3/8/8/R6K w - - 0 1', ['a1e1', 'e4d5', 'e1e8']);
+    expect(found.has('skewer')).toBe(true);
+    expect(found.has('pin')).toBe(false);
+  });
+
+  it('not a skewer when nothing behind the king is ever taken', () => {
+    const found = detectConcepts('4q3/8/8/8/4k3/8/8/R6K w - - 0 1', ['a1e1', 'e4d5']);
+    expect(found.has('skewer')).toBe(false);
+  });
+
+  it('pin: a bishop pins the queen to the king and attacks it with something cheaper', () => {
+    const found = detectConcepts('4k3/3q4/8/1B6/8/8/8/4K3 w - - 0 1', ['e1f1']);
+    expect(found.has('pin')).toBe(true);
+  });
+
+  it('capturing the defender: Rxd7 removes the only guard of the knight on e6, then it falls', () => {
+    const found = detectConcepts('6k1/3b4/4n3/8/8/8/8/3RR1K1 w - - 0 1', ['d1d7', 'g8f8', 'e1e6']);
+    expect(found.has('capturingDefender')).toBe(true);
+  });
+
+  it('discovered attack: moving the bishop uncovers the rook\'s check', () => {
+    const found = detectConcepts('4k3/8/8/4B3/8/8/8/4R1K1 w - - 0 1', ['e5d4']);
+    expect(found.has('discoveredAttack')).toBe(true);
   });
 });
