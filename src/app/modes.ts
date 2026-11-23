@@ -14,6 +14,12 @@ export interface Mode {
   prompts: boolean;
   /** Low-stakes talk: phase prompts, "Good, you saw my threat." */
   smallTalk: boolean;
+  /**
+   * Flags hung material smaller than the level's mistake size (a loose pawn,
+   * or a piece below the level's smallest taught gain). Sparring flags only
+   * the level's real mistakes.
+   */
+  minorMistakes: boolean;
   /** Takeback button, and the takeback offer after a mistake. */
   takebacks: boolean;
   /**
@@ -25,8 +31,8 @@ export interface Mode {
 }
 
 export const MODES: Mode[] = [
-  { id: 'lesson', name: 'Lesson', prompts: true, smallTalk: true, takebacks: true, revealsPlans: true },
-  { id: 'sparring', name: 'Sparring', prompts: false, smallTalk: false, takebacks: false, revealsPlans: false },
+  { id: 'lesson', name: 'Lesson', prompts: true, smallTalk: true, minorMistakes: true, takebacks: true, revealsPlans: true },
+  { id: 'sparring', name: 'Sparring', prompts: false, smallTalk: false, minorMistakes: false, takebacks: false, revealsPlans: false },
 ];
 
 export const modeInfo = (id: string | undefined): Mode => MODES.find((m) => m.id === id) ?? MODES[0];

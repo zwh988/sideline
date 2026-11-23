@@ -17,7 +17,8 @@ Roadmap phase 1 (coached game MVP) is about half done. You can play a full game 
 | `c725e00` | MVP slice 1: playable game vs Maia, theme pack, tap-to-move, takeback, promotion, phone layout |
 | `0d01f06` | MVP slice 2: fact extractor, line cutting, analyst, coach triggers, hint ladder, `?fen=` start, Vitest (24 tests) |
 | `481c003` | Coach thinks aloud on its own moves: `narration.ts` facts, `narrateCoachMove` templates, `Coach.onCoachMove`, wired into the game screen (43 tests) |
-| (task 1.4) | Lesson and Sparring modes: `modes.ts`, mode passed to `Coach`, Mode select remembered in `sideline.settings`, Take back hidden in Sparring (53 tests) |
+| `3ea2002` | Lesson and Sparring modes: `modes.ts`, mode passed to `Coach`, Mode select remembered in `sideline.settings`, Take back hidden in Sparring (53 tests) |
+| (after 1.4) | Hung pawns and pieces below the level's mistake size are flagged in Lesson, when the evaluation confirms the loss (58 tests) |
 
 ## Feasibility results (desktop only so far)
 
@@ -33,6 +34,7 @@ Measured on the developer's PC (16 cores, Intel Iris Xe-class integrated GPU).
 - Browser checks with `?fen=`: knight fork (trigger, 4 hints, praise held through the combination); Scholar's mate defense (threat warning, mistake + takeback); defended queen attacked by a knight (Levels 1 and 2).
 - A scripted full game (Maia vs Maia at 800, coach watching one side): 6 remarks in 20 moves, all accurate; ~0.35 s analysis per move.
 - Task 1.3, scripted Maia vs Maia (Level 2, 60 plies, coach = Black, a second Stockfish judging each coach move): the coach narrated 11 of its 30 moves; each claim checked by hand against the position. Examples: "After your g3, you were threatening to win a queen with gxh4. Qxe4+ moves my queen out of danger."; "…So I took your knight on b6 first."; "Your pawn on b2 wasn't defended, so I took it, with check." Moves that lost 150–580 cp got no narration, or plain facts only (e.g. O-O losing 3.5 pawns: no "reason" given).
+- Hung material (decision 12): 5 unit tests (the real-game position at Levels 1 and 2, compensation below the eval threshold, an even trade 2.exd5 Qxd5, Sparring). In the browser with the real engine, 6.d4 now gives "Careful: after d4, I can play exd4, which takes the pawn. That would win a pawn. Want to take it back?" with Take back / Play on. False-positive check with the real coach at Level 2: Scandinavian, Italian (with cxd4, Nxc3 bxc3 trades) and QGD (cxd5 exd5) lines, 22 player moves, no remark.
 - Task 1.4: 10 unit tests in `coach.test.ts` run the real trigger rules on hand-checked positions with a scripted fake analyst (knight fork, 5.Bc4?? in the Scotch losing the queen to Nxd4, a bishop threatening a loose knight, the opening): each trigger compared between Lesson and Sparring.
 - Task 1.4 in the browser: Sparring with the fork FEN (`r3kb1r/ppp2ppp/8/3N4/8/8/PPP2PPP/R3KB1R w KQkq - 0 1`): no prompt, no Take back button, Hint gave step 1 ("There's a tactic in this position."). Sparring with `r1bqkbnr/ppp2ppp/2np4/8/3QP3/5N2/PPP2PPP/RNB1KB1R w KQkq - 1 5`, 5.Bc4: "Careful: Bc4 gives me a chance to win material.", no arrow, no takeback offer, the coach played Nxd4 without narrating. Switched to Lesson in the select (status "Lesson mode set. It applies from your next game.", saved in `localStorage`), new game, same move: full explanation with arrow, Take back / Play on, Take back button shown. No console errors.
 - Task 1.3 in the game screen: after 1.e4 the coach said "I'm putting a pawn in the centre, on e5."; with `?fen=4k3/p7/5n2/8/8/8/2P1K3/2B5 w - - 0 1`, after Bb2 Ne4: "After your Bb2, you were threatening to win a knight with Bxf6. Ne4 moves my knight out of danger." No console errors.
@@ -57,8 +59,12 @@ These should be folded into the spec (see PLAN, task "Spec sync").
     - **Hints** only from the Hint button, starting at step 1 (in Lesson the tactic prompt counts as step 1).
     - **No takebacks:** the button is hidden, no offer, and the loss message doesn't suggest taking back.
 
+12. **Hung material is flagged below the mistake size (Lesson).** Found in play: at Level 2, 6.d4? in `rnb1kb1r/ppp2ppp/8/3qp3/8/3P4/PPP2PPP/R1BQKBNR w KQkq - 0 6` just drops a pawn (−0.42 → −1.73), but the coach was silent because the level's mistake size is 2.5 pawns and its smallest taught gain 3. Now a move is also flagged when (a) the engine's best reply wins material as a loose piece or pawn (`hanging-piece` pattern: a capture, maybe a recapture, at least 1 pawn), **and** (b) the evaluation drops by at least 0.7 pawns per pawn won (`HUNG_CP_PER_PAWN`). (b) keeps even trades, gambits with real compensation and sacrifices quiet. Same "Careful: after d4, I can play exd4…" remark and takeback offer as a mistake. Sparring skips it (`Mode.minorMistakes`): it flags only the level's real mistakes.
+
 ## Known issues and gaps
 
+- Foldable / small-tablet widths (760–~900 px) break the two-column layout (board cut off at 790 px wide). Planned in task 1.8.
+- Hung material uses only the engine's best line: if the best reply is something else stronger, a hung pawn isn't named (the bigger problem may be, if it's within the level).
 - **Phone not tested yet** for any engine or the UI on a real device (only the emulated phone viewport).
 - Promotion picker and the end-of-game screen are untested by clicking.
 - File letters (a–h) sit under the pieces on the first rank and are hard to read.

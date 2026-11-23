@@ -58,6 +58,11 @@ interface TurnFacts {
 
 /** Low-priority remarks wait at least this many plies after the last remark. */
 const BUDGET_PLIES = 6;
+/**
+ * Hung material is flagged below the level's mistake size when the evaluation
+ * drops by at least this much per pawn the coach wins (most of the material).
+ */
+const HUNG_CP_PER_PAWN = 70;
 /** Moves within this much of the best move count as "found it". */
 const FOUND_CP = 60;
 /**
@@ -164,27 +169,7 @@ export class Coach {
       // The move lets the coach win something the player has learned to see.
       const cut = this.analyst.taughtLine(after, this.limits());
       const refutation = this.teachable(cut.kind === 'line' ? cut.line : undefined);
-      if (refutation && !this.mode.revealsPlans) {
-        // Sparring: a serious moment, but the coach keeps its reply to itself.
-        return this.remark(ply, {
-          kind: 'mistake',
-          text: `Careful: ${move.san} gives me a chance ${refutation.mate ? 'to checkmate you' : 'to win material'}.`,
-          mood: 'concerned',
-        });
-      }
-      if (refutation) {
-        await this.analyst.markForced(refutation);
-        const first = refutation.moves[0];
-        return this.remark(ply, {
-          kind: 'mistake',
-          text: `Careful: after ${move.san}, I can play ${moveWithWhich(first)}. ${
-            refutation.mate ? '' : `That would win ${winsPhrase(refutation)}. `
-          }Want to take it back?`,
-          mood: 'concerned',
-          offerTakeback: this.mode.takebacks,
-          shapes: [{ orig: first.from, dest: first.to, brush: 'red' }],
-        });
-      }
+      if (refutation) return this.mistakeRemark(ply, move.san, refutation);
       // The player missed their own tactic.
       if (t.tactic) {
         return this.remark(ply, {
@@ -196,9 +181,13 @@ export class Coach {
           offerTakeback: this.mode.takebacks,
         });
       }
-      // Otherwise the mistake is beyond the player's concepts: stay quiet.
-      return undefined;
     }
+
+    // Smaller than the level's mistake size, but plainly hung: a pawn or piece
+    // the coach can just take, and the evaluation confirms it stays lost.
+    const hung = this.mode.minorMistakes ? this.hungMaterial(after, loss) : undefined;
+    if (hung) return this.mistakeRemark(ply, move.san, hung);
+    if (loss >= this.level.mistakeCp) return undefined; // beyond the player's concepts: stay quiet
 
     // Dealt with the coach's threat (a low-priority remark).
     if (this.mode.smallTalk && t.threat && loss < FOUND_CP && this.budgetAllows(ply)) {
@@ -251,6 +240,44 @@ export class Coach {
     if (count >= (TOPIC_LIMIT[n.topic] ?? Infinity)) return undefined;
     this.topicCount.set(n.topic, count + 1);
     return this.remark(ply, { kind: 'narration', text: n.text, mood: 'thinking' });
+  }
+
+  /**
+   * A loose pawn or piece (the "hanging-piece" pattern: a capture, maybe a
+   * recapture) the coach can win after the player's move, whatever the level's
+   * smallest taught gain. Material alone isn't enough: the evaluation must drop
+   * by at least HUNG_CP_PER_PAWN per pawn won, so an even trade, a gambit with
+   * real compensation or a sacrifice is not called a hung pawn.
+   */
+  private hungMaterial(after: PositionEval, loss: number): TaughtLine | undefined {
+    if (!this.level.motifs.includes('hanging-piece')) return undefined;
+    const cut = this.analyst.taughtLine(after, { maxPlies: this.level.maxPlies, minGain: 1 });
+    const line = cut.kind === 'line' ? cut.line : undefined;
+    if (!line || line.mate || line.motif !== 'hanging-piece') return undefined;
+    return loss >= line.gain * HUNG_CP_PER_PAWN ? line : undefined;
+  }
+
+  /** "Careful: after Bc4, I can play Nxd4…" (Lesson), or a plain warning (Sparring). */
+  private async mistakeRemark(ply: number, san: string, refutation: TaughtLine): Promise<Remark> {
+    if (!this.mode.revealsPlans) {
+      // Sparring: a serious moment, but the coach keeps its reply to itself.
+      return this.remark(ply, {
+        kind: 'mistake',
+        text: `Careful: ${san} gives me a chance ${refutation.mate ? 'to checkmate you' : 'to win material'}.`,
+        mood: 'concerned',
+      });
+    }
+    await this.analyst.markForced(refutation);
+    const first = refutation.moves[0];
+    return this.remark(ply, {
+      kind: 'mistake',
+      text: `Careful: after ${san}, I can play ${moveWithWhich(first)}. ${
+        refutation.mate ? '' : `That would win ${winsPhrase(refutation)}. `
+      }${this.mode.takebacks ? 'Want to take it back?' : ''}`.trim(),
+      mood: 'concerned',
+      offerTakeback: this.mode.takebacks,
+      shapes: [{ orig: first.from, dest: first.to, brush: 'red' }],
+    });
   }
 
   /** Step-by-step hints: something is here, where to look, which piece, the answer. */

@@ -124,6 +124,46 @@ describe('Coach modes: the player move', () => {
   });
 });
 
+// From a real game (Lesson, Level 2): 1.e4 Nf6 2.Nc3 d5 3.d3 e5 4.Nxd5 Nxd5 5.exd5 Qxd5, White to move.
+// 6.d4? hangs a pawn: 6...exd4, and 7.Qxd4?? Qxd4 loses the queen. Stockfish (depth 12): -0.42 before,
+// +1.73 for Black after 6.d4, best line 6...exd4 7.Nf3 Nc6 8.Bd3 Bb4+ 9.Bd2.
+const HUNG = 'rnb1kb1r/ppp2ppp/8/3qp3/8/3P4/PPP2PPP/R1BQKBNR w KQkq - 0 6';
+const hungScript = (afterCp: number): Script => ({
+  [HUNG]: { cp: -42, pv: ['c2c3', 'b8c6', 'd1b3'] },
+  [after(HUNG, 'd3d4')]: { cp: afterCp, pv: ['e5d4', 'g1f3', 'b8c6', 'f1d3', 'f8b4', 'c1d2'] },
+});
+
+describe('Coach: hung material below the mistake size', () => {
+  it('flags a hung pawn at Level 2 in Lesson, with a takeback offer', async () => {
+    const r = await coach('lesson', hungScript(173)).onPlayerMove(HUNG, 'd3d4', 10);
+    expect(r).toMatchObject({ kind: 'mistake', offerTakeback: true });
+    expect(r?.text).toBe('Careful: after d4, I can play exd4, which takes the pawn. That would win a pawn. Want to take it back?');
+    expect(r?.shapes).toEqual([{ orig: 'e5', dest: 'd4', brush: 'red' }]);
+  });
+
+  it('flags it at Level 1 too', async () => {
+    const c = new Coach(new FakeAnalyst(hungScript(173)) as unknown as Analyst, levelInfo(1), 'w', modeInfo('lesson'));
+    expect((await c.onPlayerMove(HUNG, 'd3d4', 10))?.kind).toBe('mistake');
+  });
+
+  it('stays quiet when the evaluation does not confirm the pawn is lost', async () => {
+    // Same capture, but the engine sees compensation: only 0.50 lost.
+    expect(await coach('lesson', hungScript(8)).onPlayerMove(HUNG, 'd3d4', 10)).toBeUndefined();
+  });
+
+  it('does not call an even trade a hung pawn', async () => {
+    // 1.e4 d5 2.exd5: Black takes back with Qxd5 (+1 pawn from the root), but the evaluation is level.
+    const fen = after(new Chess().fen(), 'e2e4');
+    const pos = after(fen, 'd7d5');
+    const script: Script = { [pos]: { cp: 30, pv: ['e4d5'] }, [after(pos, 'e4d5')]: { cp: -30, pv: ['d8d5', 'b1c3'] } };
+    expect(await coach('lesson', script).onPlayerMove(pos, 'e4d5', 3)).toBeUndefined();
+  });
+
+  it('is Lesson only: Sparring flags only the real mistakes of the level', async () => {
+    expect(await coach('sparring', hungScript(173)).onPlayerMove(HUNG, 'd3d4', 10)).toBeUndefined();
+  });
+});
+
 describe("Coach modes: thinking aloud on the coach's move", () => {
   const afterE4 = after(new Chess().fen(), 'e2e4');
   const lastMove = { san: 'e4', to: 'e4' as const };

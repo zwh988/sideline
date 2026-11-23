@@ -88,6 +88,7 @@ Spec: "Branches: play it out" and its rules. This is large; split it if needed (
   - level, colour and new game moved out of the header into a menu, so the board moves up,
   - the move list as a horizontal scrolling strip, or behind a tap.
   - Done when the bubble, the board and the buttons all fit on one phone screen without scrolling.
+- Foldables (the developer plays on a Galaxy Z Fold 7): the unfolded inner screen is nearly square, roughly 800–900 CSS px each way (measure it on the device). Today 760–~900 px wide gets the desktop two-column layout and breaks: at 790×880 the page is 41 px too wide, the board is cut off on the left and the side column is 216 px; at 880×790 it fits but the side column is cramped. Pick a layout for this size (likely the phone layout with a bigger board, or the side column under/over the board), check both orientations and the folded cover screen.
 - Pins and skewers in `facts.ts` (needed for Level 3).
 - Check the coach's analysis depth is fine on a phone.
 
