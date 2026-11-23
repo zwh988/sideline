@@ -149,8 +149,9 @@ describe('Coach: hung material below the mistake size', () => {
   });
 
   it('stays quiet when the evaluation does not confirm the pawn is lost', async () => {
-    // Same capture, but the engine sees compensation: only 0.50 lost.
-    expect(await coach('lesson', hungScript(8)).onPlayerMove(HUNG, 'd3d4', 10)).toBeUndefined();
+    // Same capture, but the engine sees some compensation: 0.80 lost (-0.42 before, +1.22 for Black after).
+    // Too little for a hung pawn (0.9 per pawn), too much for a praised sacrifice (0.6).
+    expect(await coach('lesson', hungScript(122)).onPlayerMove(HUNG, 'd3d4', 10)).toBeUndefined();
   });
 
   it('does not call an even trade a hung pawn', async () => {
@@ -163,6 +164,81 @@ describe('Coach: hung material below the mistake size', () => {
 
   it('is Lesson only: Sparring flags only the real mistakes of the level', async () => {
     expect(await coach('sparring', hungScript(173)).onPlayerMove(HUNG, 'd3d4', 10)).toBeUndefined();
+  });
+});
+
+// Greek gift: Bxh7+ is best (Stockfish depth 12: +5.39; next best Ng5 +1.96). Kxh7 wins the bishop for a
+// pawn, and the engine's best reply is sometimes Kxh7 (-5.43 for Black), sometimes declining with Kh8
+// (-5.34). Either way White is winning. Beyond Level 2's tactics.
+const GREEK = 'rnbq1rk1/pppn1ppp/4p3/3pP3/1b1P4/2NB1N2/PPP2PPP/R1BQK2R w KQ - 0 7';
+const GREEK_SCRIPT: Script = {
+  [GREEK]: { cp: 539, pv: ['d3h7', 'g8h7', 'f3g5', 'h7g6', 'h2h4'] },
+  [after(GREEK, 'd3h7')]: { cp: -543, pv: ['g8h7', 'f3g5', 'h7g6', 'h2h4', 'b8c6', 'd1d3', 'f7f5', 'h4h5'] },
+};
+
+// Evans Gambit, 1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5 4.b4: Stockfish +0.44 before, +0.30 for Black after 4...Bxb4.
+// A playable gambit, 0.74 worse than the best move: neither praised nor called a hung pawn.
+const EVANS = 'r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4';
+const EVANS_SCRIPT: Script = {
+  [EVANS]: { cp: 44, pv: ['c2c3', 'g8f6', 'd2d4'] },
+  [after(EVANS, 'b2b4')]: { cp: 30, pv: ['c5b4', 'c2c3', 'b4e7', 'd2d4', 'c6a5', 'c4d3', 'd7d6', 'd4e5'] },
+};
+
+describe('Coach: sacrifices', () => {
+  it('praises a sound sacrifice the player may not know is good', async () => {
+    const r = await coach('lesson', GREEK_SCRIPT).onPlayerMove(GREEK, 'd3h7', 13);
+    expect(r).toMatchObject({ kind: 'praise', mood: 'surprised' });
+    expect(r?.text).toBe(
+      'Bold! Bxh7+ offers your bishop for a pawn, but the engine rates it among the best moves here. Can you see what you get for it?',
+    );
+  });
+
+  it("trusts the engine's top move when its evaluations jump", async () => {
+    // Another search scored the position after Bxh7+ only -4.36 for Black: 1.03 "worse" than +5.39.
+    const noisy: Script = { ...GREEK_SCRIPT, [after(GREEK, 'd3h7')]: { ...GREEK_SCRIPT[after(GREEK, 'd3h7')], cp: -436 } };
+    expect((await coach('lesson', noisy).onPlayerMove(GREEK, 'd3h7', 13))?.kind).toBe('praise');
+  });
+
+  it('praises the offer when the engine would decline it', async () => {
+    const declined: Script = {
+      ...GREEK_SCRIPT,
+      [after(GREEK, 'd3h7')]: { cp: -534, pv: ['g8h8', 'f3g5', 'f7f6', 'd1h5', 'f6g5', 'h7g6', 'h8g8', 'c1g5'] },
+    };
+    expect((await coach('lesson', declined).onPlayerMove(GREEK, 'd3h7', 13))?.text).toMatch(/^Bold! Bxh7\+ offers your bishop for a pawn/);
+  });
+
+  it("praises the Queen's Gambit pawn offer", async () => {
+    // 1.d4 d5 2.c4: Stockfish +0.26 before, -0.25 for Black after (2...e6). c4 can't be retaken at once.
+    const pos = after(after(new Chess().fen(), 'd2d4'), 'd7d5');
+    const script: Script = { [pos]: { cp: 26, pv: ['g1f3', 'g8f6', 'c2c4'] }, [after(pos, 'c2c4')]: { cp: -25, pv: ['e7e6', 'g1f3'] } };
+    expect((await coach('lesson', script).onPlayerMove(pos, 'c2c4', 3))?.text).toBe(
+      'Bold! c4 offers a pawn, but the engine rates it among the best moves here. Can you see what you get for it?',
+    );
+  });
+
+  it('is Lesson only', async () => {
+    expect(await coach('sparring', GREEK_SCRIPT).onPlayerMove(GREEK, 'd3h7', 13)).toBeUndefined();
+  });
+
+  it('neither praises a gambit nor calls it a hung pawn', async () => {
+    expect(await coach('lesson', EVANS_SCRIPT).onPlayerMove(EVANS, 'b2b4', 7)).toBeUndefined();
+  });
+
+  it('does not praise a pawn break that can be retaken (Italian, 5.d4 exd4 cxd4)', async () => {
+    // 1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5 4.c3 Nf6 5.d4: after exd4 White can take back with cxd4.
+    const fen = 'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2P2N2/PP1P1PPP/RNBQK2R w KQkq - 1 5';
+    const script: Script = {
+      [fen]: { cp: 22, pv: ['d2d4', 'e5d4', 'c3d4'] },
+      [after(fen, 'd2d4')]: { cp: -18, pv: ['e5d4', 'e4e5', 'd7d5', 'c4b5', 'f6e4', 'c3d4', 'c5b4', 'c1d2'] },
+    };
+    expect(await coach('lesson', script).onPlayerMove(fen, 'd2d4', 9)).toBeUndefined();
+  });
+
+  it('does not praise an even trade', async () => {
+    // 1.e4 d5 2.exd5 Qxd5: material is level again.
+    const pos = after(after(new Chess().fen(), 'e2e4'), 'd7d5');
+    const script: Script = { [pos]: { cp: 30, pv: ['e4d5'] }, [after(pos, 'e4d5')]: { cp: -30, pv: ['d8d5', 'b1c3'] } };
+    expect(await coach('lesson', script).onPlayerMove(pos, 'e4d5', 3)).toBeUndefined();
   });
 });
 

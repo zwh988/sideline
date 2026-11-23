@@ -12,7 +12,7 @@ export interface Mode {
   name: string;
   /** Offers help unasked: "There's something strong here", "what does my last move want?" (hint step 1). */
   prompts: boolean;
-  /** Low-stakes talk: phase prompts, "Good, you saw my threat." */
+  /** Talk beyond the serious moments: phase prompts, "Good, you saw my threat", praise for a sound sacrifice. */
   smallTalk: boolean;
   /**
    * Flags hung material smaller than the level's mistake size (a loose pawn,

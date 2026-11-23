@@ -12,12 +12,12 @@
 // The mode (src/app/modes.ts) trims this: Sparring drops the unasked prompts,
 // small talk, takeback offers and thinking aloud, and flags a mistake without
 // saying how the coach would punish it.
-import { Chess, type Square } from 'chess.js';
+import { Chess, type PieceSymbol, type Square } from 'chess.js';
 import type { Level } from '../app/levels';
 import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
 import type { TaughtLine } from './lines';
-import { failedRecapture, type FailedRecapture } from './facts';
+import { failedRecapture, PIECE_NAME, VALUE, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
 import {
   byImportance,
@@ -63,8 +63,10 @@ const BUDGET_PLIES = 6;
 /**
  * Hung material is flagged below the level's mistake size when the evaluation
  * drops by at least this much per pawn the coach wins (most of the material).
+ * Gambits stay below it: Stockfish rates 4.b4 (Evans) 0.74 and 2.f4 (King's
+ * Gambit) 0.67 worse than the best move.
  */
-const HUNG_CP_PER_PAWN = 70;
+const HUNG_CP_PER_PAWN = 90;
 /** Moves within this much of the best move count as "found it". */
 const FOUND_CP = 60;
 /**
@@ -159,6 +161,9 @@ export class Coach {
     const after = await this.analyst.evaluate(chess.fen(), 1);
     this.afterPlayer = after;
     const loss = t.ev.bestCp - -after.bestCp;
+    // The engine's own top move is never a mistake: evaluations of sharp positions
+    // jump between searches (Bxh7+ once scored a pawn "worse" than itself).
+    const topMove = t.ev.lines[0]?.pv[0] === uci;
 
     // Found the tactic (praised once, at its first move).
     if (t.tactic && uci === t.tactic.moves[0].uci) {
@@ -167,7 +172,7 @@ export class Coach {
       return this.remark(ply, { kind: 'praise', text: praise(t.tactic), mood: 'pleased' });
     }
 
-    if (loss >= this.level.mistakeCp) {
+    if (loss >= this.level.mistakeCp && !topMove) {
       // The move lets the coach win something the player has learned to see.
       const cut = this.analyst.taughtLine(after, this.limits());
       const refutation = this.teachable(cut.kind === 'line' ? cut.line : undefined);
@@ -187,9 +192,20 @@ export class Coach {
 
     // Smaller than the level's mistake size, but plainly hung: a pawn or piece
     // the coach can just take, and the evaluation confirms it stays lost.
-    const hung = this.mode.minorMistakes ? this.hungMaterial(after, loss) : undefined;
+    const hung = this.mode.minorMistakes && !topMove ? this.hungMaterial(after, loss) : undefined;
     if (hung) return this.mistakeRemark(ply, move.san, hung);
-    if (loss >= this.level.mistakeCp) return undefined; // beyond the player's concepts: stay quiet
+    if (loss >= this.level.mistakeCp && !topMove) return undefined; // beyond the player's concepts: stay quiet
+
+    // Gave up material on purpose (or by luck), and the engine agrees it's fine.
+    const amongBest = loss < FOUND_CP || topMove;
+    const sacrifice = this.mode.smallTalk && amongBest ? this.sacrifice(fenBefore, uci) : undefined;
+    if (sacrifice) {
+      return this.remark(ply, {
+        kind: 'praise',
+        text: `Bold! ${move.san} offers ${sacrifice}, but the engine rates it among the best moves here. Can you see what you get for it?`,
+        mood: 'surprised',
+      });
+    }
 
     // Dealt with the coach's threat (a low-priority remark).
     if (this.mode.smallTalk && t.threat && loss < FOUND_CP && this.budgetAllows(ply)) {
@@ -257,6 +273,28 @@ export class Coach {
     const line = cut.kind === 'line' ? cut.line : undefined;
     if (!line || line.mate || line.motif !== 'hanging-piece') return undefined;
     return loss >= line.gain * HUNG_CP_PER_PAWN ? line : undefined;
+  }
+
+  /**
+   * The player's move offers material (board facts only): the coach can take
+   * the moved piece, and the player can't win back as much on that square
+   * (counting their own capture, and at most one recapture of the taker).
+   * Whether the coach should take it is the engine's business: the caller
+   * only praises an offer that is among the engine's best moves. Returns
+   * "a pawn" / "your bishop for a pawn".
+   */
+  private sacrifice(fenBefore: string, uci: string): string | undefined {
+    const chess = new Chess(fenBefore);
+    const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    const takesOn = () => chess.moves({ verbose: true }).filter((m) => m.to === move.to && m.captured);
+    const take = takesOn().sort((x, y) => VALUE[x.piece] - VALUE[y.piece])[0];
+    if (!take) return undefined;
+    const offered = (move.promotion ?? move.piece) as PieceSymbol;
+    const won = move.captured as PieceSymbol | undefined;
+    chess.move(take);
+    const back = takesOn().length ? VALUE[take.piece] : 0;
+    if ((won ? VALUE[won] : 0) - VALUE[offered] + back > -1) return undefined;
+    return won ? `your ${PIECE_NAME[offered]} for a ${PIECE_NAME[won]}` : `a ${PIECE_NAME[offered]}`;
   }
 
   /** "Careful: after Bc4, I can play Nxd4…" (Lesson), or a plain warning (Sparring). */
