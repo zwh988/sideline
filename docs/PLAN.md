@@ -53,7 +53,8 @@ Comes before branches (1.6), which can start from a position the player is looki
 - While viewing an earlier position: the board is read-only, the last-move highlight shows the move that led there, and a clear "Viewing move 12 · Back to game" bar is shown. Hints and takeback are disabled.
 - When the coach moves while the player is looking back, stay on the viewed position but show that a new move came in. Any move made in the live game returns to the live position.
 - Keep the coach's remark with the ply it was said at, and show it again when viewing that position (a first step toward Review mode).
-- **Done when:** it works by tapping on the phone viewport and by keyboard on desktop, and there are unit tests for the navigation state (clamping at the ends, snapping back to live, the viewed position after a takeback).
+- **Don't lose remarks** (found in play): a remark on the player's move that doesn't wait for an answer (praise, "Bold!…", "Good, you saw my threat") is replaced about 0.6 s later by the coach's narration on its own move, before it can be read. Keep the turn's remarks together: the bubble shows the remark on the player's move and adds the coach's narration under it, as a short log (newest at the bottom, older ones dimmed, scrollable), not a replacement. The fixed-height bubble in task 1.8 must fit this (tap to expand).
+- **Done when:** it works by tapping on the phone viewport and by keyboard on desktop, and there are unit tests for the navigation state (clamping at the ends, snapping back to live, the viewed position after a takeback), and a remark on the player's move is still readable after the coach replies.
 
 ### ⬜ 1.5 Explain your idea: lines with tap-arrows
 Spec: "Explain your idea", "Lines".
