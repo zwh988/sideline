@@ -11,10 +11,11 @@ import { Coach, joinRemarks, type Remark, type Shape } from '../coach/coach';
 import { Branch } from './branches';
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
-import { GameStore, newGameId, type SavedGame } from './store';
+import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
+import { reviewBarText, reviewIntro, reviewPrompt, sortedMoments } from './review';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
-import { MODES, modeInfo, type Mode, type ModeId } from './modes';
+import { MODES, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
 import { balanceText, materialOf } from './material';
 import { Navigation, RemarkLog, plyLabel } from './navigation';
 import { createOpponent, type Opponent } from './opponent';
@@ -87,6 +88,15 @@ export class App {
   private record?: SavedGame;
   private el: Record<string, HTMLElement> = {};
   private importDialog!: ImportDialog;
+  /** A saved game being looked at (Review): moments to walk through; the board is read-only. */
+  private reviewing?: {
+    moments: SavedMoment[];
+    /** The moment shown, or -1 before the first. */
+    index: number;
+    /** What the coach says at `ply` instead of the game's log (the question before a moment, the intro). */
+    say?: { ply: number; text: string; offerAnswer: boolean };
+    opponent?: string;
+  };
   /** The game ply a sideline started from (a sideline can start from an earlier viewed position). */
   private sidelinePly = 0;
 
@@ -166,6 +176,14 @@ export class App {
               <button id="sideline-exit" class="primary">Back to game</button>
             </div>
           </div>
+          <div id="review-bar" class="viewbar reviewbar" hidden>
+            <span id="review-text"></span>
+            <div class="review-buttons">
+              <button id="review-prev">‹ Moment</button>
+              <button id="review-next">Moment ›</button>
+              <button id="review-exit" class="primary">Back to my game</button>
+            </div>
+          </div>
           <div id="viewbar" class="viewbar" hidden>
             <span id="viewtext"></span>
             <button id="back-to-game" class="primary">Back to game</button>
@@ -205,7 +223,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'review-bar', 'review-text', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -229,6 +247,9 @@ export class App {
       (this.el.history as HTMLDialogElement).close();
       this.importDialog.open();
     });
+    this.el['review-prev'].addEventListener('click', () => this.stepMoment(-1));
+    this.el['review-next'].addEventListener('click', () => this.stepMoment(1));
+    this.el['review-exit'].addEventListener('click', () => void this.exitReview());
     this.el.backup.addEventListener('click', () => this.backup());
     this.el.restore.addEventListener('click', () => this.el['restore-file'].click());
     this.el['restore-file'].addEventListener('change', () => void this.restore());
@@ -278,6 +299,7 @@ export class App {
   /** Starts a new game, or (with `resume`) carries on a saved one exactly where it stopped. */
   private async newGame(resume?: SavedGame): Promise<void> {
     const id = ++this.gameId;
+    this.reviewing = undefined;
     this.thinking = false;
     this.sideline = undefined;
     this.sidelineToken++;
@@ -372,7 +394,7 @@ export class App {
   /** Writes the game in progress to this device (nothing is saved before the first move). */
   private save(): void {
     const r = this.record;
-    if (!r || !this.game) return;
+    if (!r || !this.game || this.reviewing) return; // a reviewed game is saved only when a sideline is kept
     r.moves = this.game.moves.map((m) => m.uci);
     if (!r.moves.length) {
       // Nothing worth keeping yet; and if moves were saved before (a takeback to the start), forget that game
@@ -396,13 +418,14 @@ export class App {
     nav.setLive(g.moves.length);
     this.el['board-area'].classList.toggle('sidelining', !!this.sideline);
     this.el['sideline-bar'].hidden = !this.sideline;
+    this.renderReviewBar();
     if (this.sideline) return this.renderSideline();
     this.board.set({ viewOnly: false });
     const view = nav.viewing ? g.positionAt(nav.ply) : undefined;
     const shown = view ?? { fen: g.fen, turn: g.turn, inCheck: g.inCheck, lastMove: g.lastMove };
     const last = shown.lastMove;
     // Viewing the past: the board is read-only.
-    const canMove = !nav.viewing && g.isPlayerTurn && !g.result.over && !this.thinking;
+    const canMove = !this.reviewing && !nav.viewing && g.isPlayerTurn && !g.result.over && !this.thinking;
     this.board.set({
       fen: shown.fen,
       turnColor: shown.turn,
@@ -412,7 +435,7 @@ export class App {
     });
     // Arrows from the remark said at a viewed position; back to the live ones after.
     if (nav.viewing) {
-      this.board.setAutoShapes(this.shapesAt(nav.ply));
+      this.board.setAutoShapes(this.asking() ? [] : this.shapesAt(nav.ply));
       this.viewShapes = true;
     } else if (this.viewShapes) {
       this.board.setAutoShapes(this.shapesAt(nav.live));
@@ -425,6 +448,7 @@ export class App {
     this.el.takeback.hidden = !this.mode.takebacks;
     (this.el.takeback as HTMLButtonElement).disabled = nav.viewing || this.thinking || !g.moves.some((m) => m.color === g.playerColor);
     (this.el.hint as HTMLButtonElement).disabled = !canMove;
+    this.el.hint.hidden = !!this.reviewing;
     // A sideline can start from any shown position (also an earlier one), unless the coach is busy.
     this.el.sideline.hidden = !this.mode.sidelines;
     (this.el.sideline as HTMLButtonElement).disabled = this.thinking || (g.result.over && !nav.viewing);
@@ -438,7 +462,7 @@ export class App {
     const white = this.game.playerColor === 'white';
     const mine = white ? m.lostByBlack : m.lostByWhite; // what I captured
     const theirs = white ? m.lostByWhite : m.lostByBlack;
-    this.el.material.textContent = `You took ${mine || '–'} · Coach took ${theirs || '–'} · ${balanceText(m.balance, white ? 'w' : 'b')}`;
+    this.el.material.textContent = `You took ${mine || '–'} · ${this.reviewing ? 'Opponent' : 'Coach'} took ${theirs || '–'} · ${balanceText(m.balance, white ? 'w' : 'b')}`;
   }
 
   private shapesAt(ply: number): DrawShape[] {
@@ -455,7 +479,7 @@ export class App {
     (this.el['nav-back'] as HTMLButtonElement).disabled = !nav.canBack;
     (this.el['nav-forward'] as HTMLButtonElement).disabled = !nav.canForward;
     (this.el['nav-live'] as HTMLButtonElement).disabled = !nav.canForward;
-    this.el.viewbar.hidden = !nav.viewing;
+    this.el.viewbar.hidden = !nav.viewing || !!this.reviewing; // the review bar takes its place
     this.el['board-area'].classList.toggle('viewing', nav.viewing);
     this.el.viewtext.textContent = nav.viewing
       ? `Viewing ${plyLabel(this.game.startFen, nav.ply, san)}${nav.hasNewMove ? ' · new move played' : ''}`
@@ -524,6 +548,16 @@ export class App {
       this.el.mood.textContent = '';
       this.el.portrait.dataset.mood = 'neutral';
       bubble.scrollTop = bubble.scrollHeight;
+      return;
+    }
+    const say = this.reviewing?.say;
+    if (say && say.ply === nav.ply) {
+      const p = document.createElement('p');
+      p.className = 'entry';
+      p.textContent = say.text;
+      bubble.replaceChildren(p);
+      this.el.mood.textContent = '';
+      this.el.portrait.dataset.mood = 'thinking';
       return;
     }
     const entries = nav.viewing ? this.log.at(nav.ply) : this.log.recent(nav.live);
@@ -718,6 +752,106 @@ export class App {
     if (!this.stale(id, ply)) this.say(remark);
   }
 
+  // --- Review: a saved game, moment by moment -------------------------------
+  // The saved game is laid out on the same board with the same move list,
+  // navigation and "Try a sideline" as a live game, but nothing can be played
+  // in it. At each moment the coach shows the position before the player's move
+  // and asks what they were thinking; "What happened?" shows the position after
+  // and what was saved then (the coach's words and arrows). Sidelines tried here
+  // are kept with the game (PGN variations at that move).
+
+  private async openReview(saved: SavedGame): Promise<void> {
+    let game: Game;
+    try {
+      game = new Game(saved.playerColor, saved.startFen);
+      for (const uci of saved.moves) game.play(uci);
+    } catch {
+      this.status('That game could not be opened.');
+      return;
+    }
+    this.save(); // the game in progress stays as it is, to come back to
+    ++this.gameId; // drops whatever the live game was waiting for
+    this.thinking = false;
+    this.sideline = undefined;
+    this.sidelineToken++;
+    this.sidelineBusy = false;
+    this.onSidelineClosed?.();
+    this.onSidelineClosed = undefined;
+    const moments = sortedMoments(saved);
+    const im = saved.imported;
+    const opponent = im ? (saved.playerColor === 'white' ? im.black : im.white) : undefined;
+    this.game = game;
+    this.mode = REVIEW;
+    this.record = saved;
+    this.reviewing = { moments, index: -1, opponent, say: { ply: 0, text: reviewIntro(moments.length, opponent), offerAnswer: false } };
+    const level = levelInfo(saved.level);
+    this.coach = this.analyst.then((a) => new Coach(a, level, saved.playerColor === 'white' ? 'w' : 'b', REVIEW));
+    this.nav.reset(game.moves.length);
+    this.nav.start();
+    this.log.clear();
+    for (const e of saved.remarks) this.log.add(e.ply, e.remark);
+    this.viewShapes = false;
+    this.board.set({ orientation: saved.playerColor, lastMove: undefined });
+    this.board.setAutoShapes([]);
+    this.el.choices.hidden = true;
+    this.status('Reviewing a saved game.');
+    this.sync();
+  }
+
+  /** Back to the game that was in progress (or a new one). */
+  private async exitReview(): Promise<void> {
+    if (this.sideline) this.exitSideline();
+    const current = this.store.current();
+    await this.newGame(current && current.moves.length ? current : undefined);
+  }
+
+  /** The coach has asked its question at this position and the answer is not shown yet. */
+  private asking(): boolean {
+    const say = this.reviewing?.say;
+    return !!say?.offerAnswer && say.ply === this.nav.ply;
+  }
+
+  /** Goes to the next or previous moment: the position before the move, with the question. */
+  private stepMoment(delta: number): void {
+    const r = this.reviewing;
+    if (!r || this.sideline || !r.moments.length) return;
+    r.index = Math.min(Math.max(r.index + delta, 0), r.moments.length - 1);
+    const m = r.moments[r.index];
+    r.say = { ply: m.ply - 1, text: reviewPrompt(this.record!, m), offerAnswer: true };
+    this.navigate(() => this.nav.goTo(m.ply - 1));
+  }
+
+  /** "What happened?": the position after the move, with what the coach said then. */
+  private revealMoment(): void {
+    const r = this.reviewing;
+    if (!r) return;
+    r.say = undefined;
+    const m = r.moments[r.index];
+    this.navigate(() => this.nav.goTo(m.ply));
+  }
+
+  private renderReviewBar(): void {
+    const r = this.reviewing;
+    const bar = this.el['review-bar'];
+    bar.hidden = !r || !!this.sideline;
+    const box = this.el.choices;
+    if (!r) return;
+    const m = r.moments[r.index];
+    const revealed = !!m && !r.say && this.nav.ply === m.ply;
+    this.el['review-text'].textContent = reviewBarText(r.index, r.moments.length, revealed, m);
+    (this.el['review-prev'] as HTMLButtonElement).disabled = r.index <= 0;
+    (this.el['review-next'] as HTMLButtonElement).disabled = r.index >= r.moments.length - 1;
+    if (this.asking() && !this.sideline) {
+      box.innerHTML = '<button data-choice="answer" class="primary">What happened?</button>';
+      box.hidden = false;
+      box.onclick = (e) => {
+        if ((e.target as HTMLElement).closest('button')) this.revealMoment();
+      };
+    } else if (!this.sideline) {
+      box.hidden = true;
+    }
+  }
+
   // --- Saved games: history, PGN and backup ------------------------------
 
   private openHistory(): void {
@@ -758,7 +892,7 @@ export class App {
       }
       const buttons = document.createElement('div');
       buttons.className = 'history-buttons';
-      for (const [action, label] of [['copy', 'Copy PGN'], ['download', 'Download PGN'], ['delete', 'Delete']] as const) {
+      for (const [action, label] of [['review', 'Review'], ['copy', 'Copy PGN'], ['download', 'Download PGN'], ['delete', 'Delete']] as const) {
         const b = document.createElement('button');
         b.dataset.action = action;
         b.textContent = label;
@@ -775,7 +909,10 @@ export class App {
     const game = id ? this.store.get(id) : undefined;
     if (!btn || !game) return;
     const note = this.el['history-note'];
-    if (btn.dataset.action === 'copy') {
+    if (btn.dataset.action === 'review') {
+      (this.el.history as HTMLDialogElement).close();
+      void this.openReview(game);
+    } else if (btn.dataset.action === 'copy') {
       navigator.clipboard
         .writeText(gameToPgn(game))
         .then(() => (note.textContent = 'PGN copied.'))
@@ -889,6 +1026,7 @@ export class App {
         rootFen: sl.rootFen,
         moves: sl.moves.map((m) => ({ uci: m.uci, san: m.san, mine: m.mine })),
       });
+      if (this.reviewing) this.store.save(this.record);
     }
     this.sideline = undefined;
     this.sidelineToken++;

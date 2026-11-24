@@ -30,6 +30,7 @@ npx tsc              # type-check only
 | `src/app/modes.ts` | Lesson / Sparring: switches the coach and game screen read (prompts, small talk, takebacks, reveals plans, sidelines) |
 | `src/app/branches.ts` | A sideline: a line played out from a position, one level deep (state only; the screen is in `ui.ts`) |
 | `src/app/store.ts`, `src/app/pgn.ts` | Saved games on the device (localStorage, backup file) and a game as PGN with comments and sidelines as variations |
+| `src/app/review.ts` | Review of a saved game: moment order, the question before a moment (the screen is in `ui.ts`) |
 | `src/app/pgnimport.ts`, `src/app/sources.ts`, `src/app/import-dialog.ts` | Game import: PGN text to games and saved records, Chess.com / Lichess fetch (player-started), the import dialog (pick games and side, progress, cancel) |
 | `src/app/opponent.ts` | Coach's move choice: Maia (human-like), weakened Stockfish fallback |
 | `src/app/theme.ts`, `public/themes/<id>/` | Theme packs: `theme.json` + piece images, no code changes to reskin |

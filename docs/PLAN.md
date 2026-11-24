@@ -106,8 +106,9 @@ Spec: "Try a sideline".
 For Review. Paste or upload a PGN; fetch a player's public games from the Chess.com and Lichess APIs (player-initiated; rule 4 is relaxed for this one request, see STATE decision 17; check cross-origin support first). Imported games go through the same moment-finding as live games.
 - Done: `pgnimport.ts`, `sources.ts`, `review.ts`, `import-dialog.ts` (History → Import games). Cross-origin checked: both APIs allow any origin. How the analysis runs (second engine, per-move cancel, `ucinewgame`): STATE decision 25. Not done: opening an imported game on the board (Review, 1.7d).
 
-### ⬜ 1.7d Review
+### ✅ 1.7d Review
 Spec: Modes, Review. Walk through a game's critical moments, ask what the player was thinking, let them try sidelines, name the concept. Saved moments feed Practice (Phase 3).
+- Done: Review button in History opens any saved game on the board; moment walk with the question first and "What happened?"; sidelines kept with the game; STATE decision 26. Not done: collecting the player's answer (plans task), moments' concept record per player, rewording the live phrasing for past games.
 
 ### ⬜ 1.7b Known openings and gambits
 Found in play (task 1.4 follow-ups): the Queen's Gambit 2.c4 gets "Bold! c4 offers a pawn…" praise every game, and a known gambit can look like a hung pawn. Standard theory should be named, not praised or warned about.

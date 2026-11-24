@@ -554,3 +554,14 @@ button.primary {
   width: 100%;
   height: 14px;
 }
+
+/* Review: the bar over the board */
+.reviewbar {
+  flex-wrap: wrap;
+}
+
+.review-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
