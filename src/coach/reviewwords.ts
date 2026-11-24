@@ -75,6 +75,13 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
     const lower = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
     return { texts: named.map((s) => `${s.san}: ${lower(s.text)}`), first: named[0]?.concept as string | undefined };
   };
+  /** Numbered arrows for the moves of a line that are still to come on the board shown (the position after the played move). */
+  const arrows = (fen: string, ucis: string[], from: number) =>
+    explainLine(fen, ucis, { player: ctx.me, voice: 'review' }).forEach((st, i) => {
+      if (i < from) return;
+      shapes.push({ orig: st.uci.slice(0, 2) as never, dest: st.uci.slice(2, 4) as never, brush: st.mine ? 'green' : 'red', label: String(i - from + 1) });
+    });
+  const runs = (fen: string, ucis: string[]) => (ucis.length > 1 ? ` The line runs ${sans(fen, ucis)}; the arrows on the board show it.` : '');
   const habit = (concept: string | undefined) => {
     const h = concept ? HABIT_OF[concept] : undefined;
     if (h && !ctx.seen.has(h)) {
@@ -94,10 +101,10 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
         const first = m.answer[0];
         const firstSan = sans(fenAfter, [first]);
         sentences.push(`After that, ${opp} can play ${firstSan}${wins(fenAfter, m.answer)}.`);
-        if (m.answer.length > 1 && m.answer.length <= 4) sentences.push(`The line runs ${sans(fenAfter, m.answer)}.`);
+        if (m.answer.length > 1 && m.answer.length <= 4) sentences.push(runs(fenAfter, m.answer).trim());
         const c = concepts(fenAfter, m.answer, previous);
         sentences.push(...c.texts);
-        shapes.push({ orig: first.slice(0, 2) as never, dest: first.slice(2, 4) as never, brush: 'red' });
+        arrows(fenAfter, m.answer.slice(0, 4), 0);
         if (m.line?.length) sentences.push(`The engine preferred ${sans(m.fen, m.line)}.`);
         habit(c.first);
       } else if (m.line?.length) {
@@ -117,7 +124,8 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
     }
     case 'found-tactic': {
       const line = m.line ?? [m.played];
-      sentences.push(`Good find: ${label}.${m.prompted ? ' Your opponent had just given something away.' : ''}${itWins(m.fen, line)}`);
+      sentences.push(`Good find: ${label}.${m.prompted ? ' Your opponent had just given something away.' : ''}${itWins(m.fen, line)}${runs(m.fen, line)}`);
+      arrows(fenAfter, line.slice(1), 0);
       const c = concepts(m.fen, line, undefined);
       sentences.push(...c.texts);
       habit(c.first);
@@ -125,7 +133,8 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
     }
     case 'their-tactic': {
       const line = m.line ?? [m.played];
-      sentences.push(`${cap(opp)} played ${label}.${itWins(m.fen, line)}`);
+      sentences.push(`${cap(opp)} played ${label}.${itWins(m.fen, line)}${runs(m.fen, line)}`);
+      arrows(fenAfter, line.slice(1), 0);
       const c = concepts(m.fen, line, undefined);
       sentences.push(...c.texts);
       habit(c.first);
