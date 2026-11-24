@@ -141,6 +141,7 @@ export class App {
       <header class="top">
         <h1>Sideline</h1>
         <div class="controls">
+          <div id="settings" class="settings">
           <label>Level
             <select id="level">${LEVELS.map(
               (l) => `<option value="${l.level}">${l.level} · Chess.com ${l.chessCom}</option>`,
@@ -156,14 +157,18 @@ export class App {
               <option value="random">Random</option>
             </select>
           </label>
+          </div>
           <button id="new-game">New game</button>
           <button id="history-open">History</button>
+          <button id="settings-toggle" class="settings-toggle" aria-expanded="false" aria-controls="settings">Settings</button>
         </div>
       </header>
       <main class="layout">
         <div id="board-area" class="board-area">
-          <div id="board" class="cg-wrap"></div>
-          <div id="promotion" class="promotion" hidden></div>
+          <div class="board-stack">
+            <div id="board" class="cg-wrap"></div>
+            <div id="promotion" class="promotion" hidden></div>
+          </div>
           <p id="material" class="material" aria-label="Captured material"></p>
           <div class="nav" role="group" aria-label="Move navigation">
             <button id="nav-start" aria-label="First position">«</button>
@@ -211,9 +216,9 @@ export class App {
             <div id="bubble-box" class="bubble">
               <div class="coach-name">${COACH_NAME} <span id="mood" class="mood"></span></div>
               <div id="bubble" class="log" aria-live="polite"></div>
-              <div id="choices" class="choices" hidden></div>
             </div>
           </div>
+          <div id="choices" class="choices" hidden></div>
           <p id="status" class="status"></p>
           <div class="actions">
             <button id="hint">Hint</button>
@@ -226,7 +231,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'review-bar', 'review-text', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -239,6 +244,12 @@ export class App {
     level.addEventListener('change', () => this.updateSettings({ level: Number(level.value) }));
     mode.addEventListener('change', () => this.updateSettings({ mode: modeInfo(mode.value).id }));
     color.addEventListener('change', () => this.updateSettings({ color: color.value as ColorChoice }));
+    // Phones: the level, mode and colour sit behind a Settings button, and a long coach remark opens on a tap.
+    this.el['settings-toggle'].addEventListener('click', () => {
+      const open = this.root.querySelector('.top')!.classList.toggle('open');
+      this.el['settings-toggle'].setAttribute('aria-expanded', String(open));
+    });
+    this.el['bubble-box'].addEventListener('click', () => this.root.querySelector('.coach')!.classList.toggle('expanded'));
     this.root.querySelector('#new-game')!.addEventListener('click', () => void this.newGame());
     this.root.querySelector('#flip')!.addEventListener('click', () => this.board.toggleOrientation());
     this.el.takeback.addEventListener('click', () => void this.takeback());
@@ -489,7 +500,9 @@ export class App {
       ? `Viewing ${plyLabel(this.game.startFen, nav.ply, san)}${nav.hasNewMove ? ' · new move played' : ''}`
       : '';
     this.el.moves.querySelector('.cur')?.classList.remove('cur');
-    this.el.moves.querySelector(`[data-ply="${nav.ply}"]`)?.classList.add('cur');
+    const cur = this.el.moves.querySelector<HTMLElement>(`[data-ply="${nav.ply}"]`);
+    cur?.classList.add('cur');
+    if (cur && nav.viewing) this.el.moves.scrollLeft = cur.offsetLeft - this.el.moves.clientWidth / 2;
   }
 
   /** Runs a navigation change, then redraws. */
@@ -531,7 +544,10 @@ export class App {
       rows.push(`<li><span class="num">${first + i / 2}.</span>${cell(cells[i])}${cell(cells[i + 1])}</li>`);
     }
     this.el.moves.innerHTML = rows.join('');
-    if (!this.nav.viewing) this.el.moves.scrollTop = this.el.moves.scrollHeight;
+    if (!this.nav.viewing) {
+      this.el.moves.scrollTop = this.el.moves.scrollHeight;
+      this.el.moves.scrollLeft = this.el.moves.scrollWidth; // phones show the moves as a strip
+    }
   }
 
   /** The bubble: the coach's remarks for the position, newest at the bottom. */

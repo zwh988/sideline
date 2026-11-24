@@ -132,7 +132,8 @@ Found in play (task 1.4 follow-ups): the Queen's Gambit 2.c4 gets "Bold! c4 offe
 - Done: `build-openings.mjs`, `openings.ts`, coach wiring, `SavedGame.opening`; STATE decision 27. Not done: the opening named in the status line during play, a browser check of a full Queen's Gambit game from both sides, the training link.
 - **Done when:** unit tests cover lookup by position (including a transposition), gambit entry by each side, and the suppressed praise/warning; a browser check plays the Queen's Gambit and the Evans Gambit from both sides.
 
-### ⬜ 1.8 MVP hardening and phone pass
+### 🟨 1.8 MVP hardening and phone pass (layout done; real phone still to do)
+- Done in the browser pane (STATE, task 1.8): phone layout, foldable sizes, file letters, promotion and end-of-game clicked through, pins and skewers (came with 1.6c). **Still to do by the developer:** run the feasibility tests and a full game on a real phone (`npm run dev:phone`) and record the numbers in STATE; check the analysis depth there (it is 10 on touch devices, 12 otherwise).
 - Run all feasibility tests and a full game on a real phone (`npm run dev:phone`). Record the numbers in STATE.
 - Fix: file letters under the pieces; test the promotion picker and the end-of-game screen by clicking.
 - Phone layout (spec: "Phone layout"). Today the page is one column: header controls, then the board, then the coach bubble, buttons and move list. On a ~375×650 screen the bubble is barely visible without scrolling. Change it to:

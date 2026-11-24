@@ -87,7 +87,8 @@ button:disabled {
 
 .board-area {
   position: relative;
-  width: min(calc(100vh - 90px), 640px);
+  /* Never wider than the room left beside the 300px side column (foldables, small tablets). */
+  width: min(calc(100vh - 90px), 640px, calc(100vw - 348px));
   flex-shrink: 0;
 }
 
@@ -103,21 +104,216 @@ button:disabled {
   gap: 12px;
 }
 
-@media (max-width: 760px) {
+.settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-toggle {
+  display: none;
+}
+
+/*
+ * Phones (up to 760px) and portrait tablets / an unfolded foldable held upright (up to 1000px, taller than wide): the coach bubble above the board at a fixed height (so the board does not
+ * jump), then the board sized so that bubble, board, status line, buttons and navigation fit one
+ * screen, then the buttons, the move strip. Level, mode and colour are behind Settings.
+ */
+@media (max-width: 760px), (max-width: 1000px) and (max-aspect-ratio: 1/1) {
+  .top {
+    padding: 6px 12px;
+    gap: 6px 8px;
+    flex-wrap: nowrap;
+  }
+
+  .top.open {
+    flex-wrap: wrap;
+  }
+
+  .top h1 {
+    font-size: 1.1rem;
+  }
+
+  .controls {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .controls > button {
+    padding: 6px 8px;
+  }
+
+  .top.open .controls {
+    flex-wrap: wrap;
+  }
+
+  .controls {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .controls > button,
+  .settings-toggle {
+    min-height: 40px;
+  }
+
+  .settings-toggle {
+    display: inline-block;
+  }
+
+  .settings {
+    display: none;
+    order: 5; /* under the buttons */
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .top.open .settings {
+    display: flex;
+  }
+
   .layout {
     flex-direction: column;
     align-items: stretch;
-    padding: 0 0 16px;
+    gap: 6px;
+    padding: 0 0 12px;
+    --board: clamp(280px, calc(100dvh - 330px), 100vw);
   }
 
-  /* The board takes the full width on phones. */
-  .board-area {
-    width: 100%;
-  }
-
+  /* The wrappers disappear so that each piece can be ordered on its own. */
+  .board-area,
   .side {
-    width: auto;
-    padding: 0 16px;
+    display: contents;
+  }
+
+  .coach {
+    order: 1;
+    position: relative;
+    height: 96px;
+    margin: 0 12px;
+  }
+
+  .coach .portrait {
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+  }
+
+  .coach .bubble {
+    height: 96px;
+    overflow: hidden;
+    min-height: 0;
+    padding: 4px 10px;
+  }
+
+  .coach .log {
+    max-height: 4.4em;
+    overflow: hidden;
+  }
+
+  /* A tap opens the whole remark over the top of the board. */
+  .coach.expanded .bubble {
+    position: absolute;
+    left: 50px;
+    right: 0;
+    top: 0;
+    z-index: 30;
+    height: auto;
+    max-height: 60dvh;
+    overflow-y: auto;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 0.4);
+  }
+
+  .coach.expanded .log {
+    max-height: none;
+  }
+
+  .board-stack {
+    order: 2;
+    width: var(--board);
+    margin: 0 auto;
+  }
+
+  .status {
+    order: 3;
+    padding: 0 12px;
+    min-height: 1.3em;
+  }
+
+  .choices {
+    order: 4;
+    margin: 0 12px;
+  }
+
+  .actions {
+    order: 5;
+    margin: 0 12px;
+    flex-wrap: nowrap;
+  }
+
+  .actions button {
+    flex: 1;
+    padding: 6px 4px;
+  }
+
+  .nav {
+    order: 6;
+    margin: 0 12px;
+  }
+
+  .nav button {
+    min-height: 44px;
+  }
+
+  .material {
+    order: 7;
+    margin: 0 12px;
+    font-size: 0.85rem;
+  }
+
+  /* Banners with a Back button sit right under the board, where the thumb is. */
+  .viewbar,
+  .reviewbar,
+  .sidelinebar {
+    order: 4;
+    margin: 0 12px;
+  }
+
+  .layout:has(.sidelining) .actions {
+    display: none; /* disabled in a sideline anyway; the room goes to the banner */
+  }
+
+  .moves {
+    order: 9;
+    margin: 0 12px;
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    min-height: 0;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+
+  .moves li {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    padding-right: 10px;
+  }
+
+  .moves .mv {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 6px;
+  }
+
+  .credits {
+    order: 10;
+    padding: 0 12px;
   }
 }
 
@@ -240,10 +436,38 @@ button:disabled {
 
 /* Board coordinates: readable on both square colors */
 .cg-wrap coords {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgb(0 0 0 / 0.55);
+  z-index: 4; /* above the pieces: the file letters used to sit under them */
+  font-size: 12px;
+  font-weight: 700;
+  color: rgb(0 0 0 / 0.7);
+  text-shadow: 0 0 3px rgb(255 255 255 / 0.8);
+  pointer-events: none;
 }
+
+/* Ranks down the left edge (top-left corner of each square), files along the bottom (bottom-right corner). */
+.cg-wrap coords.ranks {
+  left: 3px;
+  top: 0;
+  width: 14px;
+}
+
+.cg-wrap coords.ranks coord {
+  transform: none;
+  text-align: left;
+}
+
+.cg-wrap coords.files {
+  left: 0;
+  bottom: 1px;
+  height: 16px;
+}
+
+.cg-wrap coords.files coord {
+  text-align: right;
+  padding-right: 4px;
+}
+
+
 
 /* Coach states */
 .portrait.busy {
@@ -256,6 +480,7 @@ button:disabled {
 
 .choices {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
 }
@@ -564,4 +789,10 @@ button.primary {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* The board and its promotion picker: the picker covers the board only */
+.board-stack {
+  position: relative;
+  overflow-x: clip;
 }
