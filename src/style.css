@@ -786,13 +786,79 @@ button.primary {
 }
 
 .review-buttons {
-  display: flex;
-  flex-wrap: wrap;
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.5fr;
   gap: 6px;
+}
+
+.review-buttons button {
+  padding-inline: 6px;
+  font-size: 0.92rem;
 }
 
 /* The board and its promotion picker: the picker covers the board only */
 .board-stack {
   position: relative;
   overflow-x: clip;
+}
+
+/* Review: the evaluation through the game (White's view), moments marked, tap to jump */
+.review-strip {
+  flex: 1 0 100%;
+  width: 100%;
+  height: 30px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.review-strip[hidden] {
+  display: none;
+}
+
+.review-strip .strip-mid {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.review-strip .strip-area {
+  fill: var(--muted);
+  fill-opacity: 0.22;
+}
+
+.review-strip .strip-line {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.review-strip .strip-mark {
+  stroke-width: 3;
+  stroke-opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.review-strip .strip-mark.bad {
+  stroke: #c0392b;
+}
+
+.review-strip .strip-mark.good {
+  stroke: #2e8b57;
+}
+
+.review-strip .strip-mark.theirs {
+  stroke: #c77d1a;
+}
+
+.review-strip .strip-mark.current {
+  stroke-opacity: 1;
+  stroke-width: 5;
+}
+
+.review-strip .strip-here {
+  stroke: var(--coach-accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }

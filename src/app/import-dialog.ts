@@ -100,7 +100,7 @@ export class ImportDialog {
         <h3 data-id="picker-title">Games</h3>
         <ol data-id="list" class="history-list import-list"></ol>
         <div class="import-row">
-          <label>Look for patterns at level
+          <label>Your level (sets how big a swing is listed)
             <select data-id="level">${LEVELS.map((l) => `<option value="${l.level}">${l.level} · Chess.com ${l.chessCom}</option>`).join('')}</select>
           </label>
         </div>
@@ -320,7 +320,7 @@ export class ImportDialog {
         const game = toSavedGame(c.parsed, c.color, level.level, c.source, c.url);
         const label = `Game ${k + 1} of ${chosen.length}`;
         text.textContent = `${label} · starting…`;
-        const result = await reviewGame(analyst, game, {
+        const result = await reviewGame(analyst, { ...game, opponent: game.imported ? (game.playerColor === 'white' ? game.imported.black : game.imported.white) : undefined }, {
           level,
           book,
           signal: abort.signal,
@@ -333,6 +333,7 @@ export class ImportDialog {
         if (!result) break; // cancelled in the middle of this game: it is not kept half-done
         game.remarks = result.remarks;
         game.moments = result.moments;
+        game.curve = result.curve;
         game.opening = book.openingOf(game.startFen, game.moves);
         if (!this.deps.store.save(game)) {
           full = true;

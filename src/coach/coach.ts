@@ -12,20 +12,22 @@
 // The mode (src/app/modes.ts) trims this: Sparring drops the unasked prompts,
 // small talk, takeback offers and thinking aloud, and flags a mistake without
 // saying how the coach would punish it.
-import { Chess, type Square } from 'chess.js';
+import { Chess, type Color, type Square } from 'chess.js';
 import type { Level } from '../app/levels';
 import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
-import type { TaughtLine } from './lines';
+import { isMereRecapture, type TaughtLine } from './lines';
 import { checkLine, type LineEvaluator, type LineMove } from './linecheck';
 import { lineConceptOf, offeredMaterial, type NoteConcept } from './explain';
-import { narrateSidelineMove, sidelineReplyText } from './sideline';
+import { explainLine, taughtFrom } from './lineexplain';
+import { narrateSidelineMove, sidelineReplyText, stepNote } from './sideline';
 import { failedRecapture, PIECE_NAME, playAndDescribe, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
 import type { OpeningBook } from './openings';
 import {
   byImportance,
   capitalize,
+  evalPhrase,
   failedRecapturePhrase,
   moveWithWhich,
   narrateCoachMove,
@@ -54,7 +56,11 @@ export interface Shape {
  * coach found, with the concept when a detector named one.
  */
 export interface Moment {
-  kind: 'mistake' | 'missed-tactic' | 'found-tactic';
+  /**
+   * The player's own mistakes and finds, and (found by Review, which looks at both sides) what the
+   * opponent found (`their-tactic`) or gave away (`their-blunder`).
+   */
+  kind: 'mistake' | 'missed-tactic' | 'found-tactic' | 'their-tactic' | 'their-blunder';
   /** The position before the player's move. */
   fen: string;
   /** The player's move (UCI). */
@@ -65,6 +71,14 @@ export interface Moment {
   concept?: string;
   /** What the move cost against the engine's best, in centipawns (mistakes and missed tactics). */
   lossCp?: number;
+  /** Review: the engine's line from `fen` that should have been played (or was found), UCI. */
+  line?: string[];
+  /** Review: what the opponent answers after the played move, UCI, when that wins something (a mistake). */
+  answer?: string[];
+  /** Review: the idea is beyond the patterns the player's level usually trains. */
+  beyond?: boolean;
+  /** Review: the opponent's move just before was itself a mistake the engine confirms. */
+  prompted?: boolean;
 }
 
 export interface Remark {
@@ -138,6 +152,15 @@ export class Coach {
     return line && this.level.motifs.includes(line.motif) ? line : undefined;
   }
 
+  /** The opponent's last move, so taking back a piece it just took is not taught as a tactic. */
+  private previous?: { fen: string; uci: string };
+
+  /** A tactic that only takes back what was just taken is an even trade, not a tactic. */
+  private notRecapture(line: TaughtLine | undefined): TaughtLine | undefined {
+    if (!line) return undefined;
+    return isMereRecapture(line, this.previous, this.level.minGain) ? undefined : line;
+  }
+
   /** Starts analysing the player's position in the background (hints must feel instant). */
   prepare(fen: string): Promise<TurnFacts> {
     this.hintStep = 0;
@@ -146,7 +169,7 @@ export class Coach {
     this.turn = (async () => {
       const ev = await this.analyst.evaluate(fen, 2);
       const cut = this.analyst.taughtLine(ev, this.limits());
-      const tactic = this.teachable(cut.kind === 'line' ? cut.line : undefined);
+      const tactic = this.notRecapture(this.teachable(cut.kind === 'line' ? cut.line : undefined));
       const threat = this.teachable(await this.analyst.threat(fen, this.limits()));
       if (tactic) await this.analyst.markForced(tactic);
       return { fen, ev, tactic, threat };
@@ -292,6 +315,7 @@ export class Coach {
     if (chess.isGameOver()) return undefined; // the game screen announces the result
 
     // The player's turn analysis goes first in the queue: hints must stay instant.
+    this.previous = { fen: fenBefore, uci };
     const turn = this.prepare(chess.fen());
     if (!this.mode.revealsPlans) return undefined;
     // Playing a known gambit: say so every time it enters one, with what it offers.
@@ -434,15 +458,71 @@ export class Coach {
     return sidelineReplyText(fenBefore, f, this.seenConcepts);
   }
 
+  /** The player's colour as the long name `explainLine` takes. */
+  private get me(): Color {
+    return this.playerColor;
+  }
+
+  /**
+   * The words for the last move of a sideline `line` (moves from `rootFen`, UCI): what it does, and
+   * what it completes from earlier in the line (a skewered piece taken, a defender lured away).
+   * `skipIfNamed`: the move was already described by the verdict (a refuting reply), so only a pay-off is added.
+   */
+  describeSidelineMove(line: { rootFen: string; ucis: string[] }, skipIfNamed = false): string {
+    const step = explainLine(line.rootFen, line.ucis, { player: this.me }).at(-1);
+    if (!step) return '';
+    if (skipIfNamed) return step.payoff ?? '';
+    return stepNote(step, this.seenConcepts, 'I play ');
+  }
+
+  /**
+   * "Show me what's good here": the engine's best line from `fen`, cut to the taught part, with the
+   * words for each move. `intro` says what it wins (or that no pattern was found), and each step
+   * carries its own note.
+   */
+  async bestLine(fen: string): Promise<{ ucis: string[]; intro: string; notes: string[] } | undefined> {
+    const ev = await this.evaluator.evaluate(fen, 1);
+    const pv = ev.lines[0]?.pv ?? [];
+    if (!pv.length) return undefined;
+    const cut = this.analyst.taughtLine(ev, { maxPlies: 8, minGain: 1 });
+    const ucis = cut.kind === 'line' ? cut.line.moves.map((m) => m.uci) : pv.slice(0, 3);
+    return this.lineNotes(fen, ucis, ev.bestCp);
+  }
+
+  /**
+   * The words for a given line from `fen` (a moment's better line in Review, or the engine's):
+   * what it wins, one note per move. `cp` (the engine's score for the side to move, when known)
+   * is stated only for a line that wins no material.
+   */
+  lineNotes(fen: string, ucis: string[], cp?: number): { ucis: string[]; intro: string; notes: string[] } {
+    const steps = explainLine(fen, ucis, { player: this.me });
+    const sans = steps.map((x) => x.san).join(' ');
+    const side = new Chess(fen).turn();
+    const lead = side === this.me ? 'The engine likes' : 'The engine would play';
+    const t = taughtFrom(fen, ucis);
+    const result = t?.mate
+      ? ' It ends in checkmate.'
+      : t && t.gain >= 1
+        ? ` It wins ${winsPhrase(t)}.`
+        : cp === undefined
+          ? ''
+          : ` The engine rates the position ${evalPhrase(cp, side === this.me ? 'you' : 'me')} after the first move.`;
+    const named = steps.some((x) => x.concept);
+    const intro = `${lead} ${sans}.${result}${named ? '' : " I can't name a pattern in it that I can check."}`;
+    return { ucis, intro, notes: steps.map((x) => stepNote(x, this.seenConcepts)) };
+  }
+
   /**
    * "Try a sideline": the player played `move` from `fenBefore`. The engine says whether it
-   * holds up, and the board code names the concept behind it (or says it can't).
+   * holds up, and the board code names the concept behind it (or says it can't). `line` is the whole
+   * sideline so far (this move last), so a pay-off of an idea set up earlier can be named.
    */
-  async judgeSidelineMove(fenBefore: string, move: LineMove): Promise<Remark> {
+  async judgeSidelineMove(fenBefore: string, move: LineMove, line?: { rootFen: string; ucis: string[] }): Promise<Remark> {
     const verdict = await checkLine(this.evaluator, { rootFen: fenBefore, moves: [move] }, { maxPlies: Math.max(this.level.maxPlies, 4) });
+    const step = line ? explainLine(line.rootFen, line.ucis, { player: this.me }).at(-1) : undefined;
     return {
       kind: 'line',
-      text: narrateSidelineMove(fenBefore, verdict, this.seenConcepts),
+      text: narrateSidelineMove(fenBefore, verdict, this.seenConcepts, step),
       mood: verdict.kind === 'good' ? 'pleased' : verdict.kind === 'refuted' ? 'concerned' : 'neutral',
     };
   }

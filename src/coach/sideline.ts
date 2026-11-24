@@ -7,6 +7,7 @@ import { Chess } from 'chess.js';
 import { conceptNote, HABIT, type NoteConcept } from './explain';
 import type { MoveFacts } from './facts';
 import type { LineVerdict } from './linecheck';
+import type { LineStep } from './lineexplain';
 import { evalPhrase, moveWithWhich, winsPhrase } from './templates';
 
 /**
@@ -14,7 +15,7 @@ import { evalPhrase, moveWithWhich, winsPhrase } from './templates';
  * `seen` holds the concepts already named this game: a concept's spotting
  * habit is said only the first time.
  */
-export function narrateSidelineMove(fenBefore: string, v: LineVerdict, seen: Set<NoteConcept>): string {
+export function narrateSidelineMove(fenBefore: string, v: LineVerdict, seen: Set<NoteConcept>, step?: LineStep): string {
   if (v.kind === 'empty') return '';
   const move = v.checks[0].facts;
   const sentences: string[] = [];
@@ -55,7 +56,25 @@ export function narrateSidelineMove(fenBefore: string, v: LineVerdict, seen: Set
       sentences.push(HABIT[note.concept]);
     }
   }
+  // An idea set up earlier in the sideline that this move completes (a skewered piece taken, a lured defender).
+  if (step?.payoff && v.kind === 'good') sentences.push(step.payoff);
   return sentences.join(' ');
+}
+
+/**
+ * One step of a line in words, for the coach's reply and for "show me what's good": the move, what the
+ * board code found in it (with later pay-offs), and the concept's habit the first time it comes up.
+ * A move with nothing to say is only named.
+ */
+export function stepNote(step: LineStep, seen: Set<NoteConcept>, lead = ''): string {
+  const parts = [`${lead}${step.san}.`];
+  if (step.text) parts.push(step.text);
+  const c = step.concept as NoteConcept | undefined;
+  if (c && c in HABIT && !seen.has(c)) {
+    seen.add(c);
+    parts.push(HABIT[c]);
+  }
+  return parts.join(' ');
 }
 
 /** The coach's own move in a sideline: "I'd play Nxd4, which takes the queen." plus the concept, if one is found. */

@@ -110,7 +110,7 @@ export function discoveredAttack(before: Chess, after: Chess, movedTo: Square, c
  */
 export function trappedPieces(chess: Chess, color: Color): Placed[] {
   const enemy = other(color);
-  if (chess.turn() !== enemy) return [];
+  if (chess.turn() !== enemy || chess.inCheck()) return []; // in check, other pieces can't move at all: not "trapped"
   const out: Placed[] = [];
   for (const row of chess.board()) {
     for (const p of row) {

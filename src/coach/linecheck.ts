@@ -28,23 +28,6 @@ export interface Line {
   moves: LineMove[];
 }
 
-/** One move of a line (a sideline, or one the player wants checked). */
-export interface LineMove {
-  from: Square;
-  to: Square;
-  promotion?: string;
-  uci: string;
-  san: string;
-  /** True for the player's own moves, false for the opponent's replies. */
-  mine: boolean;
-}
-
-/** A line from a position. */
-export interface Line {
-  rootFen: string;
-  moves: LineMove[];
-}
-
 /** The part of the analyst this module needs (tests script it). */
 export interface LineEvaluator {
   evaluate(fen: string, multiPv?: number, depth?: number): Promise<PositionEval>;
@@ -149,7 +132,7 @@ async function evaluateAt(analyst: LineEvaluator, fen: string): Promise<Position
 }
 
 /** How much worse than the best move this move is, for the side that played it. */
-function moveLoss(best: PositionEval, played: string, after: PositionEval): { lossCp: number; top: boolean; valueCp: number } {
+export function moveLoss(best: PositionEval, played: string, after: PositionEval): { lossCp: number; top: boolean; valueCp: number } {
   const top = best.lines[0]?.pv[0] === played;
   const valueCp = -after.bestCp;
   if (top) return { lossCp: 0, top, valueCp };

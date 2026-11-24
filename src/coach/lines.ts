@@ -6,7 +6,7 @@
 //      through the next few moves (so checks that win nothing back don't count).
 //   3. Material matches the engine's evaluation (else extend, or flag the rest as positional).
 import { Chess, type Color } from 'chess.js';
-import { materialBalance, playAndDescribe, type MoveFacts } from './facts';
+import { VALUE, materialBalance, playAndDescribe, type MoveFacts } from './facts';
 
 export type Motif =
   | 'mate-in-1'
@@ -127,4 +127,23 @@ export function motifOf(moves: MoveFacts[], side: Color, mate: boolean): Motif {
   // doesn't make up for it. The line is just "take" or "take, take back".
   if (moves[0].captured && moves.length <= 2) return 'hanging-piece';
   return 'winning-material';
+}
+
+/**
+ * The line only takes back what the opponent's last move just took (an even
+ * trade): its gain, counted from before that capture, is below `minGain`.
+ * `previous` is the opponent's move that led to the line's root position.
+ */
+export function isMereRecapture(line: TaughtLine, previous: { fen: string; uci: string } | undefined, minGain: number): boolean {
+  if (!previous || line.mate) return false;
+  let taken;
+  const chess = new Chess(previous.fen);
+  try {
+    taken = chess.move({ from: previous.uci.slice(0, 2), to: previous.uci.slice(2, 4), promotion: previous.uci[4] });
+  } catch {
+    return false;
+  }
+  if (chess.fen().split(' ')[0] !== line.rootFen.split(' ')[0]) return false; // not the move that led here
+  if (!taken.captured || line.moves[0].to !== taken.to) return false;
+  return line.gain - VALUE[taken.captured] < minGain;
 }

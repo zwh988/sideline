@@ -10,9 +10,13 @@ const a = (p: PieceSymbol) => `a ${PIECE_NAME[p]}`;
 const listAnd = (items: string[]) =>
   items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
-/** "your knight on d5" / "my rook on a8", from the player's point of view. */
-export function pieceRef(piece: PieceSymbol, square: Square, mine: boolean): string {
-  return `${mine ? 'your' : 'my'} ${PIECE_NAME[piece]} on ${square}`;
+/**
+ * "your knight on d5" / "my rook on a8", from the player's point of view.
+ * `opp` is how the other side is called: "my" when the coach is the opponent,
+ * "their" when the coach looks back at a game against someone else.
+ */
+export function pieceRef(piece: PieceSymbol, square: Square, mine: boolean, opp: 'my' | 'their' = 'my'): string {
+  return `${mine ? 'your' : opp} ${PIECE_NAME[piece]} on ${square}`;
 }
 
 /** King first, then the most valuable pieces. */
@@ -21,8 +25,8 @@ export function byImportance(targets: Target[]): Target[] {
   return [...targets].sort((x, y) => rank(y) - rank(x));
 }
 
-export function targetList(targets: Target[], mine: boolean): string {
-  return listAnd(byImportance(targets).map((t) => pieceRef(t.piece, t.square, mine)));
+export function targetList(targets: Target[], mine: boolean, opp: 'my' | 'their' = 'my'): string {
+  return listAnd(byImportance(targets).map((t) => pieceRef(t.piece, t.square, mine, opp)));
 }
 
 /** What the line wins, from the pieces actually captured: "a rook and a pawn for a bishop". */

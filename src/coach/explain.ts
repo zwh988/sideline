@@ -43,14 +43,14 @@ export const HABIT: Record<NoteConcept, string> = {
 };
 
 /** The concept the move shows, worded; nothing when no detector fires. `fenBefore` is the position before `uci`. */
-export function conceptNote(fenBefore: string, uci: string, who: 'you' | 'me'): ConceptNote | undefined {
+export function conceptNote(fenBefore: string, uci: string, who: 'you' | 'me', opp: 'my' | 'their' = 'my'): ConceptNote | undefined {
   const before = new Chess(fenBefore);
   const color: Color = before.turn();
   const found = detectConcepts(fenBefore, [uci]);
   const chess = new Chess(fenBefore);
   const m = playAndDescribe(chess, uci);
   const mine = who === 'you';
-  const piece = pieceRef(m.piece, m.to, mine);
+  const piece = pieceRef(m.piece, m.to, mine, opp);
 
   if (found.has('smotheredMate')) {
     return { concept: 'smotheredMate', text: "That's a smothered mate: the king is boxed in by its own pieces, so it can't escape the knight's check." };
@@ -66,7 +66,7 @@ export function conceptNote(fenBefore: string, uci: string, who: 'you' | 'me'): 
     };
   }
   if (m.doubleAttack && !m.mate) {
-    return { concept: 'fork', text: `That's a fork: ${piece} attacks ${targetList(m.attacks, !mine)} at once.` };
+    return { concept: 'fork', text: `That's a fork: ${piece} attacks ${targetList(m.attacks, !mine, opp)} at once.` };
   }
   for (const l of lineUps(chess, color)) {
     if (l.by !== m.to) continue;
@@ -87,7 +87,7 @@ export function conceptNote(fenBefore: string, uci: string, who: 'you' | 'me'): 
   if (trapped) {
     return {
       concept: 'trappedPiece',
-      text: `That traps ${pieceRef(trapped.type, trapped.square, !mine)}: it is attacked and has no safe square to go to.`,
+      text: `That traps ${pieceRef(trapped.type, trapped.square, !mine, opp)}: it is attacked and has no safe square to go to.`,
     };
   }
   // Taking a guard: the captured piece defended another, which is now undefended.
@@ -97,7 +97,7 @@ export function conceptNote(fenBefore: string, uci: string, who: 'you' | 'me'): 
     if (left) {
       return {
         concept: 'capturingDefender',
-        text: `That takes the only defender of ${pieceRef(left.type, left.square, !mine)}: it is now undefended.`,
+        text: `That takes the only defender of ${pieceRef(left.type, left.square, !mine, opp)}: it is now undefended.`,
       };
     }
   }
@@ -107,7 +107,7 @@ export function conceptNote(fenBefore: string, uci: string, who: 'you' | 'me'): 
     const worth = offer.won ? `, and it is worth more than the ${PIECE_NAME[offer.won]} it takes` : '';
     return {
       concept: 'sacrifice',
-      text: `That offers material: ${pieceRef(offer.offered, m.to, mine)} can be taken${worth}.`,
+      text: `That offers material: ${pieceRef(offer.offered, m.to, mine, opp)} can be taken${worth}.`,
     };
   }
   if (m.captured && m.capturedUndefended && !m.mate) {

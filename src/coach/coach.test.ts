@@ -306,3 +306,22 @@ describe('Coach: known openings and gambits', () => {
     expect(((await c.onCoachMove(next, 'c2c3', 30, lastMove))?.text ?? '')).not.toContain('Evans Gambit');
   });
 });
+
+
+describe('Coach: taking back what was just taken is not a tactic', () => {
+  // Black's Rd2 takes White's Rd1 with check, and Kxd1 simply takes back (an even trade).
+  const BEFORE = '4k3/8/8/8/8/8/3r4/3RK3 b - - 0 1';
+  const TRADED = after(BEFORE, 'd2d1');
+  const SCRIPT: Script = { [TRADED]: { cp: 0, pv: ['e1d1'] } };
+
+  it('stays quiet after the opponent took a rook and the line only takes it back', async () => {
+    const c = coach('lesson', SCRIPT, 'w');
+    await c.onCoachMove(BEFORE, 'd2d1', 24);
+    expect(await c.onPlayerTurn(TRADED, 24)).toBeUndefined();
+  });
+
+  it('would have called it a tactic without knowing the last move', async () => {
+    const c = coach('lesson', SCRIPT, 'w');
+    expect((await c.onPlayerTurn(TRADED, 24))?.kind).toBe('tactic');
+  });
+});

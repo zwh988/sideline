@@ -13,7 +13,8 @@ import { Branch } from './branches';
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
-import { reviewBarText, reviewIntro, reviewPrompt, sortedMoments } from './review';
+import { reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
+import { reviewGame } from '../coach/review';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { MODES, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
@@ -98,6 +99,11 @@ export class App {
     /** What the coach says at `ply` instead of the game's log (the question before a moment, the intro). */
     say?: { ply: number; text: string; offerAnswer: boolean };
     opponent?: string;
+    /** White's evaluation by ply, for the strip over the board. */
+    curve?: number[];
+    /** The whole-game analysis is running (it starts when a game without one is opened). */
+    analysing?: { done: number; total: number };
+    abort?: AbortController;
   };
   /** The game ply a sideline started from (a sideline can start from an earlier viewed position). */
   private sidelinePly = 0;
@@ -181,11 +187,13 @@ export class App {
             <p id="sideline-line" class="sideline-line"></p>
             <div class="sideline-buttons">
               <button id="sideline-undo">Undo</button>
+              <button id="sideline-good">Show what's good</button>
               <button id="sideline-exit" class="primary">Back to game</button>
             </div>
           </div>
           <div id="review-bar" class="viewbar reviewbar" hidden>
             <span id="review-text"></span>
+            <svg id="review-strip" class="review-strip" viewBox="0 0 300 44" preserveAspectRatio="none" role="img" aria-label="The evaluation through the game. Tap to jump to a move." hidden></svg>
             <div class="review-buttons">
               <button id="review-prev">‹ Moment</button>
               <button id="review-next">Moment ›</button>
@@ -231,7 +239,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-undo', 'sideline-good', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -269,6 +277,7 @@ export class App {
     this.el['restore-file'].addEventListener('change', () => void this.restore());
     this.el.sideline.addEventListener('click', () => this.startSideline());
     this.el['sideline-undo'].addEventListener('click', () => this.sidelineUndo());
+    this.el['sideline-good'].addEventListener('click', () => void this.showGood());
     this.el['sideline-exit'].addEventListener('click', () => this.exitSideline());
 
     this.importDialog = new ImportDialog(this.root, {
@@ -313,6 +322,7 @@ export class App {
   /** Starts a new game, or (with `resume`) carries on a saved one exactly where it stopped. */
   private async newGame(resume?: SavedGame): Promise<void> {
     const id = ++this.gameId;
+    this.reviewing?.abort?.abort();
     this.reviewing = undefined;
     this.thinking = false;
     this.sideline = undefined;
@@ -558,7 +568,7 @@ export class App {
     if (sideline) {
       // In a sideline the bubble shows what the coach said there, not the game's log.
       bubble.replaceChildren(
-        ...sideline.notes.slice(-3).map((text, i, all) => {
+        ...sideline.notes.slice(-6).map((text, i, all) => {
           const p = document.createElement('p');
           p.className = i < all.length - 1 ? 'entry old' : 'entry';
           p.textContent = text;
@@ -803,7 +813,9 @@ export class App {
     this.game = game;
     this.mode = REVIEW;
     this.record = saved;
-    this.reviewing = { moments, index: -1, opponent, say: { ply: 0, text: reviewIntro(moments.length, opponent), offerAnswer: false } };
+    const labels = moveLabels(saved);
+    const turning = turningPoints(saved.curve).map((t) => labels[t.ply - 1]);
+    this.reviewing = { moments, index: -1, opponent, curve: saved.curve, say: { ply: 0, text: reviewIntro(moments.length, opponent, turning), offerAnswer: false } };
     const level = levelInfo(saved.level);
     this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => new Coach(a, level, saved.playerColor === 'white' ? 'w' : 'b', REVIEW, book));
     this.nav.reset(game.moves.length);
@@ -816,10 +828,61 @@ export class App {
     this.el.choices.hidden = true;
     this.status('Reviewing a saved game.');
     this.sync();
+    // Review looks at the whole game once, both sides, every pattern (task 1.7e); older records get it now.
+    if (!saved.curve) void this.analyseForReview(saved);
+  }
+
+  /** Looks at the whole game with the engine and replaces the saved moments with what Review finds. */
+  private async analyseForReview(saved: SavedGame): Promise<void> {
+    const r = this.reviewing;
+    if (!r || !saved.moves.length) return;
+    const abort = (r.abort = new AbortController());
+    r.analysing = { done: 0, total: saved.moves.length };
+    r.say = { ply: 0, text: 'Let me look through the whole game first, both sides. This takes a few seconds.', offerAnswer: false };
+    this.status('Looking at the game…');
+    this.sync();
+    try {
+      const [analyst, book] = await Promise.all([this.analyst, this.book]);
+      const result = await reviewGame(
+        analyst,
+        { startFen: saved.startFen, moves: saved.moves, playerColor: saved.playerColor, opponent: r.opponent },
+        {
+          level: levelInfo(saved.level),
+          book,
+          signal: abort.signal,
+          onProgress: (done, total) => {
+            if (this.reviewing !== r) return;
+            r.analysing = { done, total };
+            this.renderReviewBar();
+          },
+        },
+      );
+      if (!result || this.reviewing !== r) return;
+      mergeAnalysis(saved, result);
+      this.store.save(saved);
+      const labels = moveLabels(saved);
+      r.moments = sortedMoments(saved);
+      r.index = -1;
+      r.curve = saved.curve;
+      this.log.clear();
+      for (const e of saved.remarks) this.log.add(e.ply, e.remark);
+      r.say = { ply: 0, text: reviewIntro(r.moments.length, r.opponent, turningPoints(saved.curve).map((t) => labels[t.ply - 1])), offerAnswer: false };
+      this.status('Reviewing a saved game.');
+    } catch (e) {
+      console.error(e);
+      if (this.reviewing === r) r.say = { ply: 0, text: 'I could not look through this game. You can still step through it and try sidelines.', offerAnswer: false };
+    } finally {
+      if (this.reviewing === r) {
+        r.analysing = undefined;
+        r.abort = undefined;
+        this.sync();
+      }
+    }
   }
 
   /** Back to the game that was in progress (or a new one). */
   private async exitReview(): Promise<void> {
+    this.reviewing?.abort?.abort();
     if (this.sideline) this.exitSideline();
     const current = this.store.current();
     await this.newGame(current && current.moves.length ? current : undefined);
@@ -858,18 +921,70 @@ export class App {
     if (!r) return;
     const m = r.moments[r.index];
     const revealed = !!m && !r.say && this.nav.ply === m.ply;
-    this.el['review-text'].textContent = reviewBarText(r.index, r.moments.length, revealed, m);
-    (this.el['review-prev'] as HTMLButtonElement).disabled = r.index <= 0;
-    (this.el['review-next'] as HTMLButtonElement).disabled = r.index >= r.moments.length - 1;
-    if (this.asking() && !this.sideline) {
+    const busy = r.analysing;
+    this.el['review-text'].textContent = busy
+      ? `Looking at the game… move ${busy.done} of ${busy.total}`
+      : reviewBarText(r.index, r.moments.length, revealed, m);
+    (this.el['review-prev'] as HTMLButtonElement).disabled = !!busy || r.index <= 0;
+    (this.el['review-next'] as HTMLButtonElement).disabled = !!busy || r.index >= r.moments.length - 1;
+    this.renderStrip();
+    if (busy) {
+      box.hidden = true;
+    } else if (this.asking() && !this.sideline) {
       box.innerHTML = '<button data-choice="answer" class="primary">What happened?</button>';
       box.hidden = false;
       box.onclick = (e) => {
         if ((e.target as HTMLElement).closest('button')) this.revealMoment();
       };
+    } else if (revealed && !this.sideline) {
+      // The drill: after the answer, see the engine's line played out, or try the position yourself.
+      box.innerHTML = `${m.line?.length ? '<button data-choice="line" class="primary">Show the line</button>' : ''}<button data-choice="try">Try it yourself</button>`;
+      box.hidden = false;
+      box.onclick = (e) => {
+        const choice = (e.target as HTMLElement).closest('button')?.dataset.choice;
+        if (choice === 'line') void this.showMomentLine(m);
+        else if (choice === 'try') void this.openSideline(m.fen, 'Try your idea from here. Nothing here changes your game.', m.ply - 1);
+      };
     } else if (!this.sideline) {
       box.hidden = true;
     }
+  }
+
+  /** The evaluation through the game, White's view, with the moments marked and the position shown. Tap to jump. */
+  private renderStrip(): void {
+    const r = this.reviewing;
+    const strip = this.el['review-strip'] as unknown as SVGElement;
+    const curve = r?.curve;
+    strip.toggleAttribute('hidden', !r || !curve || curve.length < 3);
+    if (!r || !curve || curve.length < 3) return;
+    const W = 300;
+    const H = 44;
+    const x = (ply: number) => (ply / (curve.length - 1)) * W;
+    const y = (cp: number) => H / 2 - (cp / 1000) * (H / 2 - 2);
+    const mid = `<line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" class="strip-mid"/>`;
+    const area = `<polygon points="0,${H / 2} ${curve.map((cp, i) => `${x(i).toFixed(1)},${y(cp).toFixed(1)}`).join(' ')} ${W},${H / 2}" class="strip-area"/>`;
+    const line = `<polyline points="${curve.map((cp, i) => `${x(i).toFixed(1)},${y(cp).toFixed(1)}`).join(' ')}" class="strip-line"/>`;
+    const marks = r.moments
+      .map((m, i) => {
+        const kind = m.kind === 'mistake' || m.kind === 'missed-tactic' ? 'bad' : m.kind === 'found-tactic' ? 'good' : 'theirs';
+        return `<line x1="${x(m.ply).toFixed(1)}" y1="0" x2="${x(m.ply).toFixed(1)}" y2="${H}" class="strip-mark ${kind}${i === r.index ? ' current' : ''}"/>`;
+      })
+      .join('');
+    const here = `<line x1="${x(this.nav.ply).toFixed(1)}" y1="0" x2="${x(this.nav.ply).toFixed(1)}" y2="${H}" class="strip-here"/>`;
+    strip.innerHTML = mid + area + line + marks + here;
+    strip.onclick = (e) => {
+      if (this.sideline) return;
+      const box = strip.getBoundingClientRect();
+      const ply = Math.round(((e.clientX - box.left) / box.width) * (curve.length - 1));
+      this.navigate(() => this.nav.goTo(Math.max(0, Math.min(curve.length - 1, ply))));
+    };
+  }
+
+  /** "Show the line": a sideline from the position before the moment, with the engine's better line played out. */
+  private async showMomentLine(m: SavedMoment): Promise<void> {
+    if (!m.line?.length || this.sideline) return;
+    const fresh = m.kind === 'mistake' || m.kind === 'missed-tactic' ? 'Here is the line the engine preferred.' : 'Here is the line.';
+    await this.openSideline(m.fen, `${fresh} Nothing here changes your game.`, m.ply - 1, m.line);
   }
 
   // --- Saved games: history, PGN and backup ------------------------------
@@ -1011,7 +1126,7 @@ export class App {
   }
 
   /** Opens a sideline from `fen`. Resolves when the player goes back to the game. */
-  private async openSideline(fen: string, intro?: string, ply = this.game.moves.length): Promise<void> {
+  private async openSideline(fen: string, intro?: string, ply = this.game.moves.length, autoLine?: string[]): Promise<void> {
     const sl = new Branch(fen, this.game.playerColor);
     if (sl.result.over) {
       this.status('The game is over here, so there is nothing to try.');
@@ -1031,7 +1146,8 @@ export class App {
     this.status('Trying a sideline.');
     const closed = new Promise<void>((resolve) => (this.onSidelineClosed = resolve));
     this.sync();
-    if (!sl.isPlayerTurn) await this.sidelineReply(sl, undefined, true);
+    if (autoLine?.length) void this.playLine(sl, this.sidelineToken, async () => (await this.coach).lineNotes(fen, autoLine));
+    else if (!sl.isPlayerTurn) await this.sidelineReply(sl, undefined, true);
     return closed;
   }
 
@@ -1085,13 +1201,20 @@ export class App {
     this.status('Thinking…');
     const coach = await this.coach;
     // The coach judges the move and picks its reply together (one engine search serves both).
+    const playerLine = { rootFen: sl.rootFen, ucis: sl.moves.map((m) => m.uci) };
     const [remark] = await Promise.all([
-      coach.judgeSidelineMove(fenBefore, move),
+      coach.judgeSidelineMove(fenBefore, move, playerLine),
       this.sidelineReply(sl, token),
       sleep(MIN_THINK_MS),
     ]);
     if (token !== this.sidelineToken || this.sideline !== sl) return;
     sl.notes.push(remark.text);
+    // The coach's reply gets its words too (what it does, the concept, what it completes). A refuting reply
+    // was already named by the verdict, so only a pay-off is added then.
+    if (sl.moves.length > playerLine.ucis.length) {
+      const reply = coach.describeSidelineMove({ rootFen: sl.rootFen, ucis: sl.moves.map((m) => m.uci) }, remark.mood === 'concerned');
+      if (reply) sl.notes.push(reply);
+    }
     this.renderBubble();
     this.sidelineEnded(sl);
   }
@@ -1143,6 +1266,64 @@ export class App {
     this.renderBubble();
   }
 
+  /**
+   * "Show what's good": the engine's best line from here, played out on the sideline's board one move at a
+   * time with the words for each (what it wins, the concept, what it completes later), or a plain statement
+   * that no pattern could be named. Undo takes it back.
+   */
+  private async showGood(): Promise<void> {
+    const sl = this.sideline;
+    if (!sl || this.sidelineBusy || sl.result.over) return;
+    const token = ++this.sidelineToken;
+    this.status('Looking for the best line…');
+    await this.playLine(sl, token, async () => (await this.coach).bestLine(sl.fen));
+  }
+
+  /**
+   * Plays a line on the sideline's board one move at a time, with the coach's note for each (and what the
+   * line is up front). `get` supplies the line and its words; the sideline stays busy meanwhile.
+   */
+  private async playLine(
+    sl: Branch,
+    token: number,
+    get: () => Promise<{ ucis: string[]; intro: string; notes: string[] } | undefined>,
+  ): Promise<void> {
+    this.sidelineBusy = true;
+    this.sync();
+    let best: Awaited<ReturnType<typeof get>>;
+    try {
+      best = await get();
+    } catch {
+      best = undefined;
+    }
+    if (token !== this.sidelineToken || this.sideline !== sl) return;
+    if (!best) {
+      this.sidelineBusy = false;
+      this.status('I could not find a line here.');
+      this.sync();
+      return;
+    }
+    sl.notes.push(best.intro);
+    this.renderBubble();
+    for (let i = 0; i < best.ucis.length; i++) {
+      await sleep(1200);
+      if (token !== this.sidelineToken || this.sideline !== sl) return;
+      try {
+        sl.play(best.ucis[i]);
+      } catch {
+        break;
+      }
+      sl.notes.push(best.notes[i]);
+      this.sync();
+      if (sl.result.over) break;
+    }
+    this.sidelineBusy = false;
+    this.sync();
+    if (sl.result.over) return this.sidelineEnded(sl, true);
+    this.status(sl.isPlayerTurn ? 'That is the line. Undo to try your own idea, or play on.' : 'That is the line.');
+    if (!sl.isPlayerTurn) await this.sidelineReply(sl, token, true);
+  }
+
   /** The board, banner and buttons for the open sideline. */
   private renderSideline(): void {
     const sl = this.sideline!;
@@ -1158,7 +1339,8 @@ export class App {
       movable: { color: canMove ? this.game.playerColor : undefined, dests: canMove ? (sl.dests as Map<Key, Key[]>) : new Map() },
     });
     this.el['sideline-line'].textContent = sl.lineText || 'Make a move on the board.';
-    (this.el['sideline-undo'] as HTMLButtonElement).disabled = !sl.moves.some((m) => m.mine);
+    (this.el['sideline-undo'] as HTMLButtonElement).disabled = !sl.moves.some((m) => m.mine) || this.sidelineBusy;
+    (this.el['sideline-good'] as HTMLButtonElement).disabled = this.sidelineBusy || sl.result.over;
     this.el.viewbar.hidden = true;
     this.el['board-area'].classList.remove('viewing');
     for (const id of ['hint', 'sideline', 'takeback']) (this.el[id] as HTMLButtonElement).disabled = true;

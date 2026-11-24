@@ -52,6 +52,8 @@ export interface SavedGame {
   remarks: { ply: number; remark: Remark }[];
   sidelines: SavedSideline[];
   moments: SavedMoment[];
+  /** Review's evaluation curve: White's score after 0..n moves (centipawns, clamped). Present once Review has analysed the game. */
+  curve?: number[];
   hintsUsed: number;
   /** The deepest named opening the game reached (both sides' moves), for the openings training later. */
   opening?: { eco: string; name: string; ply: number };

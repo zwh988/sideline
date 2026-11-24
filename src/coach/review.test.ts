@@ -46,30 +46,42 @@ const asGame = (pgn: string, playerColor: 'white' | 'black') => {
   return { startFen: g.startFen, moves: g.moves.map((m) => m.uci), playerColor };
 };
 
-describe('reviewGame: the same moment-finding as a live game, over an imported game', () => {
-  it('finds the mistake in a game with a bad move (5.Bc4?? loses the queen to Nxd4)', async () => {
+describe('reviewGame: every pattern, both sides, at any level', () => {
+  it('finds the mistake in a game with a bad move (5.Bc4?? loses the queen to Nxd4), in the past tense', async () => {
     const r = await reviewGame(new FakeAnalyst(SCOTCH_SCRIPT) as unknown as Analyst, asGame(BAD_MOVE_PGN, 'white'), { level: level2 });
     expect(r?.moments).toHaveLength(1);
     const m = r!.moments[0];
-    expect(m).toMatchObject({ kind: 'mistake', fen: SCOTCH_FEN, played: 'f1c4', better: 'c6d4', ply: 9 });
+    expect(m).toMatchObject({ kind: 'mistake', fen: SCOTCH_FEN, played: 'f1c4', better: 'd4a4', line: ['d4a4'], answer: ['c6d4', 'f3d4'], ply: 9 });
     expect(m.lossCp).toBeGreaterThan(500);
-    expect(m.concept).toBe('hangingPiece');
-    // Looking back, not offering a takeback.
-    expect(m.text).toBe('Careful: after Bc4, I can play Nxd4, which takes the queen. That would win a queen for a knight.');
-    expect(r!.remarks).toEqual([{ ply: 9, remark: expect.objectContaining({ kind: 'mistake', offerTakeback: false }) }]);
+    expect(m.text).toBe(
+      'You played 5.Bc4. After that, your opponent can play Nxd4, winning a queen for a knight. The line runs Nxd4 Nxd4. ' +
+        'That takes the only defender of your bishop on c4: it is now undefended. The engine preferred Qa4. ' +
+        'Habit: when a piece is guarded, ask what happens if you take its guard.',
+    );
+    // Looking back: no takeback offer, no "Careful: after Bc4, I can play…".
+    expect(r!.remarks).toEqual([{ ply: 9, remark: expect.objectContaining({ kind: 'mistake', shapes: [{ orig: 'c6', dest: 'd4', brush: 'red' }] }) }]);
+    expect(r!.remarks[0].remark.offerTakeback).toBeUndefined();
   });
 
-  it('judges only the chosen side: as Black the same game has no mistake, but Nxd4 is a tactic found', async () => {
+  it('as Black the same game: the opponent gave something away, and Nxd4 found it (one moment, not two)', async () => {
     const r = await reviewGame(new FakeAnalyst(SCOTCH_SCRIPT) as unknown as Analyst, asGame(BAD_MOVE_PGN, 'black'), { level: level2 });
     expect(r?.moments).toHaveLength(1);
-    expect(r!.moments[0]).toMatchObject({ kind: 'found-tactic', played: 'c6d4', ply: 10, concept: 'hangingPiece' });
-    expect(r!.moments[0].text).toBe('Good eye: that wins a queen for a knight.');
+    expect(r!.moments[0]).toMatchObject({ kind: 'found-tactic', played: 'c6d4', ply: 10, prompted: true });
+    expect(r!.moments[0].text).toMatch(/^Good find: 5…Nxd4\. Your opponent had just given something away\. It wins a queen for a knight\./);
   });
 
   it('finds the tactic the player found, in a game that starts from a position', async () => {
     const r = await reviewGame(new FakeAnalyst(FORK_SCRIPT) as unknown as Analyst, asGame(FORK_PGN, 'white'), { level: level2 });
     expect(r?.moments).toHaveLength(1);
-    expect(r!.moments[0]).toMatchObject({ kind: 'found-tactic', fen: FORK_FEN, played: 'd5c7', ply: 1, concept: 'fork' });
+    expect(r!.moments[0]).toMatchObject({ kind: 'found-tactic', fen: FORK_FEN, played: 'd5c7', ply: 1, concept: 'fork', line: ['d5c7', 'e8d7', 'c7a8'] });
+    expect(r!.moments[0].text).toContain("That's a fork: your knight on c7 attacks their king on e8 and their rook on a8 at once.");
+  });
+
+  it('as Black the opponent found the fork: their tactic', async () => {
+    const r = await reviewGame(new FakeAnalyst(FORK_SCRIPT) as unknown as Analyst, asGame(FORK_PGN, 'black'), { level: level2 });
+    expect(r?.moments).toHaveLength(1);
+    expect(r!.moments[0]).toMatchObject({ kind: 'their-tactic', played: 'd5c7', concept: 'fork' });
+    expect(r!.moments[0].text).toMatch(/^Your opponent played 1\.Nxc7\+\. It wins a rook and a pawn\. That's a fork: their knight on c7 attacks your king on e8 and your rook on a8 at once\./);
   });
 
   it('finds the tactic the player missed', async () => {
@@ -77,13 +89,44 @@ describe('reviewGame: the same moment-finding as a live game, over an imported g
     const game = { startFen: FORK_FEN, moves: ['h1g1'], playerColor: 'white' as const };
     const r = await reviewGame(new FakeAnalyst(missed) as unknown as Analyst, game, { level: level2 });
     expect(r?.moments[0]).toMatchObject({ kind: 'missed-tactic', played: 'h1g1', better: 'd5c7' });
+    expect(r!.moments[0].text).toMatch(/^You played 1\.Rg1, but you had something stronger: Nxc7\+ Kd7 Nxa8, winning a rook and a pawn\./);
+  });
+
+  it('the level never hides a pattern: Level 1 finds the fork too, and says it is beyond the level', async () => {
+    const r = await reviewGame(new FakeAnalyst(FORK_SCRIPT) as unknown as Analyst, asGame(FORK_PGN, 'white'), { level: levelInfo(1) });
+    expect(r?.moments).toHaveLength(1);
+    expect(r!.moments[0]).toMatchObject({ kind: 'found-tactic', concept: 'fork', beyond: true });
+  });
+
+  it('the level sets how big a swing is listed: a 2.4-pawn drop is your mistake at Level 6; at Level 2 only what they found is listed', async () => {
+    const script: Script = { ...SCOTCH_SCRIPT, [after(SCOTCH_FEN, 'f1c4')]: { cp: 200, pv: ['c6d4', 'f3d4', 'g8f6'] } };
+    const g = asGame(BAD_MOVE_PGN, 'white');
+    expect((await reviewGame(new FakeAnalyst(script) as unknown as Analyst, g, { level: level2 }))?.moments.map((m) => m.kind)).toEqual(['their-tactic']);
+    expect((await reviewGame(new FakeAnalyst(script) as unknown as Analyst, g, { level: levelInfo(6) }))?.moments.map((m) => m.kind)).toEqual(['mistake']);
+  });
+
+  it('a quiet drop with nothing the detectors can name says so', async () => {
+    const fen = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
+    const script: Script = { [fen]: { cp: 300, pv: ['e2e4'] }, [after(fen, 'e1d1')]: { cp: 100 } };
+    const r = await reviewGame(new FakeAnalyst(script) as unknown as Analyst, { startFen: fen, moves: ['e1d1'], playerColor: 'white' }, { level: levelInfo(6) });
+    expect(r!.moments[0]).toMatchObject({ kind: 'mistake', better: 'e2e4' });
+    expect(r!.moments[0].answer).toBeUndefined();
+    expect(r!.moments[0].text).toBe("You played 1.Kd1. The engine preferred e4, about 4.0 pawns better for you. I can't name a reason I can check.");
+  });
+
+  it('returns the evaluation curve (White\'s view, one value per position)', async () => {
+    const r = await reviewGame(new FakeAnalyst(SCOTCH_SCRIPT) as unknown as Analyst, asGame(BAD_MOVE_PGN, 'white'), { level: level2 });
+    expect(r!.curve).toHaveLength(13);
+    expect(r!.curve[8]).toBe(40); // White to move at 5.: +0.4
+    expect(r!.curve[9]).toBe(-600); // after 5.Bc4, Black to move at +6.0
   });
 
   it('stays quiet over a whole annotated game when nothing happens', async () => {
     const a = new FakeAnalyst({});
     const r = await reviewGame(a as unknown as Analyst, asGame(OPERA_ANNOTATED, 'white'), { level: level2 });
-    expect(r).toEqual({ remarks: [], moments: [] });
-    expect(a.searches).toBeGreaterThan(30); // it did look at White's 17 moves
+    expect(r?.moments).toEqual([]);
+    expect(r?.remarks).toEqual([]);
+    expect(a.searches).toBe(33); // one search per position, both sides (33 plies; the mated position needs none)
   });
 
   it('starts each game with a fresh engine state', async () => {
@@ -93,7 +136,7 @@ describe('reviewGame: the same moment-finding as a live game, over an imported g
     expect(a.newGames).toBe(2);
   });
 
-  it('reports progress after every move, and counts the opponent\'s moves too', async () => {
+  it('reports progress after every move', async () => {
     const seen: [number, number][] = [];
     await reviewGame(new FakeAnalyst({}) as unknown as Analyst, asGame(BAD_MOVE_PGN, 'white'), { level: level2, onProgress: (d, t) => seen.push([d, t]) });
     expect(seen).toHaveLength(12);
@@ -112,10 +155,5 @@ describe('reviewGame: the same moment-finding as a live game, over an imported g
     });
     expect(r).toBeUndefined();
     expect(moves).toBe(3); // no engine work after the cancel
-  });
-
-  it('does not call a mistake a mistake above the level (Level 1 does not know the fork)', async () => {
-    const r = await reviewGame(new FakeAnalyst(FORK_SCRIPT) as unknown as Analyst, asGame(FORK_PGN, 'white'), { level: levelInfo(1) });
-    expect(r?.moments).toEqual([]);
   });
 });
