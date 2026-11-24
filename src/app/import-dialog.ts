@@ -10,6 +10,7 @@
 // dialog shows progress, and Cancel (or closing the dialog) stops at the next
 // move. Every game that finished before that is kept.
 import type { Analyst } from '../coach/analyst';
+import { loadOpeningBook } from '../coach/openings';
 import { reviewGame } from '../coach/review';
 import { guessColor, importedId, parseGame, parsePgn, toSavedGame, describeGame, type ParsedGame } from './pgnimport';
 import { LEVELS, levelInfo } from './levels';
@@ -313,6 +314,7 @@ export class ImportDialog {
     let failed = false;
     try {
       analyst = await this.deps.createAnalyst();
+      const book = await loadOpeningBook();
       for (const [k, c] of chosen.entries()) {
         if (abort.signal.aborted) break;
         const game = toSavedGame(c.parsed, c.color, level.level, c.source, c.url);
@@ -320,6 +322,7 @@ export class ImportDialog {
         text.textContent = `${label} · starting…`;
         const result = await reviewGame(analyst, game, {
           level,
+          book,
           signal: abort.signal,
           onProgress: (done, total) => {
             text.textContent = `${label} · move ${Math.ceil(done / 2)} of ${Math.ceil(total / 2)}`;
@@ -330,6 +333,7 @@ export class ImportDialog {
         if (!result) break; // cancelled in the middle of this game: it is not kept half-done
         game.remarks = result.remarks;
         game.moments = result.moments;
+        game.opening = book.openingOf(game.startFen, game.moves);
         if (!this.deps.store.save(game)) {
           full = true;
           break;

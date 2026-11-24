@@ -22,6 +22,7 @@ import { lineConceptOf, offeredMaterial, type NoteConcept } from './explain';
 import { narrateSidelineMove, sidelineReplyText } from './sideline';
 import { failedRecapture, PIECE_NAME, playAndDescribe, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
+import type { OpeningBook } from './openings';
 import {
   byImportance,
   capitalize,
@@ -125,6 +126,8 @@ export class Coach {
     private level: Level,
     private playerColor: 'w' | 'b',
     private mode: Mode = MODES[0],
+    /** Known openings (task 1.7b); without it the coach knows no theory. */
+    private book?: OpeningBook,
   ) {}
 
   private limits() {
@@ -187,7 +190,10 @@ export class Coach {
     const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
     if (chess.isCheckmate()) return undefined; // the game screen celebrates
 
-    const after = await this.analyst.evaluate(chess.fen(), 1);
+    const fenAfter = chess.fen();
+    // A named line of theory: its pawn breaks and gambits are not hung material or daring sacrifices.
+    const inBook = !!this.book?.has(fenAfter);
+    const after = await this.analyst.evaluate(fenAfter, 1);
     this.afterPlayer = after;
     const loss = t.ev.bestCp - -after.bestCp;
     // The engine's own top move is never a mistake: evaluations of sharp positions
@@ -234,13 +240,24 @@ export class Coach {
 
     // Smaller than the level's mistake size, but plainly hung: a pawn or piece
     // the coach can just take, and the evaluation confirms it stays lost.
-    const hung = this.mode.minorMistakes && !topMove ? this.hungMaterial(after, loss) : undefined;
+    const hung = this.mode.minorMistakes && !topMove && !inBook ? this.hungMaterial(after, loss) : undefined;
     if (hung) return this.mistakeRemark(ply, move.san, hung, { fenBefore, uci, loss });
     if (loss >= this.level.mistakeCp && !topMove) return undefined; // beyond the player's concepts: stay quiet
 
     // Gave up material on purpose (or by luck), and the engine agrees it's fine.
+    // A known gambit is named, not praised: the name and the offer are facts; the engine's view
+    // is added only when the evaluation says it prefers other moves.
+    const gambit = this.mode.smallTalk ? this.book?.gambitEntered(fenBefore, fenAfter) : undefined;
+    const offer = gambit ? this.sacrifice(fenBefore, uci) : undefined;
+    if (gambit && offer) {
+      return this.remark(ply, {
+        kind: 'praise',
+        text: `That's the ${gambit.gambit}, a known opening: you offer ${offer}.${loss >= HUNG_CP_PER_PAWN ? ' The engine prefers other moves here.' : ''} We'll look at this one in openings training.`,
+        mood: 'neutral',
+      });
+    }
     const amongBest = loss < FOUND_CP || topMove;
-    const sacrifice = this.mode.smallTalk && amongBest ? this.sacrifice(fenBefore, uci) : undefined;
+    const sacrifice = this.mode.smallTalk && amongBest && !inBook ? this.sacrifice(fenBefore, uci) : undefined;
     if (sacrifice) {
       return this.remark(ply, {
         kind: 'praise',
@@ -277,6 +294,17 @@ export class Coach {
     // The player's turn analysis goes first in the queue: hints must stay instant.
     const turn = this.prepare(chess.fen());
     if (!this.mode.revealsPlans) return undefined;
+    // Playing a known gambit: say so (once), with what it offers.
+    const gambit = this.book?.gambitEntered(fenBefore, chess.fen());
+    const offer = gambit ? this.sacrifice(fenBefore, uci, false) : undefined;
+    if (gambit && offer && !this.said.has(gambit.gambit) && ply - this.lastRemarkPly >= NARRATION_GAP.medium) {
+      this.said.add(gambit.gambit);
+      return this.remark(ply, {
+        kind: 'narration',
+        text: `I'm playing the ${gambit.gambit}, a known opening: I offer ${offer}.`,
+        mood: 'thinking',
+      });
+    }
     const before =
       this.afterPlayer?.fen === fenBefore ? this.afterPlayer : await this.analyst.evaluate(fenBefore, 1);
     const playerThreat = this.teachable(await this.analyst.threat(fenBefore, this.limits()));
@@ -325,10 +353,10 @@ export class Coach {
    * only praises an offer that is among the engine's best moves. Returns
    * "a pawn" / "your bishop for a pawn".
    */
-  private sacrifice(fenBefore: string, uci: string): string | undefined {
+  private sacrifice(fenBefore: string, uci: string, mine = true): string | undefined {
     const offer = offeredMaterial(fenBefore, uci);
     if (!offer) return undefined;
-    return offer.won ? `your ${PIECE_NAME[offer.offered]} for a ${PIECE_NAME[offer.won]}` : `a ${PIECE_NAME[offer.offered]}`;
+    return offer.won ? `${mine ? 'your' : 'my'} ${PIECE_NAME[offer.offered]} for a ${PIECE_NAME[offer.won]}` : `a ${PIECE_NAME[offer.offered]}`;
   }
 
   /** "Careful: after Bc4, I can play Nxd4…" (Lesson), or a plain warning (Sparring). */

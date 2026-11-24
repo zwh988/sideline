@@ -45,6 +45,7 @@ npx tsc              # type-check only
 | `src/coach/lines.ts` | Cuts engine lines to the taught part, names the motif |
 | `src/coach/analyst.ts` | Second Stockfish: position evals, threats (pass the move), forced replies |
 | `src/coach/narration.ts` | Facts for the coach's own move: threat answered, captures, idea, move quality vs Stockfish |
+| `src/coach/openings.ts`, `openings-data.json` | Known openings and gambits by position (Lichess names; `node scripts/build-openings.mjs <folder>` rebuilds the data) |
 | `src/coach/review.ts` | The coach's moment-finding over a whole game already played (imported games), with progress and cancel |
 | `src/coach/coach.ts` | Trigger rules (when the coach speaks, by level and mode), hint ladder, comment budget |
 | `src/coach/templates.ts` | Sentences built from facts. This is the coach's voice |

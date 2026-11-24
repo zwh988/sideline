@@ -4,6 +4,8 @@ import { levelInfo } from '../app/levels';
 import { modeInfo, type ModeId } from '../app/modes';
 import { Analyst, flipTurn, type PositionEval } from './analyst';
 import { Coach } from './coach';
+import openingData from './openings-data.json';
+import { OpeningBook } from './openings';
 
 /** Hand-checked engine output per position; unknown positions are quiet (0.00, no line). */
 type Script = Record<string, { cp: number; pv?: string[] }>;
@@ -26,8 +28,10 @@ class FakeAnalyst {
   }
 }
 
-function coach(mode: ModeId, script: Script = {}, color: 'w' | 'b' = 'w'): Coach {
-  return new Coach(new FakeAnalyst(script) as unknown as Analyst, levelInfo(2), color, modeInfo(mode));
+const BOOK = new OpeningBook(openingData as never);
+
+function coach(mode: ModeId, script: Script = {}, color: 'w' | 'b' = 'w', book?: OpeningBook): Coach {
+  return new Coach(new FakeAnalyst(script) as unknown as Analyst, levelInfo(2), color, modeInfo(mode), book);
 }
 
 /** Plays a UCI move (which must be legal) and returns the new FEN. */
@@ -253,5 +257,49 @@ describe("Coach modes: thinking aloud on the coach's move", () => {
     const lesson = await coach('lesson', {}, 'w').onCoachMove(afterE4, 'e7e5', 2, lastMove);
     expect(lesson?.text).toBe("I'm putting a pawn in the centre, on e5.");
     expect(await coach('sparring', {}, 'w').onCoachMove(afterE4, 'e7e5', 2, lastMove)).toBeUndefined();
+  });
+});
+
+describe('Coach: known openings and gambits', () => {
+  const start = new Chess().fen();
+  const d4d5 = after(after(start, 'd2d4'), 'd7d5');
+  const qgScript: Script = { [d4d5]: { cp: 26, pv: ['g1f3'] }, [after(d4d5, 'c2c4')]: { cp: -25, pv: ['e7e6', 'g1f3'] } };
+
+  it("names the Queen's Gambit instead of praising the offer (and without a book, praises as before)", async () => {
+    expect((await coach('lesson', qgScript, 'w', BOOK).onPlayerMove(d4d5, 'c2c4', 3))?.text).toBe(
+      "That's the Queen's Gambit, a known opening: you offer a pawn. We'll look at this one in openings training.",
+    );
+    expect((await coach('lesson', qgScript).onPlayerMove(d4d5, 'c2c4', 3))?.text).toMatch(/^Bold!/);
+    expect(await coach('sparring', qgScript, 'w', BOOK).onPlayerMove(d4d5, 'c2c4', 3)).toBeUndefined();
+  });
+
+  it('names the Evans Gambit the player enters, and does not repeat when it carries on', async () => {
+    const r = await coach('lesson', EVANS_SCRIPT, 'w', BOOK).onPlayerMove(EVANS, 'b2b4', 7);
+    expect(r?.text).toBe("That's the Evans Gambit, a known opening: you offer a pawn. We'll look at this one in openings training.");
+  });
+
+  it('as Black: the Englund Gambit is named, with the engine view when it prefers other moves, and is not a hung pawn', async () => {
+    const afterD4 = after(start, 'd2d4');
+    const script: Script = { [afterD4]: { cp: 20 }, [after(afterD4, 'e7e5')]: { cp: 140, pv: ['d4e5', 'b8c6'] } };
+    // Without the book the lost pawn is flagged as hung material.
+    expect((await coach('lesson', script, 'b').onPlayerMove(afterD4, 'e7e5', 2))?.kind).toBe('mistake');
+    const r = await coach('lesson', script, 'b', BOOK).onPlayerMove(afterD4, 'e7e5', 2);
+    expect(r?.kind).toBe('praise');
+    expect(r?.text).toBe("That's the Englund Gambit, a known opening: you offer a pawn. The engine prefers other moves here. We'll look at this one in openings training.");
+  });
+
+  it('keeps flagging a real mistake that is in no book', async () => {
+    const r = await coach('lesson', SCOTCH_SCRIPT, 'w', BOOK).onPlayerMove(SCOTCH, 'f1c4', 9);
+    expect(r?.kind).toBe('mistake');
+  });
+
+  it('says it when the coach plays a gambit (Lesson), once; Sparring stays silent', async () => {
+    const lastMove = { san: 'Bc5', to: 'c5' as const };
+    const r = await coach('lesson', {}, 'w', BOOK).onCoachMove(EVANS, 'b2b4', 8, lastMove);
+    expect(r?.text).toBe("I'm playing the Evans Gambit, a known opening: I offer a pawn.");
+    expect(await coach('sparring', {}, 'w', BOOK).onCoachMove(EVANS, 'b2b4', 8, lastMove)).toBeUndefined();
+    const c = coach('lesson', {}, 'w', BOOK);
+    expect((await c.onCoachMove(EVANS, 'b2b4', 8, lastMove))?.kind).toBe('narration');
+    expect((await c.onCoachMove(EVANS, 'b2b4', 20, lastMove))?.text ?? '').not.toContain('Evans Gambit');
   });
 });

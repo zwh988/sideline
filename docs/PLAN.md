@@ -110,7 +110,16 @@ For Review. Paste or upload a PGN; fetch a player's public games from the Chess.
 Spec: Modes, Review. Walk through a game's critical moments, ask what the player was thinking, let them try sidelines, name the concept. Saved moments feed Practice (Phase 3).
 - Done: Review button in History opens any saved game on the board; moment walk with the question first and "What happened?"; sidelines kept with the game; STATE decision 26. Not done: collecting the player's answer (plans task), moments' concept record per player, rewording the live phrasing for past games.
 
-### ⬜ 1.7b Known openings and gambits
+### ⬜ 1.7e Polish Review and the coach in sidelines
+Found in play after 1.7d: "Review is quite bad right now." The first pass shows the machinery but not yet a good lesson. Plan with the user before building; known gaps and ideas:
+- **Level in Review.** A tactic the level does not teach is silent (seen: Rxc8+ Qxc8 Qxd4, a "winning material" line, silent at Levels 1–2). Choose how Review decides what to look at: re-analyse a saved game at a level the player picks ("Look again at level N"), or look at every pattern in Review and let the level only change the wording. Weigh against rule 3.
+- **Moments in both directions:** the opponent's tactics and blunders (what the player could have punished, what the opponent found) are not looked at at all; only the player's own moves are.
+- **Wording for the past:** the saved live phrasing ("Careful: after Bc4…") is odd for a past game; plain recaptures can be flagged as tactics; show the better line, not only the first move; name the concept when a detector fires.
+- **Flow:** the question "what were you thinking?" collects nothing; the bubble sits below the board on phones (1.8); Moments could be a list with kind and cost to jump to; an overview of the game's turning points (evaluation swings).
+- **Coach comments in a sideline, and showing what is good there:** today the sideline judges only the player's move and the coach's reply, and words the first move of a line only. Wanted: the coach says what is good or bad about each move of the line as it goes (not only the first), can show the best continuation on request ("show me what's good here"), and names later concepts (skewer, pin, trapped piece cashed in several moves on, deflection, attraction). Needs line-level wording in `explain.ts` / `sideline.ts` (see STATE: "the coach words only the first move of a line").
+- **Done when:** the user plays through a reviewed game and says it teaches something; tests for the level choice and the wording.
+
+### ✅ 1.7b Known openings and gambits
 Found in play (task 1.4 follow-ups): the Queen's Gambit 2.c4 gets "Bold! c4 offers a pawn…" praise every game, and a known gambit can look like a hung pawn. Standard theory should be named, not praised or warned about.
 - Data: the Lichess opening names (`lichess-org/chess-openings`, CC0; ~3,000+ named lines with ECO codes and positions). A small script builds a lookup by position (EPD, so transpositions match) into a file committed to the repo; nothing fetched at runtime (rule 4). Check its size; at most a few hundred KB.
 - Recognition after every move, **by either side**: the named opening of the current position, and whether this move entered a *gambit* (its name contains "Gambit" and the previous position's opening isn't already that gambit).
@@ -120,6 +129,7 @@ Found in play (task 1.4 follow-ups): the Queen's Gambit 2.c4 gets "Bold! c4 offe
   - while the position is in the book, no sacrifice praise and no hung-material warning (below the level's mistake size). Real mistakes within the level are still flagged.
   - point ahead: "We'll look at this one in openings training." until Phase 6 exists, then link to it.
 - Store the openings met per game on the device (with task 1.7's persistence), as input for Phase 6 (start the repertoire from openings the player actually meets).
+- Done: `build-openings.mjs`, `openings.ts`, coach wiring, `SavedGame.opening`; STATE decision 27. Not done: the opening named in the status line during play, a browser check of a full Queen's Gambit game from both sides, the training link.
 - **Done when:** unit tests cover lookup by position (including a transposition), gambit entry by each side, and the suppressed praise/warning; a browser check plays the Queen's Gambit and the Evans Gambit from both sides.
 
 ### ⬜ 1.8 MVP hardening and phone pass

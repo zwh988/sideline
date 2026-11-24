@@ -7,6 +7,7 @@ import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key } from '@lichess-org/chessground/types';
 import type { Square } from 'chess.js';
 import { Analyst } from '../coach/analyst';
+import { loadOpeningBook, openingBookIfLoaded, type OpeningBook } from '../coach/openings';
 import { Coach, joinRemarks, type Remark, type Shape } from '../coach/coach';
 import { Branch } from './branches';
 import { gameToPgn } from './pgn';
@@ -64,6 +65,7 @@ export class App {
   private board!: Api;
   private opponent: Promise<Opponent>;
   private analyst: Promise<Analyst>;
+  private book: Promise<OpeningBook>;
   private coach!: Promise<Coach>;
   /** The mode of the game in progress (a new setting applies from the next game). */
   private mode: Mode = MODES[0];
@@ -107,6 +109,7 @@ export class App {
   ) {
     this.render();
     this.analyst = Analyst.create();
+    this.book = loadOpeningBook();
     this.opponent = createOpponent(levelInfo(this.settings.level).maiaElo, (loaded, total) => {
       if (this.game.moves.length === 0 && total) this.status(`Getting ready… ${Math.round((loaded / total) * 100)}%`);
     });
@@ -348,8 +351,8 @@ export class App {
       hintsUsed: 0,
     };
     const hintsUsed = this.record.hintsUsed;
-    this.coach = this.analyst.then((a) => {
-      const c = new Coach(a, level, color === 'white' ? 'w' : 'b', mode);
+    this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => {
+      const c = new Coach(a, level, color === 'white' ? 'w' : 'b', mode, book);
       c.hintsUsed = hintsUsed;
       return c;
     });
@@ -405,6 +408,7 @@ export class App {
       }
       return;
     }
+    r.opening = openingBookIfLoaded()?.openingOf(r.startFen, r.moves) ?? r.opening;
     r.remarks = this.log.all.map((e) => ({ ply: e.ply, remark: e.remark }));
     const res = this.game.result;
     r.result = res.over ? { winner: res.winner, reason: res.reason } : undefined;
@@ -785,7 +789,7 @@ export class App {
     this.record = saved;
     this.reviewing = { moments, index: -1, opponent, say: { ply: 0, text: reviewIntro(moments.length, opponent), offerAnswer: false } };
     const level = levelInfo(saved.level);
-    this.coach = this.analyst.then((a) => new Coach(a, level, saved.playerColor === 'white' ? 'w' : 'b', REVIEW));
+    this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => new Coach(a, level, saved.playerColor === 'white' ? 'w' : 'b', REVIEW, book));
     this.nav.reset(game.moves.length);
     this.nav.start();
     this.log.clear();
@@ -878,7 +882,7 @@ export class App {
       const text = document.createElement('p');
       const date = new Date(g.startedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
       const moments = g.moments.length ? ` · ${g.moments.length} moment${g.moments.length === 1 ? '' : 's'}` : '';
-      const moveCount = `${Math.ceil(g.moves.length / 2)} move${g.moves.length > 2 ? 's' : ''}`;
+      const moveCount = `${Math.ceil(g.moves.length / 2)} move${g.moves.length > 2 ? 's' : ''}${g.opening ? ` (${g.opening.name})` : ''}`;
       const side = g.playerColor === 'white' ? 'White' : 'Black';
       if (g.imported) {
         const im = g.imported;

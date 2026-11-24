@@ -11,6 +11,7 @@ import type { Level } from '../app/levels';
 import { REVIEW } from '../app/modes';
 import type { SavedMoment } from '../app/store';
 import type { Analyst } from './analyst';
+import type { OpeningBook } from './openings';
 import { Coach, type Remark } from './coach';
 
 export interface ReviewedGame {
@@ -22,6 +23,8 @@ export interface ReviewedGame {
 export interface ReviewOptions {
   level: Level;
   signal?: AbortSignal;
+  /** Known openings: a move inside theory is not flagged as hung material. */
+  book?: OpeningBook;
   /** Called after each move of the game has been handled (`done` of `total` plies). */
   onProgress?: (done: number, total: number) => void;
 }
@@ -37,7 +40,7 @@ export async function reviewGame(
 ): Promise<ReviewedGame | undefined> {
   await analyst.newGame();
   const me = game.playerColor === 'white' ? 'w' : 'b';
-  const coach = new Coach(analyst, opts.level, me, REVIEW);
+  const coach = new Coach(analyst, opts.level, me, REVIEW, opts.book);
   const chess = new Chess(game.startFen);
   const out: ReviewedGame = { remarks: [], moments: [] };
   for (let i = 0; i < game.moves.length; i++) {

@@ -53,6 +53,8 @@ export interface SavedGame {
   sidelines: SavedSideline[];
   moments: SavedMoment[];
   hintsUsed: number;
+  /** The deepest named opening the game reached (both sides' moves), for the openings training later. */
+  opening?: { eco: string; name: string; ply: number };
   /** Set on games imported for review (not played here); the coach's words are then about the past. */
   imported?: ImportedInfo;
   result?: { winner: 'white' | 'black' | null; reason: string };
