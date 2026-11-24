@@ -71,7 +71,9 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
       .slice(0, 3)
       .filter((s) => s.concept && s.text)
       .slice(0, 2);
-    return { texts: named.map((s) => s.text), first: named[0]?.concept as string | undefined };
+    // Each sentence says which move of the line it is about: a later move is not on the board yet.
+    const lower = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+    return { texts: named.map((s) => `${s.san}: ${lower(s.text)}`), first: named[0]?.concept as string | undefined };
   };
   const habit = (concept: string | undefined) => {
     const h = concept ? HABIT_OF[concept] : undefined;

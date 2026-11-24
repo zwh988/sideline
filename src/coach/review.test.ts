@@ -55,7 +55,7 @@ describe('reviewGame: every pattern, both sides, at any level', () => {
     expect(m.lossCp).toBeGreaterThan(500);
     expect(m.text).toBe(
       'You played 5.Bc4. After that, your opponent can play Nxd4, winning a queen for a knight. The line runs Nxd4 Nxd4. ' +
-        'That takes the only defender of your bishop on c4: it is now undefended. The engine preferred Qa4. ' +
+        'Nxd4: that takes the only defender of your bishop on c4: it is now undefended. The engine preferred Qa4. ' +
         'Habit: when a piece is guarded, ask what happens if you take its guard.',
     );
     // Looking back: no takeback offer, no "Careful: after Bc4, I can play…".
@@ -74,14 +74,14 @@ describe('reviewGame: every pattern, both sides, at any level', () => {
     const r = await reviewGame(new FakeAnalyst(FORK_SCRIPT) as unknown as Analyst, asGame(FORK_PGN, 'white'), { level: level2 });
     expect(r?.moments).toHaveLength(1);
     expect(r!.moments[0]).toMatchObject({ kind: 'found-tactic', fen: FORK_FEN, played: 'd5c7', ply: 1, concept: 'fork', line: ['d5c7', 'e8d7', 'c7a8'] });
-    expect(r!.moments[0].text).toContain("That's a fork: your knight on c7 attacks their king on e8 and their rook on a8 at once.");
+    expect(r!.moments[0].text).toContain("Nxc7+: that's a fork: your knight on c7 attacks their king on e8 and their rook on a8 at once.");
   });
 
   it('as Black the opponent found the fork: their tactic', async () => {
     const r = await reviewGame(new FakeAnalyst(FORK_SCRIPT) as unknown as Analyst, asGame(FORK_PGN, 'black'), { level: level2 });
     expect(r?.moments).toHaveLength(1);
     expect(r!.moments[0]).toMatchObject({ kind: 'their-tactic', played: 'd5c7', concept: 'fork' });
-    expect(r!.moments[0].text).toMatch(/^Your opponent played 1\.Nxc7\+\. It wins a rook and a pawn\. That's a fork: their knight on c7 attacks your king on e8 and your rook on a8 at once\./);
+    expect(r!.moments[0].text).toMatch(/^Your opponent played 1\.Nxc7\+\. It wins a rook and a pawn\. Nxc7\+: that's a fork: their knight on c7 attacks your king on e8 and your rook on a8 at once\./);
   });
 
   it('finds the tactic the player missed', async () => {
