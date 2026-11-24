@@ -5,7 +5,7 @@
 //   Sparring: serious moments only, hints only on request, no takebacks,
 //             no plans revealed.
 
-export type ModeId = 'lesson' | 'sparring';
+export type ModeId = 'lesson' | 'sparring' | 'review';
 
 export interface Mode {
   id: ModeId;
@@ -37,4 +37,11 @@ export const MODES: Mode[] = [
   { id: 'sparring', name: 'Sparring', prompts: false, smallTalk: false, minorMistakes: false, takebacks: false, revealsPlans: false, sidelines: false },
 ];
 
-export const modeInfo = (id: string | undefined): Mode => MODES.find((m) => m.id === id) ?? MODES[0];
+/**
+ * Review: the coach looks back at a game that was already played (an imported one).
+ * Same moment-finding as Lesson, minus everything that needs a live game: no
+ * prompts or small talk, no takebacks. It is not a choice in the Mode select.
+ */
+export const REVIEW: Mode = { id: 'review', name: 'Review', prompts: false, smallTalk: false, minorMistakes: true, takebacks: false, revealsPlans: true, sidelines: true };
+
+export const modeInfo = (id: string | undefined): Mode => (id === 'review' ? REVIEW : (MODES.find((m) => m.id === id) ?? MODES[0]));

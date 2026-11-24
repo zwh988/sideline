@@ -56,15 +56,30 @@ function variation(s: SavedSideline): string {
 
 export function gameToPgn(g: SavedGame): string {
   const coach = `Coach (level ${g.level})`;
-  const headers = [
-    tag('Event', 'Sideline coached game'),
-    tag('Site', 'Sideline'),
-    tag('Date', pgnDate(g.startedAt)),
-    tag('Round', '-'),
-    tag('White', g.playerColor === 'white' ? 'You' : coach),
-    tag('Black', g.playerColor === 'black' ? 'You' : coach),
-    tag('Result', resultTag(g)),
-  ];
+  const im = g.imported;
+  // An imported game keeps the names and details it came with.
+  const headers = im
+    ? [
+        tag('Event', im.event ?? '?'),
+        tag('Site', im.site ?? '?'),
+        tag('Date', im.date ?? pgnDate(g.startedAt)),
+        tag('Round', '-'),
+        tag('White', im.white),
+        tag('Black', im.black),
+        tag('Result', resultTag(g)),
+        ...(im.whiteElo ? [tag('WhiteElo', im.whiteElo)] : []),
+        ...(im.blackElo ? [tag('BlackElo', im.blackElo)] : []),
+        ...(im.timeControl ? [tag('TimeControl', im.timeControl)] : []),
+      ]
+    : [
+        tag('Event', 'Sideline coached game'),
+        tag('Site', 'Sideline'),
+        tag('Date', pgnDate(g.startedAt)),
+        tag('Round', '-'),
+        tag('White', g.playerColor === 'white' ? 'You' : coach),
+        tag('Black', g.playerColor === 'black' ? 'You' : coach),
+        tag('Result', resultTag(g)),
+      ];
   if (g.startFen !== START_FEN) headers.push(tag('SetUp', '1'), tag('FEN', g.startFen));
 
   const sans = sansFrom(g.startFen, g.moves);

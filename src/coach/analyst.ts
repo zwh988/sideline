@@ -57,6 +57,15 @@ export class Analyst {
     });
   }
 
+  /**
+   * Forgets what the engine learned from earlier searches (hash table, move
+   * ordering): a game reviewed after another one gets the same answers as when
+   * it is reviewed alone.
+   */
+  newGame(): Promise<void> {
+    return this.run(() => this.sf.newGame());
+  }
+
   /** Cuts the best line of an evaluated position to its taught part. */
   taughtLine(ev: PositionEval, limits: LineLimits): CutResult {
     const pv = ev.lines[0]?.pv ?? [];

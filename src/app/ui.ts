@@ -10,6 +10,7 @@ import { Analyst } from '../coach/analyst';
 import { Coach, joinRemarks, type Remark, type Shape } from '../coach/coach';
 import { Branch } from './branches';
 import { gameToPgn } from './pgn';
+import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame } from './store';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
@@ -85,6 +86,7 @@ export class App {
   /** The record of the game in progress, saved as it changes. */
   private record?: SavedGame;
   private el: Record<string, HTMLElement> = {};
+  private importDialog!: ImportDialog;
   /** The game ply a sideline started from (a sideline can start from an earlier viewed position). */
   private sidelinePly = 0;
 
@@ -174,6 +176,7 @@ export class App {
           <p id="history-note" class="history-note" aria-live="polite">Saved on this device only.</p>
           <ol id="history-list" class="history-list"></ol>
           <div class="history-foot">
+            <button id="import-open">Import games</button>
             <button id="backup">Back up all data</button>
             <button id="restore">Restore from file</button>
             <input id="restore-file" type="file" accept="application/json,.json" hidden>
@@ -202,7 +205,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -222,12 +225,23 @@ export class App {
     this.el['history-open'].addEventListener('click', () => this.openHistory());
     this.el['history-close'].addEventListener('click', () => (this.el.history as HTMLDialogElement).close());
     this.el['history-list'].addEventListener('click', (e) => this.onHistoryClick(e));
+    this.el['import-open'].addEventListener('click', () => {
+      (this.el.history as HTMLDialogElement).close();
+      this.importDialog.open();
+    });
     this.el.backup.addEventListener('click', () => this.backup());
     this.el.restore.addEventListener('click', () => this.el['restore-file'].click());
     this.el['restore-file'].addEventListener('change', () => void this.restore());
     this.el.sideline.addEventListener('click', () => this.startSideline());
     this.el['sideline-undo'].addEventListener('click', () => this.sidelineUndo());
     this.el['sideline-exit'].addEventListener('click', () => this.exitSideline());
+
+    this.importDialog = new ImportDialog(this.root, {
+      store: this.store,
+      level: () => this.settings.level,
+      createAnalyst: () => Analyst.create(),
+      onChange: () => this.renderHistory(),
+    });
 
     this.el['nav-start'].addEventListener('click', () => this.navigate(() => this.nav.start()));
     this.el['nav-back'].addEventListener('click', () => this.navigate(() => this.nav.back()));
@@ -727,10 +741,21 @@ export class App {
     for (const g of games) {
       const li = document.createElement('li');
       li.dataset.id = g.id;
-      const result = !g.result ? (g.id === this.record?.id ? 'in progress' : 'unfinished') : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'coach won') : 'draw';
       const text = document.createElement('p');
       const date = new Date(g.startedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-      text.textContent = `${date} · ${g.playerColor === 'white' ? 'White' : 'Black'} · level ${g.level} · ${modeInfo(g.mode).name} · ${Math.ceil(g.moves.length / 2)} move${g.moves.length > 2 ? 's' : ''} · ${result}${g.moments.length ? ` · ${g.moments.length} moment${g.moments.length === 1 ? '' : 's'}` : ''}`;
+      const moments = g.moments.length ? ` · ${g.moments.length} moment${g.moments.length === 1 ? '' : 's'}` : '';
+      const moveCount = `${Math.ceil(g.moves.length / 2)} move${g.moves.length > 2 ? 's' : ''}`;
+      const side = g.playerColor === 'white' ? 'White' : 'Black';
+      if (g.imported) {
+        const im = g.imported;
+        const opponent = g.playerColor === 'white' ? im.black : im.white;
+        const result = !g.result ? 'unfinished' : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'you lost') : 'draw';
+        const from = { pgn: 'pasted', 'chess.com': 'Chess.com', lichess: 'Lichess' }[im.source];
+        text.textContent = `${date} · imported (${from}) · ${side} vs ${opponent} · ${moveCount} · ${result}${moments}`;
+      } else {
+        const result = !g.result ? (g.id === this.record?.id ? 'in progress' : 'unfinished') : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'coach won') : 'draw';
+        text.textContent = `${date} · ${side} · level ${g.level} · ${modeInfo(g.mode).name} · ${moveCount} · ${result}${moments}`;
+      }
       const buttons = document.createElement('div');
       buttons.className = 'history-buttons';
       for (const [action, label] of [['copy', 'Copy PGN'], ['download', 'Download PGN'], ['delete', 'Delete']] as const) {

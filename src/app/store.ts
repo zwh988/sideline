@@ -22,6 +22,21 @@ export interface SavedSideline {
   moves: { uci: string; san: string; mine: boolean }[];
 }
 
+/** Where an imported game came from, and the PGN details to write back out. */
+export interface ImportedInfo {
+  source: 'pgn' | 'chess.com' | 'lichess';
+  /** Names as in the game (the player's own side is in `playerColor`). */
+  white: string;
+  black: string;
+  /** PGN date, "2024.01.31" (may contain ?). */
+  date?: string;
+  event?: string;
+  site?: string;
+  whiteElo?: string;
+  blackElo?: string;
+  timeControl?: string;
+}
+
 export interface SavedGame {
   version: 1;
   id: string;
@@ -38,6 +53,8 @@ export interface SavedGame {
   sidelines: SavedSideline[];
   moments: SavedMoment[];
   hintsUsed: number;
+  /** Set on games imported for review (not played here); the coach's words are then about the past. */
+  imported?: ImportedInfo;
   result?: { winner: 'white' | 'black' | null; reason: string };
 }
 

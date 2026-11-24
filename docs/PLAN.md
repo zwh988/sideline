@@ -102,8 +102,9 @@ Spec: "Try a sideline".
 - **Moments record:** every flagged moment (mistake, missed tactic, good find) saved with its position, the concept named (or none) and the outcome. This is the input for Review and Practice.
 - Done: `store.ts`, `pgn.ts`, `Moment` in `coach.ts`, resume after reload, History dialog (Copy / Download PGN, Delete), backup file (Back up / Restore). See STATE decisions 22 and 23. Not done: a list of the *moments* themselves and the concept record per player (that is Review, 1.7d); opening a past game on the board (also Review).
 
-### ⬜ 1.7c Game import
+### ✅ 1.7c Game import
 For Review. Paste or upload a PGN; fetch a player's public games from the Chess.com and Lichess APIs (player-initiated; rule 4 is relaxed for this one request, see STATE decision 17; check cross-origin support first). Imported games go through the same moment-finding as live games.
+- Done: `pgnimport.ts`, `sources.ts`, `review.ts`, `import-dialog.ts` (History → Import games). Cross-origin checked: both APIs allow any origin. How the analysis runs (second engine, per-move cancel, `ucinewgame`): STATE decision 25. Not done: opening an imported game on the board (Review, 1.7d).
 
 ### ⬜ 1.7d Review
 Spec: Modes, Review. Walk through a game's critical moments, ask what the player was thinking, let them try sidelines, name the concept. Saved moments feed Practice (Phase 3).
