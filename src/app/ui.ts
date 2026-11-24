@@ -659,7 +659,7 @@ export class App {
     const remark = joinRemarks(narration, await coach.onPlayerTurn(this.game.fen, ply));
     if (!this.stale(id, ply) && remark) {
       this.say(remark);
-      if (remark.offerSideline && this.mode.prompts && this.mode.sidelines) this.offerSideline();
+      if (remark.offerSideline && this.mode.prompts && this.mode.sidelines) this.offerSideline(remark.line);
     }
   }
 
@@ -699,7 +699,12 @@ export class App {
         // "Show me": the coach plays its answer in a sideline; afterwards the choice is offered again.
         while (choice === 'show') {
           if (moment) moment.showedMe = true;
-          await this.openSideline(this.game.fen, 'Here is what I would play. Nothing here changes your game; tap Back to game when you are ready.');
+          // From the position before the move, with its universes: what happens now, and what the engine wanted.
+          if (moment?.answer?.length) {
+            await this.openSideline(moment.fen, 'Here is what would happen, and what you could play instead. Nothing here changes your game; tap Back to game when you are ready.', this.game.moves.length - 1, [moment.played, ...moment.answer], momentUniverses(moment));
+          } else {
+            await this.openSideline(this.game.fen, 'Here is what I would play. Nothing here changes your game; tap Back to game when you are ready.');
+          }
           if (this.stale(id, ply)) return;
           choice = await this.askTakeback();
         }
@@ -1115,21 +1120,21 @@ export class App {
   // paused and untouched. Lesson only.
 
   /** A button in the bubble that opens a sideline (the coach suggests it, e.g. at a tactic). */
-  private offerSideline(): void {
+  private offerSideline(line?: string[]): void {
     const box = this.el.choices;
     box.innerHTML = `<button data-choice="try" class="primary">Try it out</button>`;
     box.hidden = false;
     box.onclick = (e) => {
       if (!(e.target as HTMLElement).closest('button')) return;
       box.hidden = true;
-      this.startSideline();
+      this.startSideline(line?.length ? [{ label: 'The tactic', ucis: line }] : []);
     };
   }
 
   /** From the button: the position shown (the live one, or an earlier one being viewed). */
-  private startSideline(): void {
+  private startSideline(universes: Universe[] = []): void {
     if (!this.mode.sidelines || this.sideline || this.thinking) return;
-    void this.openSideline(this.nav.viewing ? this.game.positionAt(this.nav.ply).fen : this.game.fen, undefined, this.nav.viewing ? this.nav.ply : this.game.moves.length);
+    void this.openSideline(this.nav.viewing ? this.game.positionAt(this.nav.ply).fen : this.game.fen, undefined, this.nav.viewing ? this.nav.ply : this.game.moves.length, undefined, universes);
   }
 
   /** Opens a sideline from `fen`. Resolves when the player goes back to the game. */

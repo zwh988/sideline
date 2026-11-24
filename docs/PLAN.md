@@ -119,8 +119,20 @@ Found in play after 1.7d: "Review is quite bad right now." Planned with the user
 ### ✅ 1.7f Universes in sidelines (Review first)
 User's direction: a sideline should show the different universes play out (what could have been; if the opponent doesn't play the strongest, how to punish; what tactic was missed in that universe). Done: STATE decision 31 (tree, 3-fork cap, universe chips, "If they play X" with punishment) inside Review's sidelines.
 
-### ⬜ 1.7g Universes in live games
-Same tree in the live game: a mistake's "Show me" and a tactic's "Try it out" open the sideline with their universes ("what happened" is the line the coach would play, "what you wanted"); deviation chips at every opponent node of the path (not only the latest); universes saved with the game; rename the UI around universes where the word "sideline" no longer fits. Also: chips for the player's tempting alternatives (a plausible move the engine refutes).
+### ✅ 1.7g Universes in live games
+Done: live mistakes, missed tactics and found tactics save `line` (what the engine wanted) and, for a mistake, `answer` (the coach's winning line); "Show me" now opens the sideline from the position before the mistake with "What happened" played out and the chips "What happened" / "What the engine wanted" / "If they play X"; a tactic prompt's "Try it out" offers "The tactic" as a chip (`Remark.line`). STATE decision 31. Not done: deviation chips at every opponent node of the path (only the latest), the player's tempting alternatives, universes saved with the game, renaming the UI around universes.
+
+### ⬜ 1.9 UI/UX pass on sidelines and Review (both live and Review)
+Found in play (user): navigating inside one sideline is already really hard; it is hard to follow the coach when he talks while the pieces move at the same time. Apply one design to both live games and Review. Ideas to weigh with the user before building:
+- **Step, don't autoplay:** a line plays one move per tap (› ‹ and a move list for the sideline, like the game's), the coach's note for that move shows with it; autoplay only on request. Words and board always agree (the note belongs to the move on the board).
+- **A sideline move list** with the universe's name, the current move highlighted, tap to jump; Undo and Back to game stay; the fork points marked.
+- **One place for the chips** (universes) and one for the notes: the bubble shows only the note for the shown move, with the earlier ones one tap away, instead of the last six.
+- **Fewer controls on a phone** (Undo / Show what's good / Back to game / chips / review bar / action row): decide what is always visible and what folds; fit one screen at 375×650.
+- **Review:** the same stepper for a moment's line; the strip and Moment ‹ › stay; the text for a moment is shorter (what happened, why, what instead) with details on tap.
+- Check on a real phone.
+
+### ⬜ 1.10 Ask the coach (an LLM layer over the engine's lines)
+Found in play (user): wanting to ask more questions about a line ("why not Bxc6?", "what if they take?"). The model never judges: it reads the structured facts the app already has (the engine's lines for the shown position, `explainLine` steps, concept notes, evaluations) and answers questions about them, or turns a question into an engine query (a candidate move to check) whose result the templates word. Rule 1 holds: anything it says must be traceable to those facts; when it can't, it says so. Needs: a fact bundle per position, a question-to-query step (JSON, the feasibility test showed small models are good at that), an answer-from-facts step, and a refusal path. Depends on the WebLLM model download (rule 4) and on 1.9's single place for the bubble.
 
 ### ✅ 1.7b Known openings and gambits
 Found in play (task 1.4 follow-ups): the Queen's Gambit 2.c4 gets "Bold! c4 offers a pawn…" praise every game, and a known gambit can look like a hung pawn. Standard theory should be named, not praised or warned about.

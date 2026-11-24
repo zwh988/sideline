@@ -89,6 +89,8 @@ export interface Remark {
   offerTakeback?: boolean;
   /** Lesson: invite the player to try their idea in a sideline. */
   offerSideline?: boolean;
+  /** The engine's line from this position (UCI), offered as a universe in the sideline (a tactic prompt). */
+  line?: string[];
   shapes?: Shape[];
   /** Set on a mistake, a missed tactic or a found tactic: saved with the game. */
   moment?: Moment;
@@ -195,6 +197,7 @@ export class Coach {
         text: "There's something strong here. Take your time.",
         mood: 'pleased',
         offerSideline: true,
+        line: t.tactic.moves.map((m) => m.uci),
       });
     }
     if (t.threat) {
@@ -223,6 +226,8 @@ export class Coach {
     // The engine's own top move is never a mistake: evaluations of sharp positions
     // jump between searches (Bxh7+ once scored a pawn "worse" than itself).
     const topMove = t.ev.lines[0]?.pv[0] === uci;
+    // What the player could have played instead, for the universes ("what the engine wanted").
+    const betterLine = t.tactic ? t.tactic.moves.map((m) => m.uci) : (t.ev.lines[0]?.pv ?? []).slice(0, 3);
 
     // Found the tactic (praised once, at its first move).
     if (t.tactic && uci === t.tactic.moves[0].uci) {
@@ -232,7 +237,7 @@ export class Coach {
         kind: 'praise',
         text: praise(t.tactic),
         mood: 'pleased',
-        moment: { kind: 'found-tactic', fen: fenBefore, played: uci, concept: lineConceptOf(fenBefore, t.tactic.moves.map((m) => m.uci), undefined, t.tactic.motif) },
+        moment: { kind: 'found-tactic', fen: fenBefore, played: uci, line: t.tactic.moves.map((m) => m.uci), concept: lineConceptOf(fenBefore, t.tactic.moves.map((m) => m.uci), undefined, t.tactic.motif) },
       });
     }
 
@@ -240,7 +245,7 @@ export class Coach {
       // The move lets the coach win something the player has learned to see.
       const cut = this.analyst.taughtLine(after, this.limits());
       const refutation = this.teachable(cut.kind === 'line' ? cut.line : undefined);
-      if (refutation) return this.mistakeRemark(ply, move.san, refutation, { fenBefore, uci, loss });
+      if (refutation) return this.mistakeRemark(ply, move.san, refutation, { fenBefore, uci, loss, better: betterLine });
       // The player missed their own tactic.
       if (t.tactic) {
         return this.remark(ply, {
@@ -255,6 +260,7 @@ export class Coach {
             fen: fenBefore,
             played: uci,
             better: t.tactic.moves[0].uci,
+            line: t.tactic.moves.map((m) => m.uci),
             concept: lineConceptOf(fenBefore, t.tactic.moves.map((m) => m.uci), undefined, t.tactic.motif),
             lossCp: loss,
           },
@@ -265,7 +271,7 @@ export class Coach {
     // Smaller than the level's mistake size, but plainly hung: a pawn or piece
     // the coach can just take, and the evaluation confirms it stays lost.
     const hung = this.mode.minorMistakes && !topMove && !inBook ? this.hungMaterial(after, loss) : undefined;
-    if (hung) return this.mistakeRemark(ply, move.san, hung, { fenBefore, uci, loss });
+    if (hung) return this.mistakeRemark(ply, move.san, hung, { fenBefore, uci, loss, better: betterLine });
     if (loss >= this.level.mistakeCp && !topMove) return undefined; // beyond the player's concepts: stay quiet
 
     // Gave up material on purpose (or by luck), and the engine agrees it's fine.
@@ -388,7 +394,7 @@ export class Coach {
     ply: number,
     san: string,
     refutation: TaughtLine,
-    ctx: { fenBefore: string; uci: string; loss: number },
+    ctx: { fenBefore: string; uci: string; loss: number; better: string[] },
   ): Promise<Remark> {
     // The concept is the coach's answer: the position after the player's move.
     const chess = new Chess(ctx.fenBefore);
@@ -398,6 +404,8 @@ export class Coach {
       fen: ctx.fenBefore,
       played: ctx.uci,
       better: refutation.moves[0].uci,
+      answer: refutation.moves.map((m) => m.uci),
+      line: ctx.better.length ? ctx.better : undefined,
       concept: lineConceptOf(chess.fen(), refutation.moves.map((m) => m.uci), { fen: ctx.fenBefore, uci: ctx.uci }, refutation.motif),
       lossCp: ctx.loss,
     };

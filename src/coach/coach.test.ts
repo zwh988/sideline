@@ -62,6 +62,12 @@ describe('Coach modes: prompts on the player turn', () => {
     expect(await coach('sparring', FORK_SCRIPT).onPlayerTurn(FORK, 10)).toBeUndefined();
   });
 
+  it('a tactic prompt carries the engine line for the sideline', async () => {
+    const r = await coach('lesson', FORK_SCRIPT).onPlayerTurn(FORK, 10);
+    expect(r?.kind).toBe('tactic');
+    expect(r?.line).toEqual(['d5c7', 'e8d7', 'c7a8']);
+  });
+
   it('Lesson asks about a threat; Sparring stays quiet', async () => {
     expect((await coach('lesson', THREAT_SCRIPT).onPlayerTurn(THREAT, 10))?.text).toBe(
       'Before you move: what does my last move want?',
@@ -98,6 +104,8 @@ describe('Coach modes: the player move', () => {
     // The moment saved with the game: where the player decided, what they played, what the coach found.
     expect(r?.moment).toMatchObject({ kind: 'mistake', fen: SCOTCH, played: 'f1c4', better: 'c6d4' });
     expect(typeof r?.moment?.lossCp).toBe('number');
+    // The universes: what happens after it (the coach's line) and what the engine wanted.
+    expect(r?.moment).toMatchObject({ answer: ['c6d4', 'f3d4'], line: ['d4a4'] });
   });
 
   it('Sparring flags the mistake without the refutation or a takeback', async () => {
