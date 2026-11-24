@@ -13,6 +13,7 @@
 // small talk, takeback offers and thinking aloud, and flags a mistake without
 // saying how the coach would punish it.
 import { Chess, type Color, type Square } from 'chess.js';
+import { scoreToCp } from '../engine/stockfish';
 import type { Level } from '../app/levels';
 import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
@@ -490,21 +491,56 @@ export class Coach {
   }
 
   /**
+   * The opponent's other real choices at `fen` (the engine's next-best moves, within 3 pawns of its best),
+   * so the player can see what happens "if they don't". `played` is the move already shown.
+   */
+  async deviations(fen: string, played: string, count = 2): Promise<{ uci: string; san: string; lossCp: number }[]> {
+    const ev = await this.evaluator.evaluate(fen, 3);
+    const best = ev.lines[0] ? scoreToCp(ev.lines[0].score) : 0;
+    const out: { uci: string; san: string; lossCp: number }[] = [];
+    for (const l of ev.lines) {
+      const uci = l.pv[0];
+      if (!uci || uci === played) continue;
+      const lossCp = best - scoreToCp(l.score);
+      if (lossCp > 300) continue;
+      out.push({ uci, san: playAndDescribe(new Chess(fen), uci).san, lossCp });
+      if (out.length === count) break;
+    }
+    return out;
+  }
+
+  /**
+   * What the player can do after the opponent's reply (`fen`, player to move): the engine's line cut to
+   * its taught part when it wins something (`wins`), else its first moves and the engine's score.
+   */
+  async punishment(fen: string): Promise<{ ucis: string[]; intro: string; notes: string[]; wins: boolean } | undefined> {
+    const ev = await this.evaluator.evaluate(fen, 1);
+    const pv = ev.lines[0]?.pv ?? [];
+    if (!pv.length) return undefined;
+    const cut = this.analyst.taughtLine(ev, { maxPlies: 8, minGain: 1 });
+    const wins = cut.kind === 'line';
+    const ucis = cut.kind === 'line' ? cut.line.moves.map((m) => m.uci) : pv.slice(0, 3);
+    return { ...this.lineNotes(fen, ucis, ev.bestCp), wins };
+  }
+
+  /**
    * The words for a given line from `fen` (a moment's better line in Review, or the engine's):
    * what it wins, one note per move. `cp` (the engine's score for the side to move, when known)
    * is stated only for a line that wins no material.
    */
-  lineNotes(fen: string, ucis: string[], cp?: number): { ucis: string[]; intro: string; notes: string[] } {
+  lineNotes(fen: string, ucis: string[], cp?: number, lead?: string): { ucis: string[]; intro: string; notes: string[] } {
     const steps = explainLine(fen, ucis, { player: this.me });
     const sans = steps.map((x) => x.san).join(' ');
     const side = new Chess(fen).turn();
-    const lead = side === this.me ? 'The engine likes' : 'The engine would play';
+    lead ??= side === this.me ? 'The engine likes' : 'The engine would play';
     const t = taughtFrom(fen, ucis);
     const result = t?.mate
       ? ' It ends in checkmate.'
       : t && t.gain >= 1
         ? ` It wins ${winsPhrase(t)}.`
-        : cp === undefined
+        : t && t.gain <= -1
+          ? ` It costs ${side === this.me ? 'you' : 'them'} ${Math.abs(t.gain)} pawns of material.`
+          : cp === undefined
           ? ''
           : ` The engine rates the position ${evalPhrase(cp, side === this.me ? 'you' : 'me')} after the first move.`;
     const named = steps.some((x) => x.concept);

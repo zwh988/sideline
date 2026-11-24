@@ -110,3 +110,37 @@ export function mergeAnalysis(game: SavedGame, result: ReviewedGame): void {
   game.remarks = [...game.remarks.filter((r) => !r.remark.moment), ...result.remarks].sort((a, b) => a.ply - b.ply);
   game.curve = result.curve;
 }
+
+/** One universe of a moment: a line from the position before the played move. */
+export interface Universe {
+  label: string;
+  ucis: string[];
+}
+
+/**
+ * The universes a moment starts with, from its saved facts: what happened in the game, and what the
+ * engine wanted instead (or, for what the opponent gave away, what they should have played).
+ */
+export function momentUniverses(m: SavedMoment): Universe[] {
+  const out: Universe[] = [];
+  const played = [m.played];
+  switch (m.kind) {
+    case 'mistake':
+      out.push({ label: 'What happened', ucis: [...played, ...(m.answer ?? [])] });
+      if (m.line?.length) out.push({ label: 'What the engine wanted', ucis: m.line });
+      break;
+    case 'missed-tactic':
+      out.push({ label: 'What happened', ucis: played });
+      if (m.line?.length) out.push({ label: 'The tactic', ucis: m.line });
+      break;
+    case 'found-tactic':
+    case 'their-tactic':
+      out.push({ label: 'What happened', ucis: m.line?.length ? m.line : played });
+      break;
+    case 'their-blunder':
+      out.push({ label: 'What happened', ucis: [...played, ...(m.line ?? [])] });
+      if (m.better) out.push({ label: 'What they should have played', ucis: [m.better] });
+      break;
+  }
+  return out;
+}

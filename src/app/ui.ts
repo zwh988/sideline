@@ -13,7 +13,7 @@ import { Branch } from './branches';
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
-import { reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
+import { momentUniverses, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
 import { reviewGame } from '../coach/review';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
@@ -105,6 +105,12 @@ export class App {
     analysing?: { done: number; total: number };
     abort?: AbortController;
   };
+  /** Universes: the lines a sideline starts with (a Review moment's), the forks taken, and the chips shown now. */
+  private rootUniverses: Universe[] = [];
+  private forks = 0;
+  private universeKey = '';
+  /** At most this many forks per sideline, so the screen stays readable. */
+  private static readonly MAX_FORKS = 3;
   /** The game ply a sideline started from (a sideline can start from an earlier viewed position). */
   private sidelinePly = 0;
 
@@ -185,6 +191,7 @@ export class App {
           <div id="sideline-bar" class="sidelinebar" hidden>
             <p class="sideline-title">Sideline · nothing here changes your game</p>
             <p id="sideline-line" class="sideline-line"></p>
+            <div id="sideline-universes" class="universes" aria-label="Other universes from here"></div>
             <div class="sideline-buttons">
               <button id="sideline-undo">Undo</button>
               <button id="sideline-good">Show what's good</button>
@@ -239,7 +246,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-undo', 'sideline-good', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-universes', 'sideline-undo', 'sideline-good', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -943,7 +950,7 @@ export class App {
       box.onclick = (e) => {
         const choice = (e.target as HTMLElement).closest('button')?.dataset.choice;
         if (choice === 'line') void this.showMomentLine(m);
-        else if (choice === 'try') void this.openSideline(m.fen, 'Try your idea from here. Nothing here changes your game.', m.ply - 1);
+        else if (choice === 'try') void this.openSideline(m.fen, 'Try your idea from here. Nothing here changes your game.', m.ply - 1, undefined, momentUniverses(m));
       };
     } else if (!this.sideline) {
       box.hidden = true;
@@ -984,7 +991,7 @@ export class App {
   private async showMomentLine(m: SavedMoment): Promise<void> {
     if (!m.line?.length || this.sideline) return;
     const fresh = m.kind === 'mistake' || m.kind === 'missed-tactic' ? 'Here is the line the engine preferred.' : 'Here is the line.';
-    await this.openSideline(m.fen, `${fresh} Nothing here changes your game.`, m.ply - 1, m.line);
+    await this.openSideline(m.fen, `${fresh} Nothing here changes your game.`, m.ply - 1, m.line, momentUniverses(m));
   }
 
   // --- Saved games: history, PGN and backup ------------------------------
@@ -1126,13 +1133,16 @@ export class App {
   }
 
   /** Opens a sideline from `fen`. Resolves when the player goes back to the game. */
-  private async openSideline(fen: string, intro?: string, ply = this.game.moves.length, autoLine?: string[]): Promise<void> {
+  private async openSideline(fen: string, intro?: string, ply = this.game.moves.length, autoLine?: string[], universes: Universe[] = []): Promise<void> {
     const sl = new Branch(fen, this.game.playerColor);
     if (sl.result.over) {
       this.status('The game is over here, so there is nothing to try.');
       return;
     }
     this.sideline = sl;
+    this.rootUniverses = universes;
+    this.forks = 0;
+    this.universeKey = '';
     this.sidelinePly = ply;
     this.sidelineToken++;
     this.el.choices.hidden = true;
@@ -1346,6 +1356,85 @@ export class App {
     for (const id of ['hint', 'sideline', 'takeback']) (this.el[id] as HTMLButtonElement).disabled = true;
     this.el.portrait.classList.toggle('busy', this.sidelineBusy);
     this.renderBubble();
+    void this.refreshUniverses(sl);
+  }
+
+  // --- Universes: other ways the line could have gone -----------------------
+  // Chips under the sideline: the moment's own universes (what happened, what the engine wanted) and,
+  // after the coach's reply, "if they don't": the opponent's next-best real choices. A chip plays that
+  // universe from its fork point with notes, and shows how the player punishes the deviation (or says
+  // nothing is won). Every line is the engine's; at most MAX_FORKS forks per sideline.
+
+  private async refreshUniverses(sl: Branch): Promise<void> {
+    const box = this.el['sideline-universes'];
+    const last = sl.moves.at(-1);
+    const idle = !this.sidelineBusy && !sl.result.over;
+    const key = `${sl.fen}|${idle}|${this.forks}`;
+    if (key === this.universeKey) return;
+    this.universeKey = key;
+    box.replaceChildren();
+    if (!idle) return;
+    const chips: { label: string; title?: string; run: () => void }[] = this.rootUniverses.map((u) => ({
+      label: u.label,
+      run: () => void this.runUniverse(sl, u),
+    }));
+    if (last && !last.mine && sl.isPlayerTurn) {
+      const idx = sl.moves.length - 1;
+      try {
+        const coach = await this.coach;
+        const devs = await coach.deviations(sl.fenAt(idx), last.uci);
+        if (this.sideline !== sl || this.universeKey !== key) return;
+        for (const d of devs) {
+          chips.push({ label: `If they play ${d.san}`, title: `The engine rates it ${(d.lossCp / 100).toFixed(1)} pawns worse for them than ${last.san}.`, run: () => void this.runDeviation(sl, idx, d.uci, d.san) });
+        }
+      } catch {
+        /* no engine: only the moment's own universes */
+      }
+    }
+    const capped = this.forks >= App.MAX_FORKS;
+    for (const c of chips) {
+      const b = document.createElement('button');
+      b.textContent = c.label;
+      if (c.title) b.title = c.title;
+      b.disabled = capped;
+      b.addEventListener('click', c.run);
+      box.append(b);
+    }
+    if (capped && chips.length) {
+      const p = document.createElement('p');
+      p.className = 'universe-note';
+      p.textContent = 'That is as many forks as fit on one board. Undo, or go back to the game.';
+      box.append(p);
+    }
+  }
+
+  /** A universe from the sideline's start: its line played out, with the coach's notes. */
+  private async runUniverse(sl: Branch, u: Universe): Promise<void> {
+    if (this.sideline !== sl || this.sidelineBusy) return;
+    this.forks++;
+    const token = ++this.sidelineToken;
+    sl.truncate(0);
+    this.universeKey = '';
+    await this.playLine(sl, token, async () => {
+      const r = (await this.coach).lineNotes(sl.rootFen, u.ucis, undefined, `${u.label}:`);
+      return r;
+    });
+  }
+
+  /** "If they play X": back to the fork, their other move, then how the player punishes it. */
+  private async runDeviation(sl: Branch, index: number, uci: string, san: string): Promise<void> {
+    if (this.sideline !== sl || this.sidelineBusy) return;
+    this.forks++;
+    const token = ++this.sidelineToken;
+    sl.truncate(index);
+    sl.play(uci);
+    sl.notes.push(`If they play ${san} instead:`);
+    this.universeKey = '';
+    this.sync();
+    await this.playLine(sl, token, async () => {
+      const p = await (await this.coach).punishment(sl.fen);
+      return p && { ...p, intro: p.wins ? p.intro : `That reply gives you nothing by force. ${p.intro}` };
+    });
   }
 
   /** Shows "Take back" / "Play on" in the bubble and waits for a choice. */

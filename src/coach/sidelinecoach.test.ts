@@ -1,3 +1,4 @@
+import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
 import { levelInfo } from '../app/levels';
 import { modeInfo } from '../app/modes';
@@ -54,5 +55,22 @@ describe('Coach.describeSidelineMove', () => {
     const coach = make({});
     const fen = '4q3/8/8/8/4k3/8/8/R6K w - - 0 1';
     expect(coach.describeSidelineMove({ rootFen: fen, ucis: ['a1e1', 'e4f5', 'e1e8'] })).toContain('The skewer pays off: Rxe8 takes the queen.');
+  });
+});
+
+describe('Coach.deviations (if they do not play the best reply)', () => {
+  class Multi {
+    async evaluate(fen: string): Promise<PositionEval> {
+      const mk = (cp: number, pv: string[]) => ({ multipv: 1, depth: 12, score: { kind: 'cp' as const, value: cp }, pv });
+      return { fen, bestCp: -300, lines: [mk(-300, ['d7c8']), mk(-600, ['d7d8']), mk(-900, ['d7e8'])] };
+    }
+    taughtLine = Analyst.prototype.taughtLine;
+  }
+  it('lists the next-best real choices, not the one already shown, nor a hopeless one', async () => {
+    const c = new Coach(new Multi() as unknown as Analyst, levelInfo(2), 'w', modeInfo('lesson'));
+    const fen = new Chess(ROOK_FEN);
+    fen.move('Rxc8+');
+    const devs = await c.deviations(fen.fen(), 'd7c8');
+    expect(devs).toEqual([{ uci: 'd7d8', san: 'Qd8', lossCp: 300 }]);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BAD_MOVE_PGN } from './import-fixtures';
 import { parseGame, toSavedGame } from './pgnimport';
-import { mergeAnalysis, moveLabels, playedSan, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, turningPoints } from './review';
+import { momentUniverses, mergeAnalysis, moveLabels, playedSan, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, turningPoints } from './review';
 import { SCOTCH_FEN } from './import-fixtures';
 import type { SavedMoment } from './store';
 
@@ -68,5 +68,19 @@ describe('review helpers', () => {
     expect(g.moments).toEqual([{ ...fresh, outcome: 'taken-back', showedMe: true }]);
     expect(g.remarks.map((r) => r.remark.text)).toEqual(['I am putting a pawn in the centre.', 'You played 5.Bc4. …']);
     expect(g.curve).toEqual([0, 10]);
+  });
+});
+
+describe('momentUniverses', () => {
+  it('a mistake: what happened (with their answer) and what the engine wanted', () => {
+    expect(momentUniverses({ ...mistake, answer: ['c6d4', 'f3d4'], line: ['d4a4'] })).toEqual([
+      { label: 'What happened', ucis: ['f1c4', 'c6d4', 'f3d4'] },
+      { label: 'What the engine wanted', ucis: ['d4a4'] },
+    ]);
+  });
+  it('a missed tactic, a found tactic and their blunder', () => {
+    expect(momentUniverses({ ...mistake, kind: 'missed-tactic', line: ['a1a2', 'a8a7'] }).map((u) => u.label)).toEqual(['What happened', 'The tactic']);
+    expect(momentUniverses({ ...mistake, kind: 'found-tactic', line: ['d5c7'] })).toEqual([{ label: 'What happened', ucis: ['d5c7'] }]);
+    expect(momentUniverses({ ...mistake, kind: 'their-blunder', better: 'h2h3', line: ['x1x2'] })[1]).toEqual({ label: 'What they should have played', ucis: ['h2h3'] });
   });
 });

@@ -91,6 +91,21 @@ export class Branch {
     return true;
   }
 
+  /** The position after the first `n` moves of the sideline. */
+  fenAt(n: number): string {
+    const c = new Chess(this.rootFen);
+    for (const m of this.moves.slice(0, n)) c.move({ from: m.from, to: m.to, promotion: m.promotion });
+    return c.fen();
+  }
+
+  /** Goes back to the position after the first `n` moves (a fork: another universe starts from there). */
+  truncate(n: number): void {
+    while (this.moves.length > n) {
+      this.moves.pop();
+      this.chess.undo();
+    }
+  }
+
   /** The line so far, with move numbers: "14.Nxe5 Qd4 15.Nxf7". */
   get lineText(): string {
     // Numbers before White's moves, and before the first move whoever plays it.
