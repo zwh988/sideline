@@ -293,13 +293,16 @@ describe('Coach: known openings and gambits', () => {
     expect(r?.kind).toBe('mistake');
   });
 
-  it('says it when the coach plays a gambit (Lesson), once; Sparring stays silent', async () => {
+  it('says it every time the coach plays a gambit (Lesson), also in a later game or after a takeback; Sparring stays silent', async () => {
     const lastMove = { san: 'Bc5', to: 'c5' as const };
     const r = await coach('lesson', {}, 'w', BOOK).onCoachMove(EVANS, 'b2b4', 8, lastMove);
     expect(r?.text).toBe("I'm playing the Evans Gambit, a known opening: I offer a pawn.");
     expect(await coach('sparring', {}, 'w', BOOK).onCoachMove(EVANS, 'b2b4', 8, lastMove)).toBeUndefined();
     const c = coach('lesson', {}, 'w', BOOK);
     expect((await c.onCoachMove(EVANS, 'b2b4', 8, lastMove))?.kind).toBe('narration');
-    expect((await c.onCoachMove(EVANS, 'b2b4', 20, lastMove))?.text ?? '').not.toContain('Evans Gambit');
+    // The same position again (a takeback replayed it): said again. A move that only carries the gambit on is not an entry.
+    expect((await c.onCoachMove(EVANS, 'b2b4', 20, lastMove))?.text).toContain('Evans Gambit');
+    const next = after(after(EVANS, 'b2b4'), 'c5b4');
+    expect(((await c.onCoachMove(next, 'c2c3', 30, lastMove))?.text ?? '')).not.toContain('Evans Gambit');
   });
 });

@@ -294,11 +294,10 @@ export class Coach {
     // The player's turn analysis goes first in the queue: hints must stay instant.
     const turn = this.prepare(chess.fen());
     if (!this.mode.revealsPlans) return undefined;
-    // Playing a known gambit: say so (once), with what it offers.
+    // Playing a known gambit: say so every time it enters one, with what it offers.
     const gambit = this.book?.gambitEntered(fenBefore, chess.fen());
     const offer = gambit ? this.sacrifice(fenBefore, uci, false) : undefined;
-    if (gambit && offer && !this.said.has(gambit.gambit) && ply - this.lastRemarkPly >= NARRATION_GAP.medium) {
-      this.said.add(gambit.gambit);
+    if (gambit && offer && ply - this.lastRemarkPly >= NARRATION_GAP.medium) {
       return this.remark(ply, {
         kind: 'narration',
         text: `I'm playing the ${gambit.gambit}, a known opening: I offer ${offer}.`,
