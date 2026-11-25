@@ -272,8 +272,7 @@ button:disabled {
   }
 
   .layout:has(.sidelining) #ask,
-  .layout:has(.sidelining) .status,
-  .chart-key {
+  .layout:has(.sidelining) .status {
     display: none; /* disabled in a sideline anyway; the room goes to the chart */
   }
 
@@ -296,7 +295,7 @@ button:disabled {
   }
 
   .chart-wrap {
-    max-height: 150px;
+    max-height: 168px;
     overflow-y: auto;
   }
 
@@ -644,7 +643,7 @@ button.primary {
 .sidelinebar {
   margin-top: 8px;
   padding: 8px;
-  border: 2px solid #c77d1a;
+  border: 2px solid #7c5cc4;
   border-radius: 10px;
   background: var(--panel);
 }
@@ -671,14 +670,16 @@ button.primary {
   outline-offset: 2px;
 }
 
-.chart-key {
-  margin: 4px 0 6px;
-  font-size: 0.78rem;
-  color: var(--muted);
+.entry.verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
 }
 
-.entry.verdict {
-  font-weight: 600;
+.entry.verdict .meter {
+  flex: none;
+  color: var(--text);
 }
 
 .entry.reason {
@@ -694,8 +695,22 @@ button.primary {
 }
 
 #sideline-arrows.on {
-  background: #c77d1a;
+  background: #7c5cc4;
+  border-color: #7c5cc4;
   color: #fff;
+}
+
+.chart-thinking circle {
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+.chart-node {
+  transition: opacity 0.2s;
 }
 
 .sideline-buttons {
@@ -706,10 +721,6 @@ button.primary {
 .sideline-buttons button {
   flex: 1;
   min-height: 48px;
-}
-
-.board-area.sidelining #board {
-  box-shadow: 0 0 0 5px #c77d1a;
 }
 
 .board-area.sidelining .captured,
@@ -957,18 +968,23 @@ button.primary {
 }
 
 /* While the coach's line plays, the board is tinted: it is not the game. */
-.board-area.ghosting #board {
-  position: relative;
+/* Off the game (the coach's ghost line, a sideline): the squares turn violet, the pieces keep their colours. */
+.board-area.ghosting cg-board,
+.board-area.sidelining cg-board {
+  background: repeating-conic-gradient(
+      color-mix(in srgb, var(--board-dark) 55%, #6a4fc0) 0% 25%,
+      color-mix(in srgb, var(--board-light) 72%, #b7a4f0) 0% 50%
+    )
+    0 0 / 25% 25%;
+}
+
+.board-area.ghosting #board,
+.board-area.sidelining #board {
   box-shadow: 0 0 0 5px #7c5cc4;
 }
 
-.board-area.ghosting #board::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgb(124 92 196 / 0.18);
-  pointer-events: none;
-  z-index: 5;
+body:has(.board-area.sidelining) .top {
+  background: color-mix(in srgb, var(--bg) 82%, #7c5cc4);
 }
 
 .board-area.blunder #board {

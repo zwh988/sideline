@@ -186,7 +186,7 @@ Found in play (user, Nov 25): the app looks barebones and, worse, the coach feel
 - ✅ **1.12a Coach reacts on the board** (decision 34, 1–2): move goes through; on a flagged move the opponent waits; ring on the piece in danger, the refutation auto-plays as ghost pieces to the end of the taught line, `?`/`!` badge on the moved piece; three choices (Take back / Explore / Play on; a board tap = Play on, recorded); severity table; bigger coach face with mood states.
 - ✅ **1.12b Takeback is recorded** (decision 34, 3): every takeback and "Play on" stored on the game, shown in the end-of-game summary ("3 moments, 2 takebacks, both on loose pieces").
 - ✅ **1.12c Actions regrouped** (decision 34, 4): "Ask coach" menu (Hint, Explore), Undo by the last move, Flip and Settings in the header menu; captured pieces beside/above-below the board with +x.
-- ⬜ **1.12d Sideline on the board** (decision 34, 5): tinted squares and header, option arrows coloured and weighted by lane (no numbers, no legend), badges on pieces, the path we're on bold and the rest faded, the chart reduced to a wordless strip, aligned and non-overlapping.
+- ✅ **1.12d Sideline on the board** (decision 34, 5): tinted squares and header, option arrows coloured and weighted by lane (no numbers, no legend), badges on pieces, the path we're on bold and the rest faded, the chart reduced to a wordless strip, aligned and non-overlapping.
 - ⬜ **1.12e One visual system**: the list below (tokens, type, coach portrait, controls, dialogs, motion, accessibility), migrated screen by screen.
 - ⬜ **1.12f Sound and haptics** (separate, later): light haptic on a mistake, short sound on a blunder, a Settings switch (haptics on, sound off by default).
 

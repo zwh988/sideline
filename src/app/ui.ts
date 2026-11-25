@@ -9,8 +9,8 @@ import { Chess, type Square } from 'chess.js';
 import { Analyst } from '../coach/analyst';
 import { loadOpeningBook, openingBookIfLoaded, type OpeningBook } from '../coach/openings';
 import { Coach, joinRemarks, type Mark, type Mood, type Remark, type Shape } from '../coach/coach';
-import { drawChart } from './linechart';
-import { LANE_NAME, LineTree, isCommon, verdictOf, type LineNode, type Option } from './linetree';
+import { LANE_ARROW, LANE_COLOUR, drawChart, meterSvg } from './linechart';
+import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode, type Option } from './linetree';
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
@@ -300,7 +300,6 @@ export class App {
           <p id="status" class="status"></p>
           <div id="sideline-bar" class="sidelinebar" hidden>
             <div id="chart-wrap" class="chart-wrap"><svg id="chart" role="group" aria-label="Lines: moves in lanes by quality"></svg></div>
-            <p class="chart-key">Row: how good the move was. Colour: gray game, amber engine, purple you. Dot: who is better.</p>
             <div class="sideline-buttons">
               <button id="sideline-arrows" aria-pressed="false">Show options</button>
               <button id="sideline-undo">Remove move</button>
@@ -392,6 +391,10 @@ export class App {
         events: { after: (orig, dest) => void this.onPlayerMove(orig as Square, dest as Square) },
       },
     });
+    // One arrow colour and width per quality of move, the same colours as the chart (task 1.12d).
+    const brushes = { ...this.board.state.drawable.brushes };
+    for (const l of LANES) brushes[`q-${l}`] = { key: `q-${l}`, color: LANE_COLOUR[l], opacity: 0.85, lineWidth: LANE_ARROW[l] };
+    this.board.set({ drawable: { brushes } });
     // Chessground measures the board once and only re-measures on a window resize. A sideline changes the
     // board's size through CSS alone (the side column grows), so clicks would land on the wrong square.
     let pending = 0;
@@ -734,7 +737,10 @@ export class App {
         const v = verdictOf(node.rating.evalCp);
         const p = document.createElement('p');
         p.className = `entry verdict ${v.side}`;
-        p.textContent = `${LANE_NAME[node.rating.lane]} · ${v.text}${node.rating.common ? ' · common at your level' : ''}`;
+        p.innerHTML = `${meterSvg(node.rating.lane, 14)}<span></span>`;
+        p.title = LANE_NAME[node.rating.lane];
+        p.setAttribute('aria-label', `${LANE_NAME[node.rating.lane]}. ${v.text}${node.rating.common ? '. Common at your level' : ''}`);
+        p.lastElementChild!.textContent = `${v.text}${node.rating.common ? ' · common at your level' : ''}`;
         entries.unshift(p); // first, so it stays visible when the note is long
       }
       if (node.reason) {
@@ -1643,7 +1649,12 @@ export class App {
     wrap.scrollLeft = at.x - wrap.clientWidth / 2;
     wrap.scrollTop = at.y - wrap.clientHeight / 2;
     const reasonShapes: DrawShape[] = (cur.reason?.squares ?? []).map((s) => ({ orig: s as Key, brush: 'yellow' }));
-    this.board.setAutoShapes([...reasonShapes, ...(this.arrowsOn ? ghosts.map((g, i) => ({ orig: g.uci.slice(0, 2) as Key, dest: g.uci.slice(2, 4) as Key, brush: g.lane === 'best' ? 'green' : g.lane === 'other' ? 'red' : 'blue', label: { text: String(i + 1) } })) : [])]);
+    // Options are arrows in their quality's colour and width (no numbers: the chart shows the same colours),
+    // strongest drawn last so it stays on top; the cursor's move wears its badge on the piece.
+    const arrows: DrawShape[] = [...ghosts].reverse().map((g) => ({ orig: g.uci.slice(0, 2) as Key, dest: g.uci.slice(2, 4) as Key, brush: `q-${g.lane}` }));
+    const badge = cur === sl.root ? undefined : badgeOf(cur.rating);
+    const badgeMark: DrawShape[] = badge ? [markShape({ square: cur.uci.slice(2, 4) as Square, kind: badge === '!' ? 'good' : badge === '?' ? 'bad' : 'blunder' })] : [];
+    this.board.setAutoShapes([...reasonShapes, ...arrows, ...badgeMark]);
     const opts = this.el['sideline-arrows'];
     opts.classList.toggle('on', this.arrowsOn);
     opts.setAttribute('aria-pressed', String(this.arrowsOn));
