@@ -653,6 +653,11 @@ button.primary {
 
 #board {
   touch-action: manipulation;
+  /* A tap on the board must not flash or select the whole board on phones. */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* chessground's file letters poke out of the board by a few pixels, which made the page scroll sideways at 390px */
