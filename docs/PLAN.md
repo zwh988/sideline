@@ -187,7 +187,7 @@ Found in play (user, Nov 25): the app looks barebones and, worse, the coach feel
 - ✅ **1.12b Takeback is recorded** (decision 34, 3): every takeback and "Play on" stored on the game, shown in the end-of-game summary ("3 moments, 2 takebacks, both on loose pieces").
 - ✅ **1.12c Actions regrouped** (decision 34, 4): "Ask coach" menu (Hint, Explore), Undo by the last move, Flip and Settings in the header menu; captured pieces beside/above-below the board with +x.
 - ✅ **1.12d Sideline on the board** (decision 34, 5): tinted squares and header, option arrows coloured and weighted by lane (no numbers, no legend), badges on pieces, the path we're on bold and the rest faded, the chart reduced to a wordless strip, aligned and non-overlapping.
-- ⬜ **1.12e One visual system**: the list below (tokens, type, coach portrait, controls, dialogs, motion, accessibility), migrated screen by screen.
+- 🟨 **1.12e One visual system** (tokens done; type pair and coach portrait to decide with the user, then controls, dialogs, motion, accessibility): the list below (tokens, type, coach portrait, controls, dialogs, motion, accessibility), migrated screen by screen.
 - ⬜ **1.12f Sound and haptics** (separate, later): light haptic on a mistake, short sound on a blunder, a Settings switch (haptics on, sound off by default).
 
 Ideas for 1.12e (nothing here is decided beyond the flow above):

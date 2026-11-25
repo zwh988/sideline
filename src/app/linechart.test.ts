@@ -14,7 +14,7 @@ describe('quality without words', () => {
   it('the meter fills as many bars as the lane has', () => {
     for (const lane of LANES) {
       const svg = meterSvg(lane);
-      expect(svg.match(new RegExp(`fill="${LANE_COLOUR[lane]}"`, 'g'))?.length).toBe(LANE_BARS[lane]);
+      expect(svg.split(`fill="${LANE_COLOUR[lane]}"`).length - 1).toBe(LANE_BARS[lane]);
       expect(svg.match(/<rect/g)?.length).toBe(4);
     }
   });

@@ -63,20 +63,20 @@ function drawShape(s: Shape): DrawShape {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const MARK_COLOUR = { bad: '#e0861a', blunder: '#d63a3a', good: '#2aa66b' } as const;
+const MARK_COLOUR = { bad: 'var(--warn)', blunder: 'var(--danger)', good: 'var(--good)' } as const;
 const MARK_GLYPH = { bad: '?', blunder: '??', good: '!' } as const;
 
 /** A mark on a square: a pulsing ring on the piece in danger, or a badge (? ?? !) on the piece just moved. */
 function markShape(m: Mark): DrawShape {
   if (m.kind === 'ring') {
-    return { orig: m.square as Key, customSvg: { html: '<circle class="mark-ring" cx="50" cy="50" r="43" fill="none" stroke="#e5484d" stroke-width="7"/>', center: 'orig' } };
+    return { orig: m.square as Key, customSvg: { html: '<circle class="mark-ring" cx="50" cy="50" r="43" fill="none" stroke="var(--danger)" stroke-width="7"/>', center: 'orig' } };
   }
   const glyph = MARK_GLYPH[m.kind];
   const size = glyph.length > 1 ? 26 : 32;
   return {
     orig: m.square as Key,
     customSvg: {
-      html: `<g class="mark-badge"><circle cx="72" cy="28" r="26" fill="${MARK_COLOUR[m.kind]}" stroke="#fff" stroke-width="4"/><text x="72" y="${glyph.length > 1 ? 37 : 39}" text-anchor="middle" font-size="${size}" font-weight="800" font-family="system-ui,sans-serif" fill="#fff">${glyph}</text></g>`,
+      html: `<g class="mark-badge"><circle cx="72" cy="28" r="26" fill="${MARK_COLOUR[m.kind]}" stroke="var(--on-accent)" stroke-width="4"/><text x="72" y="${glyph.length > 1 ? 37 : 39}" text-anchor="middle" font-size="${size}" font-weight="800" font-family="system-ui,sans-serif" fill="var(--on-accent)">${glyph}</text></g>`,
       center: 'orig',
     },
   };
@@ -89,8 +89,8 @@ function remarkShapes(r: Remark): DrawShape[] {
 
 /** The coach's face for a mood (drawn white on the portrait's colour). */
 function faceSvg(mood: Mood): string {
-  const eye = (x: number, y: number, r = 3.2) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff"/>`;
-  const line = (d: string) => `<path d="${d}" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>`;
+  const eye = (x: number, y: number, r = 3.2) => `<circle cx="${x}" cy="${y}" r="${r}" fill="var(--on-accent)"/>`;
+  const line = (d: string) => `<path d="${d}" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round"/>`;
   let inner: string;
   switch (mood) {
     case 'pleased':
@@ -100,7 +100,7 @@ function faceSvg(mood: Mood): string {
       inner = eye(21, 30) + eye(43, 30) + line('M14 22 L28 17') + line('M36 17 L50 22') + line('M23 47 Q32 40 41 47');
       break;
     case 'surprised':
-      inner = eye(21, 29, 4.6) + eye(43, 29, 4.6) + line('M15 17 L27 15') + line('M37 15 L49 17') + '<circle cx="32" cy="46" r="5" fill="none" stroke="#fff" stroke-width="3"/>';
+      inner = eye(21, 29, 4.6) + eye(43, 29, 4.6) + line('M15 17 L27 15') + line('M37 15 L49 17') + '<circle cx="32" cy="46" r="5" fill="none" stroke="var(--on-accent)" stroke-width="3"/>';
       break;
     case 'thinking':
       inner = eye(23, 29) + eye(45, 29) + line('M15 22 L28 22') + line('M36 17 L50 14') + line('M24 46 L40 43');

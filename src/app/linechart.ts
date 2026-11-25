@@ -10,12 +10,12 @@ import { LANES, LANE_NAME, badgeOf, verdictOf, type Lane, type LineNode, type Li
 const NS = 'http://www.w3.org/2000/svg';
 
 /** One colour per quality, shared by the chart and the arrows on the board. Never the only cue: rows, meter, thickness. */
-export const LANE_COLOUR: Record<Lane, string> = { best: '#2e9e6b', great: '#3a8fd6', good: '#d9a21e', other: '#d4553a' };
+export const LANE_COLOUR: Record<Lane, string> = { best: 'var(--q-best)', great: 'var(--q-great)', good: 'var(--q-good)', other: 'var(--q-other)' };
 /** How many of the four bars of the meter are filled. */
 export const LANE_BARS: Record<Lane, number> = { best: 4, great: 3, good: 2, other: 1 };
 /** Arrow width on the board (a stronger move is a thicker arrow). */
 export const LANE_ARROW: Record<Lane, number> = { best: 15, great: 12, good: 9, other: 6 };
-const GAME_COLOUR = '#8d887c';
+const GAME_COLOUR = 'var(--game-line)';
 
 const PITCH = 58;
 const PILL_W = 46;
@@ -148,15 +148,15 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
       width: PILL_W,
       height: PILL_H,
       rx: PILL_H / 2,
-      fill: o.ghost ? 'var(--bg)' : o.black ? '#2C2C2A' : 'var(--panel)',
+      fill: o.ghost ? 'var(--bg)' : o.black ? 'var(--ink-black)' : 'var(--panel)',
       stroke: o.stroke,
       'stroke-width': o.selected ? 3.5 : 2.5,
       'stroke-dasharray': o.ghost ? '3 3' : 'none',
     });
-    el(g, 'text', { x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 11.5, 'font-weight': o.selected ? 600 : 500, fill: o.ghost ? 'var(--muted)' : o.black ? '#fff' : 'var(--text)' }, label);
+    el(g, 'text', { x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 11.5, 'font-weight': o.selected ? 600 : 500, fill: o.ghost ? 'var(--muted)' : o.black ? 'var(--on-accent)' : 'var(--text)' }, label);
     if (o.badge) {
-      el(g, 'circle', { cx: -PILL_W / 2 + 2, cy: -PILL_H / 2, r: 8, fill: o.badge === '!' ? '#2aa66b' : o.badge === '?' ? '#e0861a' : '#d63a3a', stroke: 'var(--panel)', 'stroke-width': 1.5 });
-      el(g, 'text', { x: -PILL_W / 2 + 2, y: -PILL_H / 2 + 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': o.badge.length > 1 ? 9 : 11, 'font-weight': 800, fill: '#fff' }, o.badge);
+      el(g, 'circle', { cx: -PILL_W / 2 + 2, cy: -PILL_H / 2, r: 8, fill: o.badge === '!' ? 'var(--good)' : o.badge === '?' ? 'var(--warn)' : 'var(--danger)', stroke: 'var(--panel)', 'stroke-width': 1.5 });
+      el(g, 'text', { x: -PILL_W / 2 + 2, y: -PILL_H / 2 + 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': o.badge.length > 1 ? 9 : 11, 'font-weight': 800, fill: 'var(--on-accent)' }, o.badge);
     }
     if (o.better) {
       // Who is better after the move, by shape (not hue): a triangle up for you, down for them, a bar for level.
