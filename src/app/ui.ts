@@ -63,13 +63,13 @@ function drawShape(s: Shape): DrawShape {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const MARK_COLOUR = { bad: 'var(--warn)', blunder: 'var(--danger)', good: 'var(--good)' } as const;
+const MARK_COLOUR = { bad: 'var(--mark-bad)', blunder: 'var(--mark-blunder)', good: 'var(--mark-good)' } as const;
 const MARK_GLYPH = { bad: '?', blunder: '??', good: '!' } as const;
 
 /** A mark on a square: a pulsing ring on the piece in danger, or a badge (? ?? !) on the piece just moved. */
 function markShape(m: Mark): DrawShape {
   if (m.kind === 'ring') {
-    return { orig: m.square as Key, customSvg: { html: '<circle class="mark-ring" cx="50" cy="50" r="43" fill="none" stroke="var(--danger)" stroke-width="7"/>', center: 'orig' } };
+    return { orig: m.square as Key, customSvg: { html: '<circle class="mark-ring" cx="50" cy="50" r="43" fill="none" stroke="var(--mark-blunder)" stroke-width="7"/>', center: 'orig' } };
   }
   const glyph = MARK_GLYPH[m.kind];
   const size = glyph.length > 1 ? 26 : 32;
@@ -293,7 +293,7 @@ export class App {
           </div>
         </div>
         <dialog id="history" class="history" aria-label="Your games">
-          <div class="history-head"><h2>Your games</h2><button id="history-close">Close</button></div>
+          <div class="history-head"><h2>Your games</h2><button id="history-close" class="ghost">Close</button></div>
           <p id="history-note" class="history-note" aria-live="polite">Saved on this device only.</p>
           <ol id="history-list" class="history-list"></ol>
           <div class="history-foot">
@@ -405,7 +405,7 @@ export class App {
 
     this.board = Chessground(this.el.board, {
       coordinates: true,
-      animation: { duration: 200 },
+      animation: { enabled: !matchMedia('(prefers-reduced-motion: reduce)').matches, duration: 200 },
       highlight: { lastMove: true, check: true },
       premovable: { enabled: false },
       draggable: { showGhost: true },
@@ -1325,7 +1325,14 @@ export class App {
     for (const g of games) {
       const li = document.createElement('li');
       li.dataset.id = g.id;
-      const text = document.createElement('p');
+      const main = document.createElement('div');
+      main.className = 'h-main';
+      const title = document.createElement('span');
+      title.className = 'h-title';
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      const meta = document.createElement('p');
+      meta.className = 'h-meta';
       const date = new Date(g.startedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
       const moments = g.moments.length ? ` · ${g.moments.length} moment${g.moments.length === 1 ? '' : 's'}` : '';
       const takebacks = g.takebacks?.length ? ` · ${g.takebacks.length} takeback${g.takebacks.length === 1 ? '' : 's'}` : '';
@@ -1336,10 +1343,18 @@ export class App {
         const opponent = g.playerColor === 'white' ? im.black : im.white;
         const result = !g.result ? 'unfinished' : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'you lost') : 'draw';
         const from = { pgn: 'pasted', 'chess.com': 'Chess.com', lichess: 'Lichess' }[im.source];
-        text.textContent = `${date} · imported (${from}) · ${side} vs ${opponent} · ${moveCount} · ${result}${moments}${takebacks}`;
+        title.textContent = `${date} · ${side} vs ${opponent}`;
+        chip.textContent = result;
+        chip.classList.toggle('win', result === 'you won');
+        chip.classList.toggle('loss', result === 'you lost');
+        meta.textContent = `Imported (${from}) · ${moveCount}${moments}${takebacks}`;
       } else {
         const result = !g.result ? (g.id === this.record?.id ? 'in progress' : 'unfinished') : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'coach won') : 'draw';
-        text.textContent = `${date} · ${side} · level ${g.level} · ${modeInfo(g.mode).name} · ${moveCount} · ${result}${moments}${takebacks}`;
+        title.textContent = `${date} · ${side}`;
+        chip.textContent = result;
+        chip.classList.toggle('win', result === 'you won');
+        chip.classList.toggle('loss', result === 'coach won');
+        meta.textContent = `Level ${g.level} · ${modeInfo(g.mode).name} · ${moveCount}${moments}${takebacks}`;
       }
       const buttons = document.createElement('div');
       buttons.className = 'history-buttons';
@@ -1347,9 +1362,12 @@ export class App {
         const b = document.createElement('button');
         b.dataset.action = action;
         b.textContent = label;
+        // Review is the main action of a row; the rest are quiet, and Delete says what it does.
+        b.className = action === 'review' ? 'primary' : action === 'delete' ? 'ghost danger' : 'ghost';
         buttons.append(b);
       }
-      li.append(text, buttons);
+      main.append(title, chip);
+      li.append(main, meta, buttons);
       list.append(li);
     }
   }
@@ -1710,8 +1728,8 @@ export class App {
     const box = this.el.choices;
     const hasDemo = !!this.demo;
     box.innerHTML =
-      `<button data-choice="takeback">Take back</button><button data-choice="show" class="primary">Explore</button><button data-choice="play-on">Play on</button>` +
-      (hasDemo ? `<button data-choice="replay" class="icon" aria-label="Replay the line">↻</button>` : '') +
+      `<button data-choice="takeback">Take back</button><button data-choice="show" class="primary">Explore</button><button data-choice="play-on" class="ghost">Play on</button>` +
+      (hasDemo ? `<button data-choice="replay" class="icon ghost" aria-label="Replay the line">↻</button>` : '') +
       `<p class="choices-hint">Tap the board to play on.</p>`;
     box.hidden = false;
     this.status('Take it back, explore it, or play on?');

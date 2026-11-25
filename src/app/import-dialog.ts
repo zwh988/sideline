@@ -75,7 +75,7 @@ export class ImportDialog {
     this.dialog.className = 'history import';
     this.dialog.setAttribute('aria-label', 'Import games');
     this.dialog.innerHTML = `
-      <div class="history-head"><h2>Import games</h2><button data-id="close">Close</button></div>
+      <div class="history-head"><h2>Import games</h2><button data-id="close" class="ghost">Close</button></div>
       <p data-id="note" class="history-note" aria-live="polite">Games are saved on this device only.</p>
       <section data-id="inputs">
         <h3>Paste a PGN or open a file</h3>
@@ -112,7 +112,7 @@ export class ImportDialog {
       <section data-id="progress" hidden>
         <p data-id="progress-text" aria-live="polite"></p>
         <progress data-id="bar" max="1" value="0"></progress>
-        <div class="import-row"><button data-id="cancel">Cancel</button></div>
+        <div class="import-row"><button data-id="cancel" class="ghost">Cancel</button></div>
       </section>`;
     root.append(this.dialog);
     this.q = <T extends HTMLElement>(sel: string) => this.dialog.querySelector<T>(`[data-id="${sel}"]`)!;

@@ -155,7 +155,7 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
     });
     el(g, 'text', { x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 11.5, 'font-weight': o.selected ? 600 : 500, fill: o.ghost ? 'var(--muted)' : o.black ? 'var(--on-accent)' : 'var(--text)' }, label);
     if (o.badge) {
-      el(g, 'circle', { cx: -PILL_W / 2 + 2, cy: -PILL_H / 2, r: 8, fill: o.badge === '!' ? 'var(--good)' : o.badge === '?' ? 'var(--warn)' : 'var(--danger)', stroke: 'var(--panel)', 'stroke-width': 1.5 });
+      el(g, 'circle', { cx: -PILL_W / 2 + 2, cy: -PILL_H / 2, r: 8, fill: o.badge === '!' ? 'var(--mark-good)' : o.badge === '?' ? 'var(--mark-bad)' : 'var(--mark-blunder)', stroke: 'var(--panel)', 'stroke-width': 1.5 });
       el(g, 'text', { x: -PILL_W / 2 + 2, y: -PILL_H / 2 + 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': o.badge.length > 1 ? 9 : 11, 'font-weight': 800, fill: 'var(--on-accent)' }, o.badge);
     }
     if (o.better) {

@@ -28,16 +28,20 @@
   --off-game-deep: #6a4fc0;
   --off-game-soft: #b7a4f0;
 
-  /* Status */
-  --good: #2aa66b;
-  --warn: #e0861a;
-  --danger: #d63a3a;
+  /* Status: as text or lines (at least 4.5:1 on the panel; the dark values are in the dark block) */
+  --good: #1a7f4f;
+  --warn: #c46d00;
+  --danger: #c93232;
   --focus: #378add;
+  /* The badges and the ring on the board: fixed, they carry a white glyph */
+  --mark-good: #2aa66b;
+  --mark-bad: #e0861a;
+  --mark-blunder: #d63a3a;
 
   /* Quality of a move: one colour each, always with a second cue (row, meter, arrow width) */
   --q-best: #2e9e6b;
   --q-great: #3a8fd6;
-  --q-good: #d9a21e;
+  --q-good: #b8860b;
   --q-other: #d4553a;
   --game-line: #8d887c;
   --ink-black: #2c2c2a; /* fill of a move by Black in the chart */
@@ -52,6 +56,11 @@
   --fs-md: 1rem;
   --fs-lg: 1.1rem;
   --fs-xl: 1.3rem;
+
+  /* Control heights: compact, normal (the touch minimum), large */
+  --h-sm: 40px;
+  --h-md: 44px;
+  --h-lg: 48px;
 
   /* Space, shape, depth, motion */
   --sp-1: 4px;
@@ -77,6 +86,11 @@
     --muted: #9aa39e;
     --panel: #222725;
     --border: #343b38;
+    --good: #2aa66b;
+    --warn: #e0861a;
+    --danger: #f2706c;
+    --q-good: #d9a21e;
+    --q-other: #e0654a;
   }
 }
 
@@ -90,6 +104,10 @@ body {
   color: var(--text);
 }
 
+/*
+ * Buttons: one hierarchy. Secondary is the default; .primary is the one main action of a view (filled);
+ * .ghost is a quiet action (no border); .danger marks one that deletes. Heights come from --h-sm/md/lg.
+ */
 button,
 select {
   font: inherit;
@@ -100,12 +118,81 @@ select {
   color: var(--text);
 }
 
+button {
+  min-height: var(--h-md);
+  font-weight: 600;
+  transition: background-color var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+
+select {
+  min-height: var(--h-sm);
+}
+
 button:not(:disabled) {
   cursor: pointer;
 }
 
+button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--panel) 90%, var(--text));
+}
+
+button:not(:disabled):active {
+  transform: scale(0.97);
+}
+
 button:disabled {
   opacity: 0.5;
+}
+
+button.primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--coach-accent) 88%, #000);
+}
+
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+button.ghost:not(:disabled):hover {
+  background: color-mix(in srgb, var(--panel) 80%, var(--text));
+  color: var(--text);
+}
+
+button.danger {
+  color: var(--danger);
+}
+
+/* Keyboard focus: one ring everywhere (the chart's moves have their own). */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline-offset: 1px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chip.win {
+  color: var(--good);
+  border-color: var(--good);
+}
+
+.chip.loss {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 /* Header */
@@ -226,7 +313,7 @@ button:disabled {
 
   .controls > button,
   .settings-toggle {
-    min-height: 40px;
+    min-height: var(--h-sm);
   }
 
   .settings-toggle {
@@ -322,7 +409,7 @@ button:disabled {
   }
 
   .nav button {
-    min-height: 44px;
+    min-height: var(--h-md);
   }
 
   /* Banners with a Back button sit right under the board, where the thumb is. */
@@ -353,7 +440,7 @@ button:disabled {
   }
 
   .board-area.sidelining .nav button {
-    min-height: 40px;
+    min-height: var(--h-sm);
   }
 
   .chart-wrap {
@@ -362,7 +449,7 @@ button:disabled {
   }
 
   .sideline-buttons button {
-    min-height: 40px;
+    min-height: var(--h-sm);
     padding: 4px;
   }
 
@@ -391,7 +478,7 @@ button:disabled {
   }
 
   .moves .mv {
-    min-height: 44px;
+    min-height: var(--h-md);
     display: inline-flex;
     align-items: center;
     padding: 0 6px;
@@ -486,7 +573,8 @@ button:disabled {
 .coach-name {
   font-weight: 600;
   font-size: var(--fs-sm);
-  color: var(--coach-accent);
+  /* the accent, lifted toward the text colour so it reads (4.5:1) on the panel in both themes */
+  color: color-mix(in srgb, var(--coach-accent) 60%, var(--text));
 }
 
 .mood {
@@ -634,7 +722,7 @@ button.primary {
 
 .nav button {
   flex: 1;
-  min-height: 48px;
+  min-height: var(--h-lg);
   font-size: 1.5rem;
   line-height: 1;
 }
@@ -656,7 +744,7 @@ button.primary {
 }
 
 .viewbar button {
-  min-height: 44px;
+  min-height: var(--h-md);
 }
 
 .board-area.viewing #board {
@@ -712,7 +800,7 @@ button.primary {
 
 .choices button,
 #new-game {
-  min-height: 44px;
+  min-height: var(--h-md);
 }
 
 /* Sideline ("Try a sideline"): a banner under the board and a tinted board border, always visible */
@@ -796,7 +884,7 @@ button.primary {
 
 .sideline-buttons button {
   flex: 1;
-  min-height: 48px;
+  min-height: var(--h-lg);
 }
 
 .board-area.sidelining .captured,
@@ -842,15 +930,33 @@ button.primary {
   list-style: none;
   max-height: 50vh;
   overflow-y: auto;
+  padding-right: var(--sp-3); /* room for the scrollbar */
 }
 
 .history-list li {
-  padding: 8px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--border);
 }
 
 .history-list p {
   margin: 0 0 6px;
+}
+
+.history-list .h-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.history-list .h-title {
+  font-weight: 800;
+}
+
+.history-list .h-meta {
+  margin: 2px 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--muted);
 }
 
 .history-buttons,
@@ -864,9 +970,9 @@ button.primary {
   margin-top: 12px;
 }
 
-.history button,
 .history-buttons button {
-  min-height: 44px;
+  min-height: var(--h-sm);
+  padding-inline: var(--sp-3);
 }
 
 /* Import games */
@@ -899,11 +1005,11 @@ button.primary {
 .import-row input[type='text'] {
   flex: 1 1 140px;
   width: auto;
-  min-height: 44px;
+  min-height: var(--h-md);
 }
 
 .import select {
-  min-height: 44px;
+  min-height: var(--h-md);
   font-size: 16px;
 }
 
@@ -923,7 +1029,7 @@ button.primary {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  min-height: 44px;
+  min-height: var(--h-md);
 }
 
 .import-pick input {
@@ -1142,7 +1248,7 @@ body:has(.board-area.sidelining) .top {
 }
 
 .menu button {
-  min-height: 44px;
+  min-height: var(--h-md);
   text-align: left;
   border: 0;
   background: transparent;
@@ -1155,7 +1261,7 @@ body:has(.board-area.sidelining) .top {
 
 .more {
   min-width: 40px;
-  min-height: 40px;
+  min-height: var(--h-sm);
   font-size: 1.2rem;
   line-height: 1;
 }
@@ -1192,4 +1298,15 @@ body:has(.board-area.sidelining) .top {
   flex: 2;
   font-size: var(--fs-sm);
   white-space: nowrap;
+}
+
+/* Reduced motion: no animation or transition anywhere (state still changes, it just does not move). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
