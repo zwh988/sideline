@@ -190,6 +190,19 @@ Found in play (user, Nov 25): the app looks barebones and, worse, the coach feel
 - ✅ **1.12e One visual system** (tokens, Nunito, the coach portrait, buttons, History and Import, focus, reduced motion, contrast; the list below was the starting menu, see STATE for what was done and what was not checked): the list below (tokens, type, coach portrait, controls, dialogs, motion, accessibility), migrated screen by screen.
 - ⬜ **1.12f Sound and haptics** (separate, later): light haptic on a mistake, short sound on a blunder, a Settings switch (haptics on, sound off by default).
 
+Found in playtesting 1.12a–e (user, Nov 25). Do in this order, one session each:
+- ⬜ **1.12g Sideline pass.**
+  - The board must not move or resize when a sideline opens: today `.layout:has(.sidelining) .side` widens the column from 300 to 420 px and shrinks the board. Keep one layout; the chart replaces the coach and hint area in the same column (sized for the chart from the start). On phones the chart takes the space under the board.
+  - No move limit in a sideline: remove `MAX_DEPTH = 8` in `linetree.ts` (and its test); the chart scrolls sideways, following the current move. The game's own length is the only limit.
+  - Lanes: replace the wifi-style bars (`LANE_BARS`, `meterSvg`, gutter meters) with the move-rating badge symbols on each lane row, the same badges as on the board.
+  - Nodes: the move text must fit inside the node (make the node wider for long SAN such as `…Nxd4+`, or shrink the text; check the longest labels).
+  - The line we're on (the main line) is a lot thicker than now; the others stay faded.
+  - Captured pieces and +x in a sideline: they are hidden today (`.board-area.sidelining .captured`, an intended choice in 1.12c because the strips described the game). Change to show the material of the sideline's position, so the strip is never missing, in the off-game violet tint.
+- ⬜ **1.12h Material bigger.** Captured pieces beside the board larger (about 70% of a square), the advantage as a bold "+3" chip in the leader's colour.
+- ⬜ **1.12i Game review (replaces History).** One list called "Game review" holding every game the player can review: games played with the coach, imports from Chess.com (listed first) and Lichess. Picking a game makes the coach give a spoken summary like the end-of-game one (the moments, the takebacks, the habit), then the moment timeline (one dot per moment, coloured by the same badges as the board; a dot opens that moment with the question first). Game card tap opens the summary first. Import order in the dialog: Chess.com before Lichess.
+- ⬜ **1.12j Sidebar navigation.** A slim left rail (a bottom tab bar on phones) with Play, Game review, Library and Settings; room for Openings and Puzzles later. Hint, Take back, Flip and Try a sideline sit by the board and coach; the mode switch (Lesson / Sparring) goes at the top of Play and "More" into the rail. Do after 1.12i because both change navigation.
+- The LLM connection is task 1.10 (Ask the coach, ⬜ not started) and Phase 2 (2.1 model loading, 2.2 rephrasing); neither is scheduled before 1.12g–j.
+
 Ideas for 1.12e (nothing here is decided beyond the flow above):
 - **Design tokens:** one palette (light and dark), type scale, spacing, radii and elevation in CSS variables. Today colours are ad hoc (`#c77d1a`, `#888780`, `#7F77DD`, `#1D9E75` in code and CSS; the app's own variables are `--bg`, `--panel`, `--muted`). Author and lane colours of the chart become tokens that also work for colour-blind players (a second cue besides hue: line style, shape).
 - **Typography:** a typeface pair and a clear hierarchy (coach voice vs controls vs numbers like move labels); readable at the 11 px floor.
