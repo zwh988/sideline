@@ -13,4 +13,4 @@ npm run build        # static site in dist/
 
 ## License
 
-GPL-3.0 (see [LICENSE](./LICENSE)). Stockfish and chessground are GPL-3.0; the pieces are CC0 (rhosgfx); the Maia3 model is by CSSLab (its licence is being confirmed).
+GPL-3.0 (see [LICENSE](./LICENSE)). Stockfish and chessground are GPL-3.0; the pieces are CC0 (rhosgfx); the Nunito font is SIL OFL 1.1 (`src/assets/fonts/NUNITO-OFL.txt`); the Maia3 model is by CSSLab (its licence is being confirmed).

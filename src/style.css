@@ -1,3 +1,12 @@
+/* Nunito (SIL Open Font License, src/assets/fonts/NUNITO-OFL.txt), the Latin subset, self-hosted: nothing is fetched from a CDN. */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+  src: url('./assets/fonts/nunito-latin.woff2') format('woff2');
+}
+
 /*
  * Design tokens (task 1.12e). Every colour, size and duration the app uses comes from here; a screen
  * never writes its own hex value. The theme pack (public/themes) adds --coach-accent, --board-light
@@ -34,7 +43,10 @@
   --ink-black: #2c2c2a; /* fill of a move by Black in the chart */
 
   /* Type */
-  --font-ui: system-ui, sans-serif;
+  --font-ui: 'Nunito', system-ui, sans-serif;
+  --coach-skin: #f2c9a6;
+  --coach-hair: #3b2a20;
+  --coach-ink: #1f2421;
   --fs-xs: 0.8rem;
   --fs-sm: 0.9rem;
   --fs-md: 1rem;
@@ -415,8 +427,8 @@ button:disabled {
 }
 
 .portrait svg {
-  width: 82%;
-  height: 82%;
+  width: 100%;
+  height: 100%;
 }
 
 /* A mistake or blunder makes the coach's face start: it is the signal to look at the board. */
@@ -448,13 +460,27 @@ button:disabled {
 }
 
 .bubble {
+  position: relative;
   flex: 1;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--coach-accent);
   border-radius: var(--r-md);
   padding: 8px 12px;
   min-height: 56px;
+}
+
+/* The tail points at the coach's portrait: one speaker. */
+.bubble::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 26px;
+  width: 12px;
+  height: 12px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
 }
 
 .coach-name {
@@ -1164,5 +1190,6 @@ body:has(.board-area.sidelining) .top {
 
 .nav .undo {
   flex: 2;
-  font-size: 1rem;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }

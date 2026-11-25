@@ -87,28 +87,52 @@ function remarkShapes(r: Remark): DrawShape[] {
   return [...(r.shapes ?? []).map(drawShape), ...(r.marks ?? []).map(markShape)];
 }
 
-/** The coach's face for a mood (drawn white on the portrait's colour). */
-function faceSvg(mood: Mood): string {
-  const eye = (x: number, y: number, r = 3.2) => `<circle cx="${x}" cy="${y}" r="${r}" fill="var(--on-accent)"/>`;
-  const line = (d: string) => `<path d="${d}" fill="none" stroke="var(--on-accent)" stroke-width="3" stroke-linecap="round"/>`;
-  let inner: string;
+/**
+ * The coach: a person with glasses, flat, drawn in the theme's accent (task 1.12e). The mood changes the
+ * brows, pupils and mouth; the head, hair and glasses stay, so it is always the same person.
+ */
+export function faceSvg(mood: Mood): string {
+  const ink = 'var(--coach-ink)';
+  const stroke = (d: string, w = 1.8) => `<path d="${d}" fill="none" stroke="${ink}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const pupil = (x: number, y: number, r = 1.9) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${ink}"/>`;
+  let eyes: string;
+  let brows: string;
+  let mouth: string;
   switch (mood) {
     case 'pleased':
-      inner = line('M16 28 Q21 21 26 28') + line('M38 28 Q43 21 48 28') + line('M21 41 Q32 54 43 41');
+      eyes = stroke('M22 31q4-5 8 0') + stroke('M34 31q4-5 8 0');
+      brows = stroke('M21 23q5-3 9 0') + stroke('M34 23q5-3 9 0');
+      mouth = stroke('M26 40q6 6 12 0');
       break;
     case 'concerned':
-      inner = eye(21, 30) + eye(43, 30) + line('M14 22 L28 17') + line('M36 17 L50 22') + line('M23 47 Q32 40 41 47');
+      eyes = pupil(26, 32) + pupil(38, 32);
+      brows = stroke('M20 26l10-4') + stroke('M34 22l10 4');
+      mouth = stroke('M27 43q5-4 10 0');
       break;
     case 'surprised':
-      inner = eye(21, 29, 4.6) + eye(43, 29, 4.6) + line('M15 17 L27 15') + line('M37 15 L49 17') + '<circle cx="32" cy="46" r="5" fill="none" stroke="var(--on-accent)" stroke-width="3"/>';
+      eyes = pupil(26, 31, 2.6) + pupil(38, 31, 2.6);
+      brows = stroke('M21 21q5-3 9 0') + stroke('M34 21q5-3 9 0');
+      mouth = `<ellipse cx="32" cy="42" rx="2.6" ry="3.2" fill="none" stroke="${ink}" stroke-width="1.8"/>`;
       break;
     case 'thinking':
-      inner = eye(23, 29) + eye(45, 29) + line('M15 22 L28 22') + line('M36 17 L50 14') + line('M24 46 L40 43');
+      eyes = pupil(27.5, 29.5) + pupil(39.5, 29.5);
+      brows = stroke('M21 24h9') + stroke('M34 20l9-2');
+      mouth = stroke('M28 42h8');
       break;
     default:
-      inner = eye(21, 29) + eye(43, 29) + line('M15 21 L27 21') + line('M37 21 L49 21') + line('M23 45 Q32 49 41 45');
+      eyes = pupil(26, 31) + pupil(38, 31);
+      brows = stroke('M21 24h9') + stroke('M34 24h9');
+      mouth = stroke('M27 41q5 3 10 0');
   }
-  return `<svg viewBox="0 0 64 64" role="img" aria-label="Coach looks ${mood}">${inner}</svg>`;
+  const lens = (cx: number) => `<circle cx="${cx}" cy="31" r="5.4" fill="none" stroke="${ink}" stroke-width="1.6"/>`;
+  return `<svg viewBox="0 0 64 64" role="img" aria-label="Coach looks ${mood}">
+    <path d="M10 64c0-13 10-19 22-19s22 6 22 19z" style="fill:color-mix(in srgb, var(--coach-accent) 55%, #000)"/>
+    <rect x="28" y="40" width="8" height="8" rx="3" fill="var(--coach-skin)"/>
+    <circle cx="32" cy="30" r="14" fill="var(--coach-skin)"/>
+    <path d="M18 28c-1-10 6-16 14-16s15 6 14 16c-3-5-8-8-14-8s-11 3-14 8z" fill="var(--coach-hair)"/>
+    ${lens(26)}${lens(38)}${stroke('M31.4 31h1.2', 1.6)}
+    ${eyes}${brows}${mouth}
+  </svg>`;
 }
 
 
