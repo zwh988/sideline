@@ -4,6 +4,7 @@
 // storage must never break the game, they just mean nothing is saved.
 import type { Moment, Remark } from '../coach/coach';
 import type { ModeId } from './modes';
+import type { Takeback } from './summary';
 
 export interface SavedMoment extends Moment {
   /** Moves played when the coach said it. */
@@ -55,6 +56,8 @@ export interface SavedGame {
   /** Review's evaluation curve: White's score after 0..n moves (centipawns, clamped). Present once Review has analysed the game. */
   curve?: number[];
   hintsUsed: number;
+  /** Moves the player took back (task 1.12b), with the concept of the flagged ones. */
+  takebacks?: Takeback[];
   /** The deepest named opening the game reached (both sides' moves), for the openings training later. */
   opening?: { eco: string; name: string; ply: number };
   /** Set on games imported for review (not played here); the coach's words are then about the past. */

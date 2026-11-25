@@ -20,6 +20,7 @@ import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { MODES, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
 import { balanceText, materialOf } from './material';
+import { gameSummary } from './summary';
 import { Navigation, RemarkLog, plyLabel } from './navigation';
 import { createOpponent, type Opponent } from './opponent';
 import type { Theme } from './theme';
@@ -893,6 +894,7 @@ export class App {
       }
       if (choice === 'takeback') {
         if (this.stale(id, ply)) return;
+        this.noteTakeback(ply, move.san);
         this.game.takeback();
         this.log.truncate(this.game.moves.length);
         this.pruneSidelines();
@@ -942,6 +944,9 @@ export class App {
       this.say({ kind: 'phase', text: `Checkmate, I win this one. ${next}`, mood: 'concerned' });
     }
     else this.say({ kind: 'phase', text: `It's a draw by ${r.reason}.`, mood: 'neutral' });
+    // What the game's moments and takebacks add up to (task 1.12b).
+    const summary = this.record ? gameSummary(this.record) : '';
+    if (summary) this.say({ kind: 'phase', text: `This game: ${summary}`, mood: 'neutral' });
     this.status('Game over.');
     this.thinking = false;
     this.sync();
@@ -953,8 +958,24 @@ export class App {
     if (this.record) this.record.sidelines = this.record.sidelines.filter((x) => x.ply <= this.game.moves.length);
   }
 
+  /**
+   * Records a takeback with the game (task 1.12b): the move, and the moment the coach had flagged on it,
+   * whose outcome becomes "taken back" (also when the player first played on and changed their mind).
+   */
+  private noteTakeback(ply: number, san: string): void {
+    const r = this.record;
+    if (!r) return;
+    const moment = r.moments.findLast((m) => m.ply === ply && (m.kind === 'mistake' || m.kind === 'missed-tactic'));
+    if (moment) moment.outcome = 'taken-back';
+    (r.takebacks ??= []).push({ ply, san, flagged: !!moment, concept: moment?.concept });
+  }
+
   private async takeback(): Promise<void> {
-    if (this.sideline || this.thinking || this.nav.viewing || !this.mode.takebacks || !this.game.takeback()) return;
+    if (this.sideline || this.thinking || this.nav.viewing || !this.mode.takebacks) return;
+    const taken = this.game.moves;
+    const idx = taken.findLastIndex((m) => m.color === this.game.playerColor);
+    if (idx >= 0) this.noteTakeback(idx + 1, taken[idx].san);
+    if (!this.game.takeback()) return;
     this.log.truncate(this.game.moves.length);
     this.pruneSidelines();
     this.board.setAutoShapes([]);
@@ -1207,6 +1228,7 @@ export class App {
       const text = document.createElement('p');
       const date = new Date(g.startedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
       const moments = g.moments.length ? ` · ${g.moments.length} moment${g.moments.length === 1 ? '' : 's'}` : '';
+      const takebacks = g.takebacks?.length ? ` · ${g.takebacks.length} takeback${g.takebacks.length === 1 ? '' : 's'}` : '';
       const moveCount = `${Math.ceil(g.moves.length / 2)} move${g.moves.length > 2 ? 's' : ''}${g.opening ? ` (${g.opening.name})` : ''}`;
       const side = g.playerColor === 'white' ? 'White' : 'Black';
       if (g.imported) {
@@ -1214,10 +1236,10 @@ export class App {
         const opponent = g.playerColor === 'white' ? im.black : im.white;
         const result = !g.result ? 'unfinished' : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'you lost') : 'draw';
         const from = { pgn: 'pasted', 'chess.com': 'Chess.com', lichess: 'Lichess' }[im.source];
-        text.textContent = `${date} · imported (${from}) · ${side} vs ${opponent} · ${moveCount} · ${result}${moments}`;
+        text.textContent = `${date} · imported (${from}) · ${side} vs ${opponent} · ${moveCount} · ${result}${moments}${takebacks}`;
       } else {
         const result = !g.result ? (g.id === this.record?.id ? 'in progress' : 'unfinished') : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'coach won') : 'draw';
-        text.textContent = `${date} · ${side} · level ${g.level} · ${modeInfo(g.mode).name} · ${moveCount} · ${result}${moments}`;
+        text.textContent = `${date} · ${side} · level ${g.level} · ${modeInfo(g.mode).name} · ${moveCount} · ${result}${moments}${takebacks}`;
       }
       const buttons = document.createElement('div');
       buttons.className = 'history-buttons';
