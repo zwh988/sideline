@@ -159,8 +159,6 @@ export interface LineNode {
 
 /** At most this many forks per sideline, so the chart stays readable. */
 export const MAX_FORKS = 3;
-/** The chart shows this many moves after the fork. */
-export const MAX_DEPTH = 8;
 
 export class LineTree {
   readonly root: LineNode;
@@ -245,10 +243,9 @@ export class LineTree {
     return this.path(node).map((n) => n.uci);
   }
 
-  /** Whether a move from `parent` can be opened: it exists already, or it fits the chart and the fork cap. */
+  /** Whether a move from `parent` can be opened: it exists already, or it fits the fork cap (a Line may be as long as the game). */
   canOpen(parent: LineNode, uci: string): boolean {
     if (parent.kids.some((k) => k.uci === uci)) return true;
-    if (parent.depth >= MAX_DEPTH) return false;
     return parent.kids.length === 0 || this.forks < MAX_FORKS;
   }
 

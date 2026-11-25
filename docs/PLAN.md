@@ -191,7 +191,7 @@ Found in play (user, Nov 25): the app looks barebones and, worse, the coach feel
 - ⬜ **1.12f Sound and haptics** (separate, later): light haptic on a mistake, short sound on a blunder, a Settings switch (haptics on, sound off by default).
 
 Found in playtesting 1.12a–e (user, Nov 25). Do in this order, one session each:
-- ⬜ **1.12g Sideline pass.**
+- ✅ **1.12g Sideline pass** (done; see STATE. Left open: on a 375×650 phone the chart now sits below the fold because the board no longer shrinks).
   - The board must not move or resize when a sideline opens: today `.layout:has(.sidelining) .side` widens the column from 300 to 420 px and shrinks the board. Keep one layout; the chart replaces the coach and hint area in the same column (sized for the chart from the start). On phones the chart takes the space under the board.
   - No move limit in a sideline: remove `MAX_DEPTH = 8` in `linetree.ts` (and its test); the chart scrolls sideways, following the current move. The game's own length is the only limit.
   - Lanes: replace the wifi-style bars (`LANE_BARS`, `meterSvg`, gutter meters) with the move-rating badge symbols on each lane row, the same badges as on the board.

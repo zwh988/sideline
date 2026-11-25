@@ -236,18 +236,10 @@ select:focus-visible {
 
 .board-area {
   position: relative;
-  /* Never wider than the room left beside the 300px side column (foldables, small tablets). */
-  width: min(calc(100vh - 140px), 640px, calc(100vw - 348px));
+  /* Never wider than the room left beside the side column (foldables, small tablets). The column is
+     sized for the chart from the start, so the board never moves or resizes when a sideline opens. */
+  width: min(calc(100vh - 190px), 640px, calc(100vw - 468px));
   flex-shrink: 0;
-}
-
-/* Two columns: in a sideline the chart is as important as the board, so the side column grows to hold it. */
-.layout:has(.sidelining) .side {
-  width: 420px;
-}
-
-.layout:has(.sidelining) .board-area {
-  width: min(calc(100vh - 90px), 640px, calc(100vw - 468px));
 }
 
 #board {
@@ -256,7 +248,7 @@ select:focus-visible {
 }
 
 .side {
-  width: 300px;
+  width: 420px;
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
@@ -428,15 +420,6 @@ select:focus-visible {
   /* In a sideline the stepper sits right under the board, the chart below it. */
   .board-area.sidelining .nav {
     order: 3;
-  }
-
-  .layout:has(.sidelining) {
-    --board: clamp(220px, calc(100dvh - 470px), 100vw);
-  }
-
-  .layout:has(.sidelining) .coach,
-  .layout:has(.sidelining) .coach .bubble {
-    height: 80px;
   }
 
   .board-area.sidelining .nav button {
@@ -841,9 +824,8 @@ button.primary {
   font-weight: 600;
 }
 
-.entry.verdict .meter {
+.entry.verdict .lane-badge {
   flex: none;
-  color: var(--text);
 }
 
 .entry.reason {
@@ -887,9 +869,18 @@ button.primary {
   min-height: var(--h-lg);
 }
 
-.board-area.sidelining .captured,
 .board-area.sidelining #takeback {
   display: none;
+}
+
+/* The strips stay in a sideline and show its position's material, in the off-game tint. */
+.board-area.sidelining .captured {
+  background: color-mix(in srgb, var(--off-game) 14%, transparent);
+  border-radius: var(--r-sm);
+}
+
+.board-area.sidelining .cap-plus {
+  color: var(--off-game);
 }
 
 /* History: saved games, PGN export and backup */

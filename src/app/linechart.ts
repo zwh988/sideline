@@ -2,7 +2,7 @@
 // Columns are moves after the fork; rows are lanes of quality, the same everywhere, so a Line that
 // sinks from the top row to the bottom one got worse. Quality has one colour in every place it is
 // drawn (the lane band, the move's outline, the arrow on the board) and a second cue that is not a
-// hue (the row, and a meter of four bars). The Line the cursor is on is drawn bold; every other Line
+// hue (the row, and the lane's badge symbol). The Line the cursor is on is drawn bold; every other Line
 // is faded. The grey path is the game itself. A small triangle says who is better after a move.
 // Drawing only: the state is a `LineTree`, the engine work is in ui.ts.
 import { LANES, LANE_NAME, badgeOf, verdictOf, type Lane, type LineNode, type LineTree, type Option } from './linetree';
@@ -11,25 +11,34 @@ const NS = 'http://www.w3.org/2000/svg';
 
 /** One colour per quality, shared by the chart and the arrows on the board. Never the only cue: rows, meter, thickness. */
 export const LANE_COLOUR: Record<Lane, string> = { best: 'var(--q-best)', great: 'var(--q-great)', good: 'var(--q-good)', other: 'var(--q-other)' };
-/** How many of the four bars of the meter are filled. */
-export const LANE_BARS: Record<Lane, number> = { best: 4, great: 3, good: 2, other: 1 };
+/** The badge of each lane: `!` and `?` are the board's own marks, the other two are quieter ticks. */
+export const LANE_BADGE: Record<Lane, string> = { best: '!', great: '✓', good: '=', other: '?' };
 /** Arrow width on the board (a stronger move is a thicker arrow). */
 export const LANE_ARROW: Record<Lane, number> = { best: 15, great: 12, good: 9, other: 6 };
 const GAME_COLOUR = 'var(--game-line)';
 
-const PITCH = 58;
-const PILL_W = 46;
+const MIN_PILL_W = 46;
+/** The width of a move's pill: set by `drawChart` from the longest label, so "12…Nxd4+" fits inside it. */
+let PILL_W = MIN_PILL_W;
+const PILL_GAP = 12;
+const LABEL_FONT = 11.5;
 const PILL_H = 20;
-const GUTTER = 22; // the meters
+const GUTTER = 28; // the lane badges
 const FORK_X = GUTTER + 14;
 const FIRST_X = GUTTER + 62;
 const SLOT = 22; // vertical room for one move in a lane
 const BASE_H: Record<Lane, number> = { best: 24, great: 24, good: 24, other: 28 };
 const MIN_WIDTH = 300;
 
+/** A pill wide enough for the longest label at the chart's font size (an estimate of the glyph width, plus room each side). */
+export function pillWidth(labels: string[]): number {
+  const longest = Math.max(0, ...labels.map((l) => l.length));
+  return Math.max(MIN_PILL_W, Math.ceil(longest * LABEL_FONT * 0.55 + 10));
+}
+
 /** Column centre for a move `depth` moves after the fork. */
 export function columnX(depth: number): number {
-  return FIRST_X + (depth - 1) * PITCH;
+  return FIRST_X + (depth - 1) * (PILL_W + PILL_GAP);
 }
 
 function el<K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, attrs: Record<string, string | number>, text?: string): SVGElementTagNameMap[K] {
@@ -57,19 +66,10 @@ export interface ChartHandlers {
   ghost(o: Option): void;
 }
 
-/** A four-bar meter (as SVG markup, `h` tall) with `bars` filled: quality without words. */
-export function meterSvg(lane: Lane, h = 12): string {
-  const bars = LANE_BARS[lane];
-  const w = 3;
-  const gap = 1.5;
-  const rects = [0, 1, 2, 3]
-    .map((i) => {
-      const bh = ((i + 1) / 4) * h;
-      return `<rect x="${i * (w + gap)}" y="${h - bh}" width="${w}" height="${bh}" rx="0.8" fill="${i < bars ? LANE_COLOUR[lane] : 'currentColor'}" opacity="${i < bars ? 1 : 0.22}"/>`;
-    })
-    .join('');
-  const width = 4 * w + 3 * gap;
-  return `<svg class="meter" viewBox="0 0 ${width} ${h}" width="${width}" height="${h}" aria-hidden="true">${rects}</svg>`;
+/** The lane's badge as SVG markup (a coloured disc with its symbol, `d` px wide): quality without words. */
+export function laneBadgeSvg(lane: Lane, d = 16): string {
+  const glyph = LANE_BADGE[lane];
+  return `<svg class="lane-badge" viewBox="0 0 20 20" width="${d}" height="${d}" aria-hidden="true"><circle cx="10" cy="10" r="9.5" fill="${LANE_COLOUR[lane]}"/><text x="10" y="10.5" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="800" font-family="system-ui,sans-serif" fill="var(--on-accent)">${glyph}</text></svg>`;
 }
 
 /** Redraws the whole chart into `svg` (it is small: a handful of moves). Returns the cursor's position, for scrolling. */
@@ -78,6 +78,7 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
   const cursor = tree.cursor;
   svg.replaceChildren();
   const nodes = tree.all();
+  PILL_W = pillWidth([...nodes.map((n) => n.label), ...ghosts.map((g) => g.san)]);
   // Moves that share a column and a lane stack: a lane grows to fit the busiest column.
   type Item = { key: object; lane: Lane; depth: number; loss: number };
   const items: Item[] = [
@@ -106,12 +107,12 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
   svg.setAttribute('width', String(width));
   svg.setAttribute('height', String(height));
 
-  // Lane bands, tinted with the lane's colour, and each lane's meter in the gutter: no words.
+  // Lane bands, tinted with the lane's colour, and each lane's badge in the gutter: no words.
   LANES.forEach((lane, i) => {
     el(svg, 'rect', { x: 0, y: laneTop[lane], width, height: laneH[lane], fill: LANE_COLOUR[lane], opacity: i % 2 ? 0.09 : 0.15 });
     el(svg, 'rect', { x: 0, y: laneTop[lane], width: 3, height: laneH[lane], fill: LANE_COLOUR[lane] });
-    const m = el(svg, 'g', { transform: `translate(7 ${laneTop[lane] + laneH[lane] / 2 - 6})`, color: 'var(--text)' });
-    m.innerHTML = meterSvg(lane, 12);
+    const m = el(svg, 'g', { transform: `translate(7 ${laneTop[lane] + laneH[lane] / 2 - 8})` });
+    m.innerHTML = laneBadgeSvg(lane, 16);
   });
 
   const pos = (n: LineNode) => place.get(n)!;
@@ -128,7 +129,7 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
   for (const n of [...nodes].sort((a, b) => Number(faded(b)) - Number(faded(a)))) {
     curve(from(n.parent!), { x: pos(n).x - PILL_W / 2, y: pos(n).y }, {
       stroke: colourOf(n),
-      'stroke-width': faded(n) ? 2 : 5,
+      'stroke-width': faded(n) ? 2 : 10,
       opacity: faded(n) ? 0.3 : 1,
     });
   }
@@ -153,7 +154,7 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
       'stroke-width': o.selected ? 3.5 : 2.5,
       'stroke-dasharray': o.ghost ? '3 3' : 'none',
     });
-    el(g, 'text', { x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 11.5, 'font-weight': o.selected ? 600 : 500, fill: o.ghost ? 'var(--muted)' : o.black ? 'var(--on-accent)' : 'var(--text)' }, label);
+    el(g, 'text', { x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': LABEL_FONT, 'font-weight': o.selected ? 600 : 500, fill: o.ghost ? 'var(--muted)' : o.black ? 'var(--on-accent)' : 'var(--text)' }, label);
     if (o.badge) {
       el(g, 'circle', { cx: -PILL_W / 2 + 2, cy: -PILL_H / 2, r: 8, fill: o.badge === '!' ? 'var(--mark-good)' : o.badge === '?' ? 'var(--mark-bad)' : 'var(--mark-blunder)', stroke: 'var(--panel)', 'stroke-width': 1.5 });
       el(g, 'text', { x: -PILL_W / 2 + 2, y: -PILL_H / 2 + 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': o.badge.length > 1 ? 9 : 11, 'font-weight': 800, fill: 'var(--on-accent)' }, o.badge);

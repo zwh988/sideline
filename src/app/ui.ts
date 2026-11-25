@@ -9,7 +9,7 @@ import { Chess, type Square } from 'chess.js';
 import { Analyst } from '../coach/analyst';
 import { loadOpeningBook, openingBookIfLoaded, type OpeningBook } from '../coach/openings';
 import { Coach, joinRemarks, type Mark, type Mood, type Remark, type Shape } from '../coach/coach';
-import { LANE_ARROW, LANE_COLOUR, drawChart, meterSvg } from './linechart';
+import { LANE_ARROW, LANE_COLOUR, drawChart, laneBadgeSvg } from './linechart';
 import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode, type Option } from './linetree';
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
@@ -761,7 +761,7 @@ export class App {
         const v = verdictOf(node.rating.evalCp);
         const p = document.createElement('p');
         p.className = `entry verdict ${v.side}`;
-        p.innerHTML = `${meterSvg(node.rating.lane, 14)}<span></span>`;
+        p.innerHTML = `${laneBadgeSvg(node.rating.lane, 18)}<span></span>`;
         p.title = LANE_NAME[node.rating.lane];
         p.setAttribute('aria-label', `${LANE_NAME[node.rating.lane]}. ${v.text}${node.rating.common ? '. Common at your level' : ''}`);
         p.lastElementChild!.textContent = `${v.text}${node.rating.common ? ' · common at your level' : ''}`;
@@ -1681,6 +1681,7 @@ export class App {
       viewOnly: false,
       movable: { color: over ? undefined : turn, dests: over ? new Map() : (sl.dests as Map<Key, Key[]>) },
     });
+    this.renderMaterial(cur.fen); // the material of the sideline's position, so the strips are never missing
     const ghosts = this.ghosts(sl);
     const at = drawChart(
       this.el.chart as unknown as SVGSVGElement,
