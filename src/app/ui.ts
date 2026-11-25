@@ -136,6 +136,12 @@ export function faceSvg(mood: Mood): string {
 }
 
 
+const RAIL_ICONS = {
+  play: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M9 4l9 8-9 8z" fill="currentColor"/></svg>',
+  review: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 8h10M18 8h2M4 16h2M10 16h10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/><circle cx="16" cy="8" r="2.6" fill="currentColor"/><circle cx="8" cy="16" r="2.6" fill="currentColor"/></svg>',
+};
+
 export class App {
   private settings = loadSettings();
   private game!: Game;
@@ -230,18 +236,47 @@ export class App {
 
   private render(): void {
     this.root.innerHTML = `
+      <nav class="rail" aria-label="Main">
+        <button id="rail-play" class="rail-item" aria-current="page">${RAIL_ICONS.play}<span>Play</span></button>
+        <button id="history-open" class="rail-item">${RAIL_ICONS.review}<span>Game review</span></button>
+        <button id="rail-settings" class="rail-item">${RAIL_ICONS.settings}<span>Settings</span></button>
+      </nav>
       <header class="top">
         <h1>Sideline</h1>
         <div class="controls">
-          <div id="settings" class="settings">
-          <label>Level
-            <select id="level">${LEVELS.map(
-              (l) => `<option value="${l.level}">${l.level} · Chess.com ${l.chessCom}</option>`,
-            ).join('')}</select>
-          </label>
-          <label>Mode
-            <select id="mode">${MODES.map((m) => `<option value="${m.id}">${m.name}</option>`).join('')}</select>
-          </label>
+          <button id="new-game" class="primary">New game</button>
+          <div class="menu-wrap menu-phone">
+            <button id="more" class="more" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="Menu">☰</button>
+            <div id="more-menu" class="menu more-menu" role="menu" hidden>
+              <button id="menu-play" role="menuitem">Play</button>
+              <button id="menu-review" role="menuitem">Game review</button>
+              <button id="menu-settings" role="menuitem">Settings</button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <dialog id="newgame" class="sheet" aria-label="New game">
+        <h2>New game</h2>
+        <label>Level <select id="ng-level">${LEVELS.map((l) => `<option value="${l.level}">${l.level} · Chess.com ${l.chessCom}</option>`).join('')}</select></label>
+        <label>Mode <select id="ng-mode">${MODES.map((m) => `<option value="${m.id}">${m.name}</option>`).join('')}</select></label>
+        <label>Play as
+          <select id="ng-color">
+            <option value="white">White</option>
+            <option value="black">Black</option>
+            <option value="random">Random</option>
+          </select>
+        </label>
+        <div class="sheet-buttons">
+          <button id="ng-cancel" class="ghost">Cancel</button>
+          <button id="ng-start" class="primary">Start</button>
+        </div>
+      </dialog>
+      <dialog id="settings-screen" class="history settings-screen" aria-label="Settings">
+        <div class="history-head"><h2>Settings</h2><button id="settings-close" class="ghost">Back to play</button></div>
+        <p class="history-note">These are the choices New game starts with. A change applies from your next game.</p>
+        <div class="settings-list">
+          <label>Level <select id="level">${LEVELS.map((l) => `<option value="${l.level}">${l.level} · Chess.com ${l.chessCom}</option>`).join('')}</select></label>
+          <label>Mode <select id="mode">${MODES.map((m) => `<option value="${m.id}">${m.name}</option>`).join('')}</select></label>
           <label>Play as
             <select id="color">
               <option value="white">White</option>
@@ -249,18 +284,8 @@ export class App {
               <option value="random">Random</option>
             </select>
           </label>
-          </div>
-          <button id="new-game">New game</button>
-          <button id="history-open">Game review</button>
-          <div class="menu-wrap">
-            <button id="more" class="more" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="More">⋯</button>
-            <div id="more-menu" class="menu more-menu" role="menu" hidden>
-              <button id="flip" role="menuitem">Flip board</button>
-              <button id="settings-toggle" class="settings-toggle" role="menuitem" aria-expanded="false" aria-controls="settings">Settings</button>
-            </div>
-          </div>
         </div>
-      </header>
+      </dialog>
       <main class="layout">
         <div id="board-area" class="board-area">
           <div class="board-stack">
@@ -313,6 +338,7 @@ export class App {
             <div id="ask-menu" class="menu ask-menu" role="menu" hidden>
               <button id="hint" role="menuitem">Hint</button>
               <button id="sideline" role="menuitem">Try a sideline</button>
+              <button id="flip" role="menuitem">Flip board</button>
             </div>
             <div id="bubble-box" class="bubble">
               <div class="coach-name">${COACH_NAME} <span id="mood" class="mood"></span></div>
@@ -334,7 +360,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -347,13 +373,27 @@ export class App {
     level.addEventListener('change', () => this.updateSettings({ level: Number(level.value) }));
     mode.addEventListener('change', () => this.updateSettings({ mode: modeInfo(mode.value).id }));
     color.addEventListener('change', () => this.updateSettings({ color: color.value as ColorChoice }));
-    // Phones: the level, mode and colour sit behind a Settings button, and a long coach remark opens on a tap.
-    this.el['settings-toggle'].addEventListener('click', () => {
-      const open = this.root.querySelector('.top')!.classList.toggle('open');
-      this.el['settings-toggle'].setAttribute('aria-expanded', String(open));
-    });
+    // A long coach remark opens on a tap (phones).
     this.el['bubble-box'].addEventListener('click', () => this.root.querySelector('.coach')!.classList.toggle('expanded'));
-    this.root.querySelector('#new-game')!.addEventListener('click', () => void this.newGame());
+    this.root.querySelector('#new-game')!.addEventListener('click', () => this.openNewGameSheet());
+    this.el['ng-cancel'].addEventListener('click', () => (this.el.newgame as HTMLDialogElement).close());
+    this.el['ng-start'].addEventListener('click', () => {
+      this.updateSettings({
+        level: Number((this.el['ng-level'] as HTMLSelectElement).value),
+        mode: modeInfo((this.el['ng-mode'] as HTMLSelectElement).value).id,
+        color: (this.el['ng-color'] as HTMLSelectElement).value as ColorChoice,
+      }, true);
+      (this.el.newgame as HTMLDialogElement).close();
+      this.showScreen('play');
+      void this.newGame();
+    });
+    // The rail (desktop) and the Menu (phones) switch screens; Game review and Settings sit over the game.
+    for (const [id, screen] of [['rail-play', 'play'], ['history-open', 'review'], ['rail-settings', 'settings'], ['menu-play', 'play'], ['menu-review', 'review'], ['menu-settings', 'settings']] as const) {
+      this.el[id].addEventListener('click', () => this.showScreen(screen));
+    }
+    this.el['settings-close'].addEventListener('click', () => this.showScreen('play'));
+    this.el.history.addEventListener('close', () => this.railCurrent());
+    this.el['settings-screen'].addEventListener('close', () => this.railCurrent());
     this.root.querySelector('#flip')!.addEventListener('click', () => {
       this.board.toggleOrientation();
       this.renderMaterial(this.nav.viewing ? this.game.positionAt(this.nav.ply).fen : this.game.fen);
@@ -362,8 +402,7 @@ export class App {
     this.wireMenu('ask', 'ask-menu', this.el.portrait);
     this.el.takeback.addEventListener('click', () => void this.takeback());
     this.el.hint.addEventListener('click', () => void this.hint());
-    this.el['history-open'].addEventListener('click', () => this.openHistory());
-    this.el['history-close'].addEventListener('click', () => (this.el.history as HTMLDialogElement).close());
+    this.el['history-close'].addEventListener('click', () => this.showScreen('play'));
     this.el['history-list'].addEventListener('click', (e) => this.onHistoryClick(e));
     this.el['import-open'].addEventListener('click', () => {
       (this.el.history as HTMLDialogElement).close();
@@ -388,7 +427,7 @@ export class App {
       onChange: () => this.renderHistory(),
     });
     // Import opens from the Game review screen, so closing it returns there.
-    this.root.querySelector('dialog.import')?.addEventListener('close', () => this.openHistory());
+    this.root.querySelector('dialog.import')?.addEventListener('close', () => this.showScreen('review'));
 
     // The same four buttons step through a sideline, one move per tap.
     this.el['nav-start'].addEventListener('click', () => (this.sideline ? this.sideStep('start') : this.navigate(() => this.nav.start())));
@@ -432,11 +471,46 @@ export class App {
     }
   }
 
-  private updateSettings(change: Partial<Settings>): void {
+  private updateSettings(change: Partial<Settings>, quiet = false): void {
     this.settings = { ...this.settings, ...change };
     saveSettings(this.settings);
+    if (quiet) return;
     if (change.level !== undefined) this.status('New level set. It applies from your next game.');
     if (change.mode !== undefined) this.status(`${modeInfo(change.mode).name} mode set. It applies from your next game.`);
+  }
+
+  /** The sheet New game opens: level, mode and colour for this game, starting from the saved choices. */
+  private openNewGameSheet(): void {
+    (this.el['ng-level'] as HTMLSelectElement).value = String(this.settings.level);
+    (this.el['ng-mode'] as HTMLSelectElement).value = this.settings.mode;
+    (this.el['ng-color'] as HTMLSelectElement).value = this.settings.color;
+    this.showScreen('play');
+    (this.el.newgame as HTMLDialogElement).showModal();
+  }
+
+  /** Switches screen: Play is the game itself; Game review and Settings are full screens over it (not modal, so the rail stays usable). */
+  private showScreen(screen: 'play' | 'review' | 'settings'): void {
+    const history = this.el.history as HTMLDialogElement;
+    const settings = this.el['settings-screen'] as HTMLDialogElement;
+    if (screen !== 'review' && history.open) history.close();
+    if (screen !== 'settings' && settings.open) settings.close();
+    if (screen === 'review' && !history.open) this.openHistory();
+    if (screen === 'settings' && !settings.open) {
+      (this.el.level as HTMLSelectElement).value = String(this.settings.level);
+      (this.el.mode as HTMLSelectElement).value = this.settings.mode;
+      (this.el.color as HTMLSelectElement).value = this.settings.color;
+      settings.show();
+    }
+    this.railCurrent();
+  }
+
+  /** Marks the rail item of the screen that is open. */
+  private railCurrent(): void {
+    const screen = (this.el.history as HTMLDialogElement).open ? 'history-open' : (this.el['settings-screen'] as HTMLDialogElement).open ? 'rail-settings' : 'rail-play';
+    for (const id of ['rail-play', 'history-open', 'rail-settings']) {
+      if (id === screen) this.el[id].setAttribute('aria-current', 'page');
+      else this.el[id].removeAttribute('aria-current');
+    }
   }
 
   /** Starts a new game, or (with `resume`) carries on a saved one exactly where it stopped. */
@@ -1328,7 +1402,7 @@ export class App {
     this.save(); // the game in progress shows up with its latest moves
     this.renderHistory();
     this.el['history-note'].textContent = 'Pick a game to review it with the coach. Saved on this device only; back up to move them elsewhere.';
-    (this.el.history as HTMLDialogElement).showModal();
+    (this.el.history as HTMLDialogElement).show();
   }
 
   private renderHistory(): void {

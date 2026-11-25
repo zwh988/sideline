@@ -218,12 +218,96 @@ select:focus-visible {
   align-items: center;
 }
 
-.controls label {
+/* The rail: Play, Game review and Settings (a slim column on wide screens; on phones the header's menu does this job) */
+:root {
+  --rail-w: 84px;
+}
+
+body {
+  padding-left: var(--rail-w);
+}
+
+.rail {
+  position: fixed;
+  z-index: 30;
+  inset: 0 auto 0 0;
+  width: var(--rail-w);
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2);
+  box-sizing: border-box;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+}
+
+.rail-item {
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 2px;
+  min-height: 64px;
+  padding: var(--sp-2) 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.rail-item:hover {
+  color: var(--text);
+}
+
+.rail-item[aria-current='page'] {
+  color: var(--text);
+  background: color-mix(in srgb, var(--coach-accent) 22%, transparent);
+}
+
+.menu-phone {
+  display: none;
+}
+
+/* New game sheet and Settings screen */
+.sheet {
+  width: min(92vw, 360px);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.sheet h2 {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-lg);
+}
+
+.sheet label,
+.settings-list label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--sp-3);
   color: var(--muted);
   font-size: var(--fs-sm);
+}
+
+.sheet select,
+.settings-list select {
+  min-height: var(--h-md);
+}
+
+.sheet-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
 }
 
 /* Board + side panel: side by side on wide screens, stacked on phones. */
@@ -239,7 +323,7 @@ select:focus-visible {
   position: relative;
   /* Never wider than the room left beside the side column (foldables, small tablets). The column is
      sized for the chart from the start, so the board never moves or resizes when a sideline opens. */
-  width: min(calc(100vh - 250px), 640px, calc(100vw - 468px));
+  width: min(calc(100vh - 250px), 640px, calc(100vw - 468px - var(--rail-w)));
   flex-shrink: 0;
 }
 
@@ -255,17 +339,6 @@ select:focus-visible {
   gap: var(--sp-3);
 }
 
-.settings {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  align-items: center;
-}
-
-.settings-toggle {
-  display: none;
-}
-
 /*
  * Phones (up to 760px) and portrait tablets / an unfolded foldable held upright (up to 1000px, taller than wide): the coach bubble above the board at a fixed height (so the board does not
  * jump), then the board sized so that bubble, board, status line, buttons and navigation fit one
@@ -276,10 +349,6 @@ select:focus-visible {
     padding: 6px 12px;
     gap: 6px 8px;
     flex-wrap: nowrap;
-  }
-
-  .top.open {
-    flex-wrap: wrap;
   }
 
   .top h1 {
@@ -295,33 +364,26 @@ select:focus-visible {
     padding: 6px 8px;
   }
 
-  .top.open .controls {
-    flex-wrap: wrap;
-  }
-
   .controls {
     flex: 1;
     justify-content: flex-end;
   }
 
-  .controls > button,
-  .settings-toggle {
+  .controls > button {
     min-height: var(--h-sm);
   }
 
-  .settings-toggle {
-    display: inline-block;
-  }
-
-  .settings {
+  /* No rail: the menu in the header opens Play, Game review and Settings. */
+  .rail {
     display: none;
-    order: 5; /* under the buttons */
-    width: 100%;
-    justify-content: flex-start;
   }
 
-  .top.open .settings {
-    display: flex;
+  .menu-phone {
+    display: block;
+  }
+
+  :root {
+    --rail-w: 0px; /* no rail: the board and the full screens use the whole width */
   }
 
   .layout {
@@ -886,12 +948,15 @@ button.primary {
 
 /* Game review: a full screen of saved games (live and imported), PGN export and backup */
 .history {
-  width: 100vw;
+  position: fixed;
+  z-index: 20;
+  inset: 0 0 0 var(--rail-w);
+  width: auto;
   max-width: none;
-  height: 100dvh;
+  height: auto;
   max-height: none;
   margin: 0;
-  padding: 16px max(16px, calc((100vw - 640px) / 2));
+  padding: 16px max(16px, calc((100vw - var(--rail-w) - 640px) / 2));
   box-sizing: border-box;
   overflow-y: auto;
   border: 0;
