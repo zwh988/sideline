@@ -41,8 +41,8 @@ export interface ReviewOptions {
 
 /** How far a line is read for a tactic (all patterns, whatever the level). */
 const TACTIC_PLIES = 10;
-/** Moments kept per game, most costly first (Review is thorough, not endless). */
-export const MAX_MOMENTS = 8;
+/** Moments kept per game, most costly first: in practice every moment the analysis flags. */
+export const MAX_MOMENTS = 40;
 export const CURVE_CAP = 1000;
 const MATE_CP = 90000;
 

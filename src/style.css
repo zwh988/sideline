@@ -884,15 +884,24 @@ button.primary {
   border-color: var(--off-game);
 }
 
-/* History: saved games, PGN export and backup */
+/* Game review: a full screen of saved games (live and imported), PGN export and backup */
 .history {
-  width: min(92vw, 560px);
-  max-height: 86vh;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--panel);
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 16px max(16px, calc((100vw - 640px) / 2));
+  box-sizing: border-box;
+  overflow-y: auto;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
   color: var(--text);
+}
+
+.history[open] {
+  display: block;
 }
 
 .history::backdrop {
@@ -920,14 +929,59 @@ button.primary {
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 50vh;
-  overflow-y: auto;
-  padding-right: var(--sp-3); /* room for the scrollbar */
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
 }
 
 .history-list li {
-  padding: 12px 0;
-  border-top: 1px solid var(--border);
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--panel);
+}
+
+.history-list .h-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-2);
+}
+
+/* The whole card is one tap: it opens the review. */
+.history-list .h-card {
+  flex: 1;
+  min-height: var(--h-lg);
+  display: block;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  padding: var(--sp-2) var(--sp-3);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.history-list .h-card:hover {
+  background: color-mix(in srgb, var(--coach-accent) 10%, transparent);
+}
+
+.history-list .h-more {
+  min-width: var(--h-md);
+}
+
+.history-list .h-source {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.history-list .history-buttons {
+  margin-top: var(--sp-2);
+}
+
+.history-list .history-buttons[hidden] {
+  display: none;
 }
 
 .history-list p {
@@ -1043,14 +1097,52 @@ button.primary {
 
 .review-buttons {
   flex: 1 0 100%;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1.5fr;
+  display: flex;
+  align-items: center;
   gap: 6px;
 }
 
-.review-buttons button {
-  padding-inline: 6px;
+.review-buttons > .primary {
+  flex: none;
+  padding-inline: 10px;
   font-size: 0.92rem;
+}
+
+/* The timeline: one dot per moment, marked like the board's badges (task 1.12i) */
+.review-dots {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.review-dots[hidden] {
+  display: none;
+}
+
+.review-dots .dot {
+  min-width: var(--h-sm);
+  height: var(--h-sm);
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  border: 2px solid transparent;
+  color: var(--on-accent);
+  font-weight: 800;
+  font-size: var(--fs-sm);
+}
+
+.review-dots .dot.bad { background: var(--mark-bad); }
+.review-dots .dot.blunder { background: var(--mark-blunder); }
+.review-dots .dot.good { background: var(--mark-good); }
+.review-dots .dot.theirs {
+  background: transparent;
+  border-color: var(--game-line);
+  color: var(--text);
+}
+
+.review-dots .dot.current {
+  outline: 3px solid var(--text);
+  outline-offset: 1px;
 }
 
 /* The board and its promotion picker: the picker covers the board only */

@@ -88,12 +88,33 @@ export function moveLabels(game: SavedGame): string[] {
   return out;
 }
 
-/** The coach's opening words for a reviewed game. */
-export function reviewIntro(total: number, opponent: string | undefined, turning: string[] = []): string {
+/** The dot for a moment on the timeline: the same marks as the board's badges (? mistake, ?? blunder, ! good find). */
+export interface MomentDot {
+  glyph: '?' | '??' | '!' | '•';
+  tone: 'bad' | 'blunder' | 'good' | 'theirs';
+}
+
+/** Costs from this many centipawns are a blunder (the board's ?? badge). */
+export const BLUNDER_DOT_CP = 300;
+
+export function momentDot(m: Pick<SavedMoment, 'kind' | 'lossCp'>): MomentDot {
+  if (m.kind === 'found-tactic') return { glyph: '!', tone: 'good' };
+  if (m.kind === 'their-tactic' || m.kind === 'their-blunder') return { glyph: '•', tone: 'theirs' };
+  return (m.lossCp ?? 0) >= BLUNDER_DOT_CP ? { glyph: '??', tone: 'blunder' } : { glyph: '?', tone: 'bad' };
+}
+
+/**
+ * The coach's opening words for a reviewed game: how many moments, where the evaluation swung, and
+ * (when the record has them) what the moments and takebacks add up to, as at the end of a live game.
+ */
+export function reviewIntro(total: number, opponent: string | undefined, turning: string[] = [], summary = ''): string {
   const vs = opponent ? ` against ${opponent}` : '';
   const swings = turning.length ? ` The evaluation swung most at ${turning.join(', ')}.` : '';
-  if (!total) return `Here is your game${vs}. I found no moments to look at in it.${swings} Step through the moves with the arrows, or try a sideline from any position.`;
-  return `Here is your game${vs}. I found ${total} moment${total === 1 ? '' : 's'} worth a look.${swings} Tap Moment › to go through them, or step through the moves with the arrows.`;
+  // The count is already said above, so the summary starts after it.
+  const rest = summary.replace(/^\d+ moments?\.\s*/, '');
+  const sum = rest ? ` ${rest}` : '';
+  if (!total) return `Here is your game${vs}. I found no moments to look at in it.${swings}${sum} Step through the moves with the arrows, or try a sideline from any position.`;
+  return `Here is your game${vs}. I found ${total} moment${total === 1 ? '' : 's'} worth a look.${swings}${sum} Tap a dot below to go through them, or step through the moves with the arrows.`;
 }
 
 /**

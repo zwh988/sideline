@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BAD_MOVE_PGN } from './import-fixtures';
 import { parseGame, toSavedGame } from './pgnimport';
-import { momentUniverses, mergeAnalysis, moveLabels, playedSan, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, turningPoints } from './review';
+import { momentDot, momentUniverses, mergeAnalysis, moveLabels, playedSan, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, turningPoints } from './review';
 import { SCOTCH_FEN } from './import-fixtures';
 import type { SavedMoment } from './store';
 
@@ -82,5 +82,23 @@ describe('momentUniverses', () => {
     expect(momentUniverses({ ...mistake, kind: 'missed-tactic', line: ['a1a2', 'a8a7'] }).map((u) => u.label)).toEqual(['What happened', 'The tactic']);
     expect(momentUniverses({ ...mistake, kind: 'found-tactic', line: ['d5c7'] })).toEqual([{ label: 'What happened', ucis: ['d5c7'] }]);
     expect(momentUniverses({ ...mistake, kind: 'their-blunder', better: 'h2h3', line: ['x1x2'] })[1]).toEqual({ label: 'What they should have played', ucis: ['h2h3'] });
+  });
+});
+
+describe('the timeline dots', () => {
+  it('marks moments like the board badges', () => {
+    expect(momentDot({ kind: 'mistake', lossCp: 150 })).toEqual({ glyph: '?', tone: 'bad' });
+    expect(momentDot({ kind: 'mistake', lossCp: 450 })).toEqual({ glyph: '??', tone: 'blunder' });
+    expect(momentDot({ kind: 'missed-tactic', lossCp: undefined })).toEqual({ glyph: '?', tone: 'bad' });
+    expect(momentDot({ kind: 'found-tactic' })).toEqual({ glyph: '!', tone: 'good' });
+    expect(momentDot({ kind: 'their-tactic' }).tone).toBe('theirs');
+    expect(momentDot({ kind: 'their-blunder' }).tone).toBe('theirs');
+  });
+
+  it('the intro carries the game summary', () => {
+    const text = reviewIntro(3, undefined, [], '3 moments. You took back 2 moves, both on loose pieces.');
+    expect(text).toContain('You took back 2 moves, both on loose pieces.');
+    expect(text).toContain('Tap a dot below');
+    expect(text).not.toContain('3 moments.'); // the count is already said once
   });
 });

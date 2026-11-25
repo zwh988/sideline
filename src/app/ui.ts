@@ -14,7 +14,7 @@ import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
-import { momentUniverses, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
+import { KIND_LABEL, momentDot, momentUniverses, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
 import { reviewGame } from '../coach/review';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
@@ -251,7 +251,7 @@ export class App {
           </label>
           </div>
           <button id="new-game">New game</button>
-          <button id="history-open">History</button>
+          <button id="history-open">Game review</button>
           <div class="menu-wrap">
             <button id="more" class="more" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="More">⋯</button>
             <div id="more-menu" class="menu more-menu" role="menu" hidden>
@@ -282,8 +282,7 @@ export class App {
             <span id="review-text"></span>
             <svg id="review-strip" class="review-strip" viewBox="0 0 300 44" preserveAspectRatio="none" role="img" aria-label="The evaluation through the game. Tap to jump to a move." hidden></svg>
             <div class="review-buttons">
-              <button id="review-prev">‹ Moment</button>
-              <button id="review-next">Moment ›</button>
+              <div id="review-dots" class="review-dots" role="group" aria-label="Moments in this game"></div>
               <button id="review-exit" class="primary">Back to my game</button>
             </div>
           </div>
@@ -292,8 +291,8 @@ export class App {
             <button id="back-to-game" class="primary">Back to game</button>
           </div>
         </div>
-        <dialog id="history" class="history" aria-label="Your games">
-          <div class="history-head"><h2>Your games</h2><button id="history-close" class="ghost">Close</button></div>
+        <dialog id="history" class="history" aria-label="Game review">
+          <div class="history-head"><h2>Game review</h2><button id="history-close" class="ghost">Back to play</button></div>
           <p id="history-note" class="history-note" aria-live="polite">Saved on this device only.</p>
           <ol id="history-list" class="history-list"></ol>
           <div class="history-foot">
@@ -335,7 +334,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -370,8 +369,6 @@ export class App {
       (this.el.history as HTMLDialogElement).close();
       this.importDialog.open();
     });
-    this.el['review-prev'].addEventListener('click', () => this.stepMoment(-1));
-    this.el['review-next'].addEventListener('click', () => this.stepMoment(1));
     this.el['review-exit'].addEventListener('click', () => void this.exitReview());
     this.el.backup.addEventListener('click', () => this.backup());
     this.el.restore.addEventListener('click', () => this.el['restore-file'].click());
@@ -390,6 +387,8 @@ export class App {
       createAnalyst: () => Analyst.create(),
       onChange: () => this.renderHistory(),
     });
+    // Import opens from the Game review screen, so closing it returns there.
+    this.root.querySelector('dialog.import')?.addEventListener('close', () => this.openHistory());
 
     // The same four buttons step through a sideline, one move per tap.
     this.el['nav-start'].addEventListener('click', () => (this.sideline ? this.sideStep('start') : this.navigate(() => this.nav.start())));
@@ -1129,7 +1128,7 @@ export class App {
     this.record = saved;
     const labels = moveLabels(saved);
     const turning = turningPoints(saved.curve).map((t) => labels[t.ply - 1]);
-    this.reviewing = { moments, index: -1, opponent, curve: saved.curve, say: { ply: 0, text: reviewIntro(moments.length, opponent, turning), offerAnswer: false } };
+    this.reviewing = { moments, index: -1, opponent, curve: saved.curve, say: { ply: 0, text: reviewIntro(moments.length, opponent, turning, gameSummary(saved)), offerAnswer: false } };
     const level = levelInfo(saved.level);
     this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => new Coach(a, level, saved.playerColor === 'white' ? 'w' : 'b', REVIEW, book));
     this.nav.reset(game.moves.length);
@@ -1181,7 +1180,7 @@ export class App {
       r.curve = saved.curve;
       this.log.clear();
       for (const e of saved.remarks) this.log.add(e.ply, e.remark);
-      r.say = { ply: 0, text: reviewIntro(r.moments.length, r.opponent, turningPoints(saved.curve).map((t) => labels[t.ply - 1])), offerAnswer: false };
+      r.say = { ply: 0, text: reviewIntro(r.moments.length, r.opponent, turningPoints(saved.curve).map((t) => labels[t.ply - 1]), gameSummary(saved)), offerAnswer: false };
       this.status('Reviewing a saved game.');
     } catch (e) {
       console.error(e);
@@ -1209,11 +1208,33 @@ export class App {
     return !!say?.offerAnswer && say.ply === this.nav.ply;
   }
 
-  /** Goes to the next or previous moment: the position before the move, with the question. */
-  private stepMoment(delta: number): void {
+  /** The timeline: one dot per moment, marked like the board's badges; a dot opens that moment with the question first. */
+  private renderDots(r: { moments: SavedMoment[]; index: number }, busy: boolean): void {
+    const box = this.el['review-dots'];
+    box.hidden = !r.moments.length;
+    box.replaceChildren(
+      ...r.moments.map((m, i) => {
+        const dot = momentDot(m);
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `dot ${dot.tone}${i === r.index ? ' current' : ''}`;
+        b.textContent = dot.glyph;
+        b.disabled = busy;
+        const label = moveLabels(this.record!)[m.ply - 1];
+        b.setAttribute('aria-label', `Moment ${i + 1} of ${r.moments.length}: ${KIND_LABEL[m.kind]}, ${label}`);
+        b.title = `${label} · ${KIND_LABEL[m.kind]}`;
+        if (i === r.index) b.setAttribute('aria-current', 'true');
+        b.addEventListener('click', () => this.gotoMoment(i));
+        return b;
+      }),
+    );
+  }
+
+  /** Goes to a moment: the position before the move, with the question. */
+  private gotoMoment(index: number): void {
     const r = this.reviewing;
     if (!r || this.sideline || !r.moments.length) return;
-    r.index = Math.min(Math.max(r.index + delta, 0), r.moments.length - 1);
+    r.index = Math.min(Math.max(index, 0), r.moments.length - 1);
     const m = r.moments[r.index];
     r.say = { ply: m.ply - 1, text: reviewPrompt(this.record!, m), offerAnswer: true };
     this.navigate(() => this.nav.goTo(m.ply - 1));
@@ -1240,8 +1261,7 @@ export class App {
     this.el['review-text'].textContent = busy
       ? `Looking at the game… move ${busy.done} of ${busy.total}`
       : reviewBarText(r.index, r.moments.length, revealed, m);
-    (this.el['review-prev'] as HTMLButtonElement).disabled = !!busy || r.index <= 0;
-    (this.el['review-next'] as HTMLButtonElement).disabled = !!busy || r.index >= r.moments.length - 1;
+    this.renderDots(r, !!busy);
     this.renderStrip();
     if (busy) {
       box.hidden = true;
@@ -1307,7 +1327,7 @@ export class App {
   private openHistory(): void {
     this.save(); // the game in progress shows up with its latest moves
     this.renderHistory();
-    this.el['history-note'].textContent = 'Saved on this device only. Back up to move them elsewhere.';
+    this.el['history-note'].textContent = 'Pick a game to review it with the coach. Saved on this device only; back up to move them elsewhere.';
     (this.el.history as HTMLDialogElement).showModal();
   }
 
@@ -1318,13 +1338,17 @@ export class App {
     if (!games.length) {
       const li = document.createElement('li');
       li.className = 'history-empty';
-      li.textContent = 'No games yet. Play a move and it is saved here.';
+      li.textContent = 'No games yet. Play a move with the coach, or import your games from Chess.com or Lichess, and they show up here to review.';
       list.append(li);
       return;
     }
     for (const g of games) {
       const li = document.createElement('li');
       li.dataset.id = g.id;
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'h-card';
+      card.dataset.action = 'review';
       const main = document.createElement('div');
       main.className = 'h-main';
       const title = document.createElement('span');
@@ -1342,12 +1366,11 @@ export class App {
         const im = g.imported;
         const opponent = g.playerColor === 'white' ? im.black : im.white;
         const result = !g.result ? 'unfinished' : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'you lost') : 'draw';
-        const from = { pgn: 'pasted', 'chess.com': 'Chess.com', lichess: 'Lichess' }[im.source];
         title.textContent = `${date} · ${side} vs ${opponent}`;
         chip.textContent = result;
         chip.classList.toggle('win', result === 'you won');
         chip.classList.toggle('loss', result === 'you lost');
-        meta.textContent = `Imported (${from}) · ${moveCount}${moments}${takebacks}`;
+        meta.textContent = `${moveCount}${moments}${takebacks}`;
       } else {
         const result = !g.result ? (g.id === this.record?.id ? 'in progress' : 'unfinished') : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'coach won') : 'draw';
         title.textContent = `${date} · ${side}`;
@@ -1358,16 +1381,31 @@ export class App {
       }
       const buttons = document.createElement('div');
       buttons.className = 'history-buttons';
-      for (const [action, label] of [['review', 'Review'], ['copy', 'Copy PGN'], ['download', 'Download PGN'], ['delete', 'Delete']] as const) {
+      buttons.hidden = true;
+      for (const [action, label] of [['copy', 'Copy PGN'], ['download', 'Download PGN'], ['delete', 'Delete']] as const) {
         const b = document.createElement('button');
         b.dataset.action = action;
         b.textContent = label;
-        // Review is the main action of a row; the rest are quiet, and Delete says what it does.
-        b.className = action === 'review' ? 'primary' : action === 'delete' ? 'ghost danger' : 'ghost';
+        // The card itself opens the review; these are quiet, and Delete says what it does.
+        b.className = action === 'delete' ? 'ghost danger' : 'ghost';
         buttons.append(b);
       }
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'ghost h-more';
+      more.dataset.action = 'more';
+      more.textContent = '⋯';
+      more.setAttribute('aria-label', 'More: copy, download or delete this game');
+      more.setAttribute('aria-expanded', 'false');
+      const tag = document.createElement('span');
+      tag.className = 'h-source';
+      tag.textContent = g.imported ? { pgn: 'Pasted', 'chess.com': 'Chess.com', lichess: 'Lichess' }[g.imported.source] : 'With the coach';
       main.append(title, chip);
-      li.append(main, meta, buttons);
+      card.append(main, meta, tag);
+      const row = document.createElement('div');
+      row.className = 'h-row';
+      row.append(card, more);
+      li.append(row, buttons);
       list.append(li);
     }
   }
@@ -1381,6 +1419,10 @@ export class App {
     if (btn.dataset.action === 'review') {
       (this.el.history as HTMLDialogElement).close();
       void this.openReview(game);
+    } else if (btn.dataset.action === 'more') {
+      const panel = btn.closest('li')!.querySelector<HTMLElement>('.history-buttons')!;
+      panel.hidden = !panel.hidden;
+      btn.setAttribute('aria-expanded', String(!panel.hidden));
     } else if (btn.dataset.action === 'copy') {
       navigator.clipboard
         .writeText(gameToPgn(game))

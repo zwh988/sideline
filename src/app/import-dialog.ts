@@ -24,7 +24,7 @@ export interface ImportDeps {
   level: () => number;
   /** A fresh engine for the analysis; the dialog terminates it when it is done. */
   createAnalyst: () => Promise<Analyst>;
-  /** Games were saved (the History list is out of date). */
+  /** Games were saved (the Game review list is out of date). */
   onChange: () => void;
   fetcher?: Fetch;
 }
@@ -38,7 +38,7 @@ interface Candidate {
 }
 
 const NAMES_KEY = 'sideline.import.names';
-const SERVICES = { lichess: 'Lichess', 'chess.com': 'Chess.com' } as const;
+const SERVICES = { 'chess.com': 'Chess.com', lichess: 'Lichess' } as const;
 /** Games fetched from a service, and how many start ticked (analysis takes a while). */
 const FETCH_COUNT = 20;
 const TICKED = 5;
@@ -88,8 +88,8 @@ export class ImportDialog {
         <h3>Or get your latest games</h3>
         <div class="import-row">
           <select data-id="service" aria-label="Service">
-            <option value="lichess">Lichess</option>
             <option value="chess.com">Chess.com</option>
+            <option value="lichess">Lichess</option>
           </select>
           <input data-id="user" type="text" placeholder="Your username" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Your username">
           <button data-id="fetch">Get my games</button>
@@ -362,7 +362,7 @@ export class ImportDialog {
           ? games
             ? `Cancelled. ${saved}.`
             : 'Cancelled. Nothing was saved.'
-          : `${saved}. You'll find ${games === 1 ? 'it' : 'them'} in History.`,
+          : `${saved}. You'll find ${games === 1 ? 'it' : 'them'} in Game review.`,
     );
   }
 }
