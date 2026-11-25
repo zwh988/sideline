@@ -888,17 +888,17 @@ export class App {
   private face?: Mood;
 
   /** The coach's face follows the mood; a mistake or blunder makes it start (the signal to look at the board). */
-  private setMood(mood: Mood, alert?: 'mistake' | 'blunder'): void {
+  private setMood(mood: Mood, alert?: 'mistake' | 'blunder' | 'opportunity'): void {
     const p = this.el.portrait;
     p.dataset.mood = mood;
     if (this.face !== mood) {
       p.innerHTML = faceSvg(mood);
       this.face = mood;
     }
-    p.classList.remove('alert', 'alert-big');
+    p.classList.remove('alert', 'alert-big', 'alert-good');
     if (alert) {
       void p.offsetWidth; // restart the animation
-      p.classList.add(alert === 'blunder' ? 'alert-big' : 'alert');
+      p.classList.add(alert === 'blunder' ? 'alert-big' : alert === 'opportunity' ? 'alert-good' : 'alert');
     }
   }
 
@@ -1010,12 +1010,33 @@ export class App {
     const remark = joinRemarks(narration, await coach.onPlayerTurn(this.game.fen, ply));
     if (!this.stale(id, ply) && remark) {
       this.say(remark);
+      if (remark.offerSideline && this.mode.prompts) this.signalOpportunity();
       if (remark.offerSideline && this.mode.prompts && this.mode.sidelines) this.offerSideline();
     }
   }
 
+  /**
+   * A tactic is available: it does not stop the player like a mistake does, but it must not be missed. The coach
+   * perks up with a green pop, the board's edge pulses twice, and the bubble keeps a green edge until the next move
+   * (that edge is also the signal for people who turn motion off).
+   */
+  private signalOpportunity(): void {
+    this.setMood('pleased', 'opportunity');
+    const area = this.el['board-area'];
+    area.classList.remove('opportunity');
+    void area.offsetWidth; // restart the animation
+    area.classList.add('opportunity');
+    this.el['bubble-box'].classList.add('opportunity');
+  }
+
+  private clearOpportunity(): void {
+    this.el['board-area'].classList.remove('opportunity');
+    this.el['bubble-box'].classList.remove('opportunity');
+  }
+
   private async onPlayerMove(from: Square, to: Square): Promise<void> {
     if (this.sideline) return this.onSidelineMove(from, to);
+    this.clearOpportunity();
     const id = this.gameId;
     let promotion = '';
     if (this.game.isPromotion(from, to)) {
