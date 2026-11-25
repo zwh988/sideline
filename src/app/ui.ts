@@ -956,8 +956,8 @@ export class App {
         while (choice === 'show') {
           if (moment) moment.showedMe = true;
           // From the position before the move, with its universes: what happens now, and what the engine wanted.
-          if (moment?.answer?.length) {
-            await this.openSideline(moment.fen, 'Gray is what happened, amber is what the engine wanted. Step through with the arrows, or try your own move. Nothing here changes your game; tap Back to game when you are ready.', this.game.moves.length - 1, momentUniverses(moment));
+          if (moment) {
+            await this.openSideline(moment.fen, 'This is the position before your move. The gray line is what happened; the arrows are the moves worth a look. Play any move to try it. Nothing here changes your game; tap Back to game when you are ready.', this.game.moves.length - 1, momentUniverses(moment));
           } else {
             await this.openSideline(this.game.fen, 'Here are the moves I could play. Tap one to see it. Nothing here changes your game; tap Back to game when you are ready.');
           }
