@@ -16,7 +16,7 @@ import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
 import { KIND_LABEL, momentDot, momentUniverses, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
 import { reviewGame } from '../coach/review';
-import { Game, type Color } from './game';
+import { Game, resultOf, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { MODES, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
 import { materialOf } from './material';
@@ -293,6 +293,7 @@ export class App {
             <div class="board-frame">
               <div id="board" class="cg-wrap"></div>
               <div id="promotion" class="promotion" hidden></div>
+              <div id="board-note" class="board-note" aria-live="assertive" hidden></div>
             </div>
             <div id="cap-bottom" class="captured" role="img"></div>
           </div>
@@ -360,7 +361,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -662,6 +663,7 @@ export class App {
       this.viewShapes = false;
     }
     this.renderMaterial(shown.fen);
+    this.renderEndSignals(shown.fen, !nav.viewing && !this.reviewing && g.result.over);
     this.renderMoves();
     this.renderBubble();
     this.renderNav(shown.lastMove?.san);
@@ -710,6 +712,80 @@ export class App {
     };
     strip(this.el['cap-bottom'], bottom);
     strip(this.el['cap-top'], bottom === 'w' ? 'b' : 'w');
+  }
+
+  private signalKey = '';
+  private signalTimer?: number;
+
+  /**
+   * Check and the end of a game, made hard to miss (everywhere a position is shown). A new check rings the king,
+   * shakes the board and pops a "Check" tag for a moment; checkmate dims the board and puts the result on it
+   * until the position changes. `final`: this is the live game's last position, so New game and Review are offered.
+   * Each position signals once (the same position redrawn does nothing new).
+   */
+  private renderEndSignals(fen: string, final: boolean): void {
+    const area = this.el['board-area'];
+    const note = this.el['board-note'];
+    const c = new Chess(fen);
+    const res = resultOf(c);
+    const mate = c.isCheckmate();
+    const draw = res.over && !mate;
+    const check = c.inCheck() && !mate;
+    const kind = mate ? 'mate' : draw && final ? 'draw' : check ? 'check' : '';
+    const key = `${fen}|${kind}|${final}`;
+    area.classList.toggle('ended', kind === 'mate' || kind === 'draw');
+    if (key === this.signalKey) return;
+    this.signalKey = key;
+    window.clearTimeout(this.signalTimer);
+    area.classList.remove('checking', 'shake');
+    note.replaceChildren();
+    note.className = 'board-note';
+    note.hidden = !kind;
+    if (!kind) return;
+    note.classList.add(kind);
+    if (kind === 'check') {
+      void area.offsetWidth; // restart the animations
+      area.classList.add('checking', 'shake');
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = 'Check';
+      note.append(tag);
+      this.signalTimer = window.setTimeout(() => {
+        note.hidden = true;
+        area.classList.remove('checking', 'shake');
+      }, 1800);
+      return;
+    }
+    const card = document.createElement('div');
+    card.className = 'card';
+    const title = document.createElement('strong');
+    const sub = document.createElement('span');
+    if (mate) {
+      const winner = res.over && res.winner ? res.winner : undefined;
+      title.textContent = 'Checkmate';
+      sub.textContent = !winner ? '' : this.reviewing || this.sideline ? `${winner === 'white' ? 'White' : 'Black'} wins` : winner === this.game.playerColor ? 'You win' : 'The coach wins';
+    } else {
+      title.textContent = 'Draw';
+      sub.textContent = res.over ? `by ${res.reason}` : '';
+    }
+    card.append(title, sub);
+    if (final) {
+      const buttons = document.createElement('div');
+      buttons.className = 'buttons';
+      const again = document.createElement('button');
+      again.className = 'primary';
+      again.textContent = 'New game';
+      again.addEventListener('click', () => this.openNewGameSheet());
+      const review = document.createElement('button');
+      review.textContent = 'Review';
+      review.addEventListener('click', () => {
+        const rec = this.record;
+        if (rec) void this.openReview(this.store.get(rec.id) ?? rec);
+      });
+      buttons.append(again, review);
+      card.append(buttons);
+    }
+    note.append(card);
   }
 
   /** A button that opens a small menu under it; any tap outside, Esc or choosing an item closes it. */
@@ -1819,6 +1895,7 @@ export class App {
       movable: { color: over ? undefined : turn, dests: over ? new Map() : (sl.dests as Map<Key, Key[]>) },
     });
     this.renderMaterial(cur.fen); // the material of the sideline's position, so the strips are never missing
+    this.renderEndSignals(cur.fen, false);
     const ghosts = this.ghosts(sl);
     const at = drawChart(
       this.el.chart as unknown as SVGSVGElement,
