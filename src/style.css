@@ -45,6 +45,7 @@
   --q-other: #d4553a;
   --game-line: #8d887c;
   --ink-black: #2c2c2a; /* fill of a move by Black in the chart */
+  --ink-white: #f4f1e8; /* fill of White's material chip */
 
   /* Type */
   --font-ui: 'Nunito', system-ui, sans-serif;
@@ -238,7 +239,7 @@ select:focus-visible {
   position: relative;
   /* Never wider than the room left beside the side column (foldables, small tablets). The column is
      sized for the chart from the start, so the board never moves or resizes when a sideline opens. */
-  width: min(calc(100vh - 190px), 640px, calc(100vw - 468px));
+  width: min(calc(100vh - 250px), 640px, calc(100vw - 468px));
   flex-shrink: 0;
 }
 
@@ -880,7 +881,7 @@ button.primary {
 }
 
 .board-area.sidelining .cap-plus {
-  color: var(--off-game);
+  border-color: var(--off-game);
 }
 
 /* History: saved games, PGN export and backup */
@@ -1187,33 +1188,53 @@ body:has(.board-area.sidelining) .top {
   position: relative;
 }
 
+/* A captured piece is about 70% of a square (8.75% of the board's width), never below 18px. */
+.board-stack {
+  container-type: inline-size;
+}
+
 .captured {
+  --cap: clamp(18px, 8.75cqw, 56px);
   display: flex;
   align-items: center;
   gap: var(--sp-1);
-  height: 24px;
+  height: calc(var(--cap) + 6px);
   padding: 0 2px;
 }
 
 .cap-group {
   display: inline-flex;
-  margin-right: 4px;
+  margin-right: 6px;
 }
 
 .cap-group img {
-  width: 20px;
-  height: 20px;
-  margin-left: -9px;
+  width: var(--cap);
+  height: var(--cap);
+  margin-left: calc(var(--cap) * -0.45);
 }
 
 .cap-group img:first-child {
   margin-left: 0;
 }
 
+/* The advantage: a bold chip in the colour of whoever is ahead. */
 .cap-plus {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--muted);
+  padding: 0 0.5em;
+  border-radius: var(--r-pill);
+  font-size: max(var(--fs-sm), calc(var(--cap) * 0.6));
+  font-weight: 800;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+}
+
+.cap-plus.lead-w {
+  background: var(--ink-white);
+  color: var(--ink-black);
+}
+
+.cap-plus.lead-b {
+  background: var(--ink-black);
+  color: var(--ink-white);
 }
 
 /* Menus: the coach's Ask menu and the header's More menu */

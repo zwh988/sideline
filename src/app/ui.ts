@@ -628,7 +628,7 @@ export class App {
       }
       if (ahead > 0) {
         const plus = document.createElement('span');
-        plus.className = 'cap-plus';
+        plus.className = `cap-plus lead-${side}`;
         plus.textContent = `+${ahead}`;
         el.append(plus);
       }
