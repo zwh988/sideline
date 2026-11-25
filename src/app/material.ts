@@ -7,6 +7,9 @@ const ORDER: PieceSymbol[] = ['q', 'r', 'b', 'n', 'p'];
 const GLYPH = { w: { q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' }, b: { q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' } } as const;
 
 export interface Material {
+  /** The same pieces as lists (queen first), for drawing: `capturedByWhite` = Black's missing pieces. */
+  capturedByWhite: PieceSymbol[];
+  capturedByBlack: PieceSymbol[];
   /** Pieces each side has lost, as glyphs (missing from the standard set; promotions never count as lost). */
   lostByWhite: string;
   lostByBlack: string;
@@ -25,9 +28,10 @@ export function materialOf(fen: string): Material {
       balance += sq.color === 'w' ? VALUE[sq.type] : -VALUE[sq.type];
     }
   }
+  const missing = (c: 'w' | 'b') => ORDER.flatMap((p) => Array<PieceSymbol>(Math.max(0, FULL[p] - (have[c][p] ?? 0))).fill(p));
   const lost = (c: 'w' | 'b') =>
     ORDER.map((p) => GLYPH[c][p as keyof (typeof GLYPH)['w']].repeat(Math.max(0, FULL[p] - (have[c][p] ?? 0)))).join('');
-  return { lostByWhite: lost('w'), lostByBlack: lost('b'), balance };
+  return { capturedByWhite: missing('b'), capturedByBlack: missing('w'), lostByWhite: lost('w'), lostByBlack: lost('b'), balance };
 }
 
 /** "You +3" / "Level" / "Coach +2" for the player's colour. */

@@ -88,7 +88,7 @@ button:disabled {
 .board-area {
   position: relative;
   /* Never wider than the room left beside the 300px side column (foldables, small tablets). */
-  width: min(calc(100vh - 90px), 640px, calc(100vw - 348px));
+  width: min(calc(100vh - 140px), 640px, calc(100vw - 348px));
   flex-shrink: 0;
 }
 
@@ -187,7 +187,7 @@ button:disabled {
     align-items: stretch;
     gap: 6px;
     padding: 0 0 12px;
-    --board: clamp(280px, calc(100dvh - 330px), 100vw);
+    --board: clamp(280px, calc(100dvh - 318px), 100vw);
   }
 
   /* The wrappers disappear so that each piece can be ordered on its own. */
@@ -254,17 +254,6 @@ button:disabled {
     margin: 0 12px;
   }
 
-  .actions {
-    order: 5;
-    margin: 0 12px;
-    flex-wrap: nowrap;
-  }
-
-  .actions button {
-    flex: 1;
-    padding: 6px 4px;
-  }
-
   .nav {
     order: 6;
     margin: 0 12px;
@@ -272,12 +261,6 @@ button:disabled {
 
   .nav button {
     min-height: 44px;
-  }
-
-  .material {
-    order: 7;
-    margin: 0 12px;
-    font-size: 0.85rem;
   }
 
   /* Banners with a Back button sit right under the board, where the thumb is. */
@@ -288,7 +271,7 @@ button:disabled {
     margin: 0 12px;
   }
 
-  .layout:has(.sidelining) .actions,
+  .layout:has(.sidelining) #ask,
   .layout:has(.sidelining) .status,
   .chart-key {
     display: none; /* disabled in a sideline anyway; the room goes to the chart */
@@ -361,6 +344,7 @@ button:disabled {
 
 /* Coach: portrait placeholder (initial in a circle) and speech bubble */
 .coach {
+  position: relative;
   display: flex;
   gap: 10px;
   align-items: flex-start;
@@ -438,11 +422,6 @@ button:disabled {
 
 .bubble p {
   margin: 4px 0 0;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
 }
 
 /* Move list: two columns, numbered by the <ol> */
@@ -642,15 +621,6 @@ button.primary {
   color: #fff;
 }
 
-/* Actions: tap targets of 44px or more, wrapping on narrow screens */
-.actions {
-  flex-wrap: wrap;
-}
-
-.actions button {
-  min-height: 44px;
-}
-
 #board {
   touch-action: manipulation;
   /* A tap on the board must not flash or select the whole board on phones. */
@@ -668,12 +638,6 @@ button.primary {
 .choices button,
 #new-game {
   min-height: 44px;
-}
-
-.material {
-  margin: 8px 16px 0;
-  font-size: 0.95rem;
-  color: var(--muted);
 }
 
 /* Sideline ("Try a sideline"): a banner under the board and a tinted board border, always visible */
@@ -748,7 +712,8 @@ button.primary {
   box-shadow: 0 0 0 5px #c77d1a;
 }
 
-.board-area.sidelining .material {
+.board-area.sidelining .captured,
+.board-area.sidelining #takeback {
   display: none;
 }
 
@@ -1026,4 +991,112 @@ button.primary {
   .mark-ring, .mark-badge, .portrait.alert, .portrait.alert-big {
     animation: none;
   }
+}
+
+/* Captured pieces: one row above and one below the board, no words; +N for whoever is ahead (task 1.12c) */
+.board-frame {
+  position: relative;
+}
+
+.captured {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 2px;
+}
+
+.cap-group {
+  display: inline-flex;
+  margin-right: 4px;
+}
+
+.cap-group img {
+  width: 20px;
+  height: 20px;
+  margin-left: -9px;
+}
+
+.cap-group img:first-child {
+  margin-left: 0;
+}
+
+.cap-plus {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Menus: the coach's Ask menu and the header's More menu */
+.menu-wrap {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.4);
+}
+
+.menu[hidden] {
+  display: none;
+}
+
+.menu button {
+  min-height: 44px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+}
+
+.more-menu {
+  right: 0;
+  top: calc(100% + 4px);
+}
+
+.more {
+  min-width: 40px;
+  min-height: 40px;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.coach-face {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.coach-face .portrait {
+  cursor: pointer;
+}
+
+.ask {
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  transform: translateX(-50%);
+  z-index: 2;
+  min-height: 0;
+  padding: 2px 12px;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  background: var(--panel);
+  white-space: nowrap;
+}
+
+.ask-menu {
+  left: 0;
+  top: 100%;
+}
+
+.nav .undo {
+  flex: 2;
+  font-size: 1rem;
 }

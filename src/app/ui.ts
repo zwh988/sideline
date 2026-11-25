@@ -19,7 +19,7 @@ import { reviewGame } from '../coach/review';
 import { Game, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { MODES, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
-import { balanceText, materialOf } from './material';
+import { materialOf } from './material';
 import { gameSummary } from './summary';
 import { Navigation, RemarkLog, plyLabel } from './navigation';
 import { createOpponent, type Opponent } from './opponent';
@@ -228,23 +228,32 @@ export class App {
           </div>
           <button id="new-game">New game</button>
           <button id="history-open">History</button>
-          <button id="settings-toggle" class="settings-toggle" aria-expanded="false" aria-controls="settings">Settings</button>
+          <div class="menu-wrap">
+            <button id="more" class="more" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="More">⋯</button>
+            <div id="more-menu" class="menu more-menu" role="menu" hidden>
+              <button id="flip" role="menuitem">Flip board</button>
+              <button id="settings-toggle" class="settings-toggle" role="menuitem" aria-expanded="false" aria-controls="settings">Settings</button>
+            </div>
+          </div>
         </div>
       </header>
       <main class="layout">
         <div id="board-area" class="board-area">
           <div class="board-stack">
-            <div id="board" class="cg-wrap"></div>
-            <div id="promotion" class="promotion" hidden></div>
+            <div id="cap-top" class="captured" role="img"></div>
+            <div class="board-frame">
+              <div id="board" class="cg-wrap"></div>
+              <div id="promotion" class="promotion" hidden></div>
+            </div>
+            <div id="cap-bottom" class="captured" role="img"></div>
           </div>
-          <p id="material" class="material" aria-label="Captured material"></p>
           <div class="nav" role="group" aria-label="Move navigation">
             <button id="nav-start" aria-label="First position">«</button>
             <button id="nav-back" aria-label="Previous move">‹</button>
             <button id="nav-forward" aria-label="Next move">›</button>
             <button id="nav-live" aria-label="Latest position">»</button>
+            <button id="takeback" class="undo">↶ Take back</button>
           </div>
-          <div id="review-bar"
           <div id="review-bar" class="viewbar reviewbar" hidden>
             <span id="review-text"></span>
             <svg id="review-strip" class="review-strip" viewBox="0 0 300 44" preserveAspectRatio="none" role="img" aria-label="The evaluation through the game. Tap to jump to a move." hidden></svg>
@@ -272,8 +281,15 @@ export class App {
         </dialog>
         <aside class="side">
           <div class="coach">
-            <div id="portrait" class="portrait" aria-hidden="true">
-              ${faceSvg('neutral')}
+            <div class="coach-face">
+              <div id="portrait" class="portrait" aria-hidden="true">
+                ${faceSvg('neutral')}
+              </div>
+              <button id="ask" class="ask" aria-haspopup="menu" aria-expanded="false" aria-controls="ask-menu">Ask ▾</button>
+            </div>
+            <div id="ask-menu" class="menu ask-menu" role="menu" hidden>
+              <button id="hint" role="menuitem">Hint</button>
+              <button id="sideline" role="menuitem">Try a sideline</button>
             </div>
             <div id="bubble-box" class="bubble">
               <div class="coach-name">${COACH_NAME} <span id="mood" class="mood"></span></div>
@@ -291,18 +307,12 @@ export class App {
               <button id="sideline-exit" class="primary">Back to game</button>
             </div>
           </div>
-          <div class="actions">
-            <button id="hint">Hint</button>
-            <button id="sideline">Try a sideline</button>
-            <button id="takeback">Take back</button>
-            <button id="flip">Flip board</button>
-          </div>
           <ol id="moves" class="moves"></ol>
           <p class="credits">${this.theme.credits ?? ''}</p>
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -322,7 +332,12 @@ export class App {
     });
     this.el['bubble-box'].addEventListener('click', () => this.root.querySelector('.coach')!.classList.toggle('expanded'));
     this.root.querySelector('#new-game')!.addEventListener('click', () => void this.newGame());
-    this.root.querySelector('#flip')!.addEventListener('click', () => this.board.toggleOrientation());
+    this.root.querySelector('#flip')!.addEventListener('click', () => {
+      this.board.toggleOrientation();
+      this.renderMaterial(this.nav.viewing ? this.game.positionAt(this.nav.ply).fen : this.game.fen);
+    });
+    this.wireMenu('more', 'more-menu');
+    this.wireMenu('ask', 'ask-menu', this.el.portrait);
     this.el.takeback.addEventListener('click', () => void this.takeback());
     this.el.hint.addEventListener('click', () => void this.hint());
     this.el['history-open'].addEventListener('click', () => this.openHistory());
@@ -564,10 +579,65 @@ export class App {
   /** Pieces each side has captured, and the point balance (board only, no engine). */
   private renderMaterial(fen: string): void {
     const m = materialOf(fen);
-    const white = this.game.playerColor === 'white';
-    const mine = white ? m.lostByBlack : m.lostByWhite; // what I captured
-    const theirs = white ? m.lostByWhite : m.lostByBlack;
-    this.el.material.textContent = `You took ${mine || '–'} · ${this.reviewing ? 'Opponent' : 'Coach'} took ${theirs || '–'} · ${balanceText(m.balance, white ? 'w' : 'b')}`;
+    // The strip under the board belongs to the side at the bottom (it follows the board when it is flipped).
+    const bottom = this.board.state.orientation === 'white' ? 'w' : 'b';
+    const strip = (el: HTMLElement, side: 'w' | 'b') => {
+      const pieces = side === 'w' ? m.capturedByWhite : m.capturedByBlack; // what this side has taken
+      const taken = side === 'w' ? 'b' : 'w'; // the colour of those pieces
+      const ahead = side === 'w' ? m.balance : -m.balance;
+      el.replaceChildren();
+      for (const type of ['q', 'r', 'b', 'n', 'p']) {
+        const n = pieces.filter((p) => p === type).length;
+        if (!n) continue;
+        const group = document.createElement('span');
+        group.className = 'cap-group';
+        for (let i = 0; i < n; i++) {
+          const img = document.createElement('img');
+          img.src = `${this.themeBase}${this.theme.pieces.folder}/${taken}${type.toUpperCase()}.${this.theme.pieces.format}`;
+          img.alt = '';
+          group.append(img);
+        }
+        el.append(group);
+      }
+      if (ahead > 0) {
+        const plus = document.createElement('span');
+        plus.className = 'cap-plus';
+        plus.textContent = `+${ahead}`;
+        el.append(plus);
+      }
+      const who = side === (this.game.playerColor === 'white' ? 'w' : 'b') ? 'you' : this.reviewing ? 'the opponent' : 'the coach';
+      el.setAttribute('aria-label', pieces.length ? `Pieces taken by ${who}: ${pieces.length}${ahead > 0 ? `, ${ahead} points ahead` : ''}` : `${who[0].toUpperCase()}${who.slice(1)} has taken nothing`);
+    };
+    strip(this.el['cap-bottom'], bottom);
+    strip(this.el['cap-top'], bottom === 'w' ? 'b' : 'w');
+  }
+
+  /** A button that opens a small menu under it; any tap outside, Esc or choosing an item closes it. */
+  private wireMenu(buttonId: string, menuId: string, alsoOpenedBy?: HTMLElement): void {
+    const button = this.el[buttonId];
+    const menu = this.el[menuId];
+    const close = () => {
+      menu.hidden = true;
+      button.setAttribute('aria-expanded', 'false');
+    };
+    const toggle = (e: Event) => {
+      e.stopPropagation();
+      const open = menu.hidden;
+      for (const m of this.root.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
+      menu.hidden = !open;
+      button.setAttribute('aria-expanded', String(open));
+    };
+    button.addEventListener('click', toggle);
+    alsoOpenedBy?.addEventListener('click', toggle);
+    menu.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('button')) close();
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.hidden && !menu.contains(e.target as Node)) close();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !menu.hidden) close();
+    });
   }
 
   private shapesAt(ply: number): DrawShape[] {
