@@ -133,6 +133,34 @@ describe('Coach modes: the player move', () => {
     }
   });
 
+  it('marks the board: a badge on the moved piece, a ring on the piece in danger, a severity (Lesson)', async () => {
+    const r = await coach('lesson', SCOTCH_SCRIPT).onPlayerMove(SCOTCH, 'f1c4', 9);
+    // 5.Bc4?? loses the queen: the badge is on c4, the ring on the queen on d4 that Nxd4 takes.
+    const expected = (r?.moment?.lossCp ?? 0) >= 500 ? 'blunder' : 'mistake';
+    expect(r?.severity).toBe(expected);
+    expect(r?.marks).toEqual([
+      { square: 'c4', kind: expected === 'blunder' ? 'blunder' : 'bad' },
+      { square: 'd4', kind: 'ring' },
+    ]);
+    // Hung material below the level's mistake size is a slip.
+    const slip = await coach('lesson', hungScript(173)).onPlayerMove(HUNG, 'd3d4', 10);
+    expect(slip?.severity).toBe('slip');
+    expect(slip?.marks).toEqual([
+      { square: 'd4', kind: 'bad' },
+      { square: 'd4', kind: 'ring' },
+    ]);
+    // A missed tactic: only the badge. A found tactic: a good badge.
+    expect((await coach('lesson', FORK_SCRIPT).onPlayerMove(FORK, 'a2a3', 11))?.marks).toEqual([{ square: 'a3', kind: 'bad' }]);
+    const found = await coach('lesson', FORK_SCRIPT).onPlayerMove(FORK, 'd5c7', 11);
+    expect(found).toMatchObject({ severity: 'good', marks: [{ square: 'c7', kind: 'good' }] });
+  });
+
+  it('Sparring keeps its reply to itself: no ring, no badge on a mistake', async () => {
+    const r = await coach('sparring', SCOTCH_SCRIPT).onPlayerMove(SCOTCH, 'f1c4', 9);
+    expect(r?.marks).toBeUndefined();
+    expect(r?.severity).toBeUndefined();
+  });
+
   it('"you saw my threat" is Lesson only', async () => {
     expect((await coach('lesson', THREAT_SCRIPT).onPlayerMove(THREAT, 'f3d4', 1))?.kind).toBe('defended');
     expect(await coach('sparring', THREAT_SCRIPT).onPlayerMove(THREAT, 'f3d4', 1)).toBeUndefined();

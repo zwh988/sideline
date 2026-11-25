@@ -83,10 +83,28 @@ export interface Moment {
   prompted?: boolean;
 }
 
+/**
+ * A mark drawn on a board square by a remark (task 1.12a): a pulsing ring on the piece in danger,
+ * or a badge on the piece the player just moved (`bad` = ?, `blunder` = ??, `good` = !).
+ */
+export interface Mark {
+  square: Square;
+  kind: 'ring' | 'bad' | 'blunder' | 'good';
+}
+
+/** How loudly the coach reacts: a slip (below the level's mistake size), a mistake, a blunder (mate or 5+ pawns), a good find. */
+export type Severity = 'slip' | 'mistake' | 'blunder' | 'good';
+
+/** A loss of this size (centipawns), or any forced mate against the player, is a blunder. */
+const BLUNDER_CP = 500;
+
 export interface Remark {
   kind: 'tactic' | 'threat' | 'mistake' | 'missed-tactic' | 'praise' | 'defended' | 'phase' | 'hint' | 'narration' | 'line';
   text: string;
   mood: Mood;
+  /** Set on a reaction to the player's move (not in Sparring, which keeps its replies to itself). */
+  severity?: Severity;
+  marks?: Mark[];
   offerTakeback?: boolean;
   /** Lesson: invite the player to try their idea in a sideline. */
   offerSideline?: boolean;
@@ -238,6 +256,8 @@ export class Coach {
         kind: 'praise',
         text: praise(t.tactic),
         mood: 'pleased',
+        severity: 'good',
+        marks: [{ square: uci.slice(2, 4) as Square, kind: 'good' }],
         moment: { kind: 'found-tactic', fen: fenBefore, played: uci, line: t.tactic.moves.map((m) => m.uci), concept: lineConceptOf(fenBefore, t.tactic.moves.map((m) => m.uci), undefined, t.tactic.motif) },
       });
     }
@@ -255,6 +275,8 @@ export class Coach {
             ? `You had something stronger than ${move.san} here. Want to take it back and look again?`
             : `You had something stronger than ${move.san} here.`,
           mood: 'concerned',
+          severity: 'mistake',
+          marks: [{ square: uci.slice(2, 4) as Square, kind: 'bad' }],
           offerTakeback: this.mode.takebacks,
           moment: {
             kind: 'missed-tactic',
@@ -421,6 +443,11 @@ export class Coach {
     }
     await this.analyst.markForced(refutation);
     const first = refutation.moves[0];
+    const blunder = refutation.mate || ctx.loss >= BLUNDER_CP;
+    const marks: Mark[] = [{ square: ctx.uci.slice(2, 4) as Square, kind: blunder ? 'blunder' : 'bad' }];
+    // The piece in danger: what the coach takes, or the king it mates.
+    const danger = refutation.mate ? kingOf(chess.fen(), this.playerColor)[0]?.square : first.captured ? first.to : undefined;
+    if (danger) marks.push({ square: danger as Square, kind: 'ring' });
     // A single defended capture: say why taking back doesn't help, if the board shows it.
     let why: FailedRecapture | undefined;
     if (refutation.moves.length === 1 && first.captured && !first.capturedUndefended) {
@@ -436,7 +463,9 @@ export class Coach {
       text: `Careful: after ${san}, I can play ${moveWithWhich(first)}. ${wins}${
         this.mode.takebacks ? 'Want to take it back?' : ''
       }`.trim(),
-      mood: 'concerned',
+      mood: blunder ? 'surprised' : 'concerned',
+      severity: blunder ? 'blunder' : ctx.loss < this.level.mistakeCp ? 'slip' : 'mistake',
+      marks,
       offerTakeback: this.mode.takebacks,
       shapes: [{ orig: first.from, dest: first.to, brush: 'red' }],
       moment,

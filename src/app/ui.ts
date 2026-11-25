@@ -5,10 +5,10 @@ import { Chessground } from '@lichess-org/chessground';
 import type { Api } from '@lichess-org/chessground/api';
 import type { DrawShape } from '@lichess-org/chessground/draw';
 import type { Key } from '@lichess-org/chessground/types';
-import type { Square } from 'chess.js';
+import { Chess, type Square } from 'chess.js';
 import { Analyst } from '../coach/analyst';
 import { loadOpeningBook, openingBookIfLoaded, type OpeningBook } from '../coach/openings';
-import { Coach, joinRemarks, type Remark, type Shape } from '../coach/coach';
+import { Coach, joinRemarks, type Mark, type Mood, type Remark, type Shape } from '../coach/coach';
 import { drawChart } from './linechart';
 import { LANE_NAME, LineTree, isCommon, verdictOf, type LineNode, type Option } from './linetree';
 import { gameToPgn } from './pgn';
@@ -35,6 +35,7 @@ interface Settings {
 const SETTINGS_KEY = 'sideline.settings';
 const COACH_NAME = 'Coach';
 const MIN_THINK_MS = 600; // the coach shouldn't reply instantly
+const DEMO_STEP_MS = 900; // one move of the ghost line (task 1.12a)
 
 function loadSettings(): Settings {
   try {
@@ -60,6 +61,55 @@ function drawShape(s: Shape): DrawShape {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const MARK_COLOUR = { bad: '#e0861a', blunder: '#d63a3a', good: '#2aa66b' } as const;
+const MARK_GLYPH = { bad: '?', blunder: '??', good: '!' } as const;
+
+/** A mark on a square: a pulsing ring on the piece in danger, or a badge (? ?? !) on the piece just moved. */
+function markShape(m: Mark): DrawShape {
+  if (m.kind === 'ring') {
+    return { orig: m.square as Key, customSvg: { html: '<circle class="mark-ring" cx="50" cy="50" r="43" fill="none" stroke="#e5484d" stroke-width="7"/>', center: 'orig' } };
+  }
+  const glyph = MARK_GLYPH[m.kind];
+  const size = glyph.length > 1 ? 26 : 32;
+  return {
+    orig: m.square as Key,
+    customSvg: {
+      html: `<g class="mark-badge"><circle cx="72" cy="28" r="26" fill="${MARK_COLOUR[m.kind]}" stroke="#fff" stroke-width="4"/><text x="72" y="${glyph.length > 1 ? 37 : 39}" text-anchor="middle" font-size="${size}" font-weight="800" font-family="system-ui,sans-serif" fill="#fff">${glyph}</text></g>`,
+      center: 'orig',
+    },
+  };
+}
+
+/** Everything a remark draws on the board: its arrows and its marks. */
+function remarkShapes(r: Remark): DrawShape[] {
+  return [...(r.shapes ?? []).map(drawShape), ...(r.marks ?? []).map(markShape)];
+}
+
+/** The coach's face for a mood (drawn white on the portrait's colour). */
+function faceSvg(mood: Mood): string {
+  const eye = (x: number, y: number, r = 3.2) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff"/>`;
+  const line = (d: string) => `<path d="${d}" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>`;
+  let inner: string;
+  switch (mood) {
+    case 'pleased':
+      inner = line('M16 28 Q21 21 26 28') + line('M38 28 Q43 21 48 28') + line('M21 41 Q32 54 43 41');
+      break;
+    case 'concerned':
+      inner = eye(21, 30) + eye(43, 30) + line('M14 22 L28 17') + line('M36 17 L50 22') + line('M23 47 Q32 40 41 47');
+      break;
+    case 'surprised':
+      inner = eye(21, 29, 4.6) + eye(43, 29, 4.6) + line('M15 17 L27 15') + line('M37 15 L49 17') + '<circle cx="32" cy="46" r="5" fill="none" stroke="#fff" stroke-width="3"/>';
+      break;
+    case 'thinking':
+      inner = eye(23, 29) + eye(45, 29) + line('M15 22 L28 22') + line('M36 17 L50 14') + line('M24 46 L40 43');
+      break;
+    default:
+      inner = eye(21, 29) + eye(43, 29) + line('M15 21 L27 21') + line('M37 21 L49 21') + line('M23 45 Q32 49 41 45');
+  }
+  return `<svg viewBox="0 0 64 64" role="img" aria-label="Coach looks ${mood}">${inner}</svg>`;
+}
+
 
 export class App {
   private settings = loadSettings();
@@ -222,7 +272,7 @@ export class App {
         <aside class="side">
           <div class="coach">
             <div id="portrait" class="portrait" aria-hidden="true">
-              <span class="initial">${COACH_NAME[0]}</span>
+              ${faceSvg('neutral')}
             </div>
             <div id="bubble-box" class="bubble">
               <div class="coach-name">${COACH_NAME} <span id="mood" class="mood"></span></div>
@@ -412,6 +462,7 @@ export class App {
     this.board.set({ orientation: color, lastMove: undefined });
     this.board.setAutoShapes([]);
     this.el.choices.hidden = true;
+    this.stopDemo();
     this.sync();
 
     const opponent = await this.opponent;
@@ -521,8 +572,7 @@ export class App {
   private shapesAt(ply: number): DrawShape[] {
     return this.log
       .at(ply)
-      .flatMap((e) => e.remark.shapes ?? [])
-      .map(drawShape);
+      .flatMap((e) => remarkShapes(e.remark));
   }
 
   /** Buttons, the "Viewing…" bar and the highlighted move. */
@@ -624,7 +674,7 @@ export class App {
       }
       bubble.replaceChildren(...entries);
       this.el.mood.textContent = '';
-      this.el.portrait.dataset.mood = 'neutral';
+      this.setMood('neutral');
       bubble.scrollTop = 0;
       return;
     }
@@ -635,7 +685,7 @@ export class App {
       p.textContent = say.text;
       bubble.replaceChildren(p);
       this.el.mood.textContent = '';
-      this.el.portrait.dataset.mood = 'thinking';
+      this.setMood('thinking');
       return;
     }
     const entries = nav.viewing ? this.log.at(nav.ply) : this.log.recent(nav.live);
@@ -654,8 +704,94 @@ export class App {
     });
     const newest = entries.at(-1)?.remark;
     this.el.mood.textContent = !newest || newest.mood === 'neutral' ? '' : newest.mood;
-    this.el.portrait.dataset.mood = newest?.mood ?? 'neutral';
-    bubble.scrollTop = nav.viewing ? 0 : bubble.scrollHeight;
+    this.setMood(newest?.mood ?? 'neutral');
+    // Live: the newest remark starts at the top edge, so a long one is read from its first line.
+    const last = bubble.lastElementChild as HTMLElement | null;
+    bubble.scrollTop = 0;
+    if (!nav.viewing && last) bubble.scrollTop = Math.max(0, last.getBoundingClientRect().top - bubble.getBoundingClientRect().top);
+  }
+
+  private face?: Mood;
+
+  /** The coach's face follows the mood; a mistake or blunder makes it start (the signal to look at the board). */
+  private setMood(mood: Mood, alert?: 'mistake' | 'blunder'): void {
+    const p = this.el.portrait;
+    p.dataset.mood = mood;
+    if (this.face !== mood) {
+      p.innerHTML = faceSvg(mood);
+      this.face = mood;
+    }
+    p.classList.remove('alert', 'alert-big');
+    if (alert) {
+      void p.offsetWidth; // restart the animation
+      p.classList.add(alert === 'blunder' ? 'alert-big' : 'alert');
+    }
+  }
+
+  // --- The coach reacts on the board (task 1.12a) ----------------------------
+  // After a flagged move the board itself reacts: a ring on the piece in danger, a badge on the moved piece,
+  // and the coach's line plays out once as a ghost line, then the real position comes back.
+
+  /** The refutation shown for the move being decided on, and whether it is playing now. */
+  private demo?: { fenAfter: string; ucis: string[]; remark: Remark; running: boolean };
+  private demoToken = 0;
+
+  private async playDemo(): Promise<void> {
+    const d = this.demo;
+    if (!d) return;
+    const token = ++this.demoToken;
+    const area = this.el['board-area'];
+    d.running = true;
+    await sleep(700); // the player's own move settles, with its badge and ring
+    if (token !== this.demoToken) return;
+    this.board.setAutoShapes([]);
+    area.classList.add('ghosting');
+    const chess = new Chess(d.fenAfter);
+    for (const uci of d.ucis) {
+      chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+      this.board.set({
+        fen: chess.fen(),
+        turnColor: chess.turn() === 'w' ? 'white' : 'black',
+        check: chess.inCheck() ? (chess.turn() === 'w' ? 'white' : 'black') : false,
+        lastMove: [uci.slice(0, 2) as Key, uci.slice(2, 4) as Key],
+      });
+      await sleep(DEMO_STEP_MS);
+      if (token !== this.demoToken) return;
+    }
+    await sleep(900); // stay where the damage is
+    if (token !== this.demoToken) return;
+    this.endDemo();
+  }
+
+  /** Back to the real position, with the ring, badge and arrow. */
+  private endDemo(): void {
+    this.demoToken++;
+    if (this.demo) this.demo.running = false;
+    this.el['board-area'].classList.remove('ghosting');
+    this.sync();
+    if (this.demo) this.board.setAutoShapes(remarkShapes(this.demo.remark));
+  }
+
+  /** The choice is made (or the game moved on): no demo, no tint. */
+  private stopDemo(): void {
+    this.demoToken++;
+    this.demo = undefined;
+    this.el['board-area'].classList.remove('ghosting', 'blunder');
+  }
+
+  /** The coach's reaction to the player's move: face, board marks, and the ghost line for a mistake. */
+  private react(r: Remark, fenBefore: string, moment?: SavedMoment): void {
+    if (!r.severity) return;
+    if (r.severity === 'mistake' || r.severity === 'blunder' || r.severity === 'slip') {
+      this.setMood(r.mood, r.severity === 'blunder' ? 'blunder' : 'mistake');
+    }
+    if (r.severity === 'blunder') this.el['board-area'].classList.add('blunder');
+    if (moment?.answer?.length && this.mode.revealsPlans) {
+      const chess = new Chess(fenBefore);
+      chess.move({ from: moment.played.slice(0, 2), to: moment.played.slice(2, 4), promotion: moment.played[4] });
+      this.demo = { fenAfter: chess.fen(), ucis: moment.answer, remark: r, running: false };
+      void this.playDemo();
+    }
   }
 
   /** The coach speaks: new text in the bubble, with arrows or circles on the board. */
@@ -669,7 +805,7 @@ export class App {
     this.el['bubble-box'].classList.remove('stale');
     // While looking at the past, the new remark waits in the log (arrows too).
     if (!this.nav.viewing && !this.sideline) {
-      this.board.setAutoShapes((r.shapes ?? []).map(drawShape));
+      this.board.setAutoShapes(remarkShapes(r));
     }
     this.renderBubble();
     this.save();
@@ -713,6 +849,7 @@ export class App {
       if (id !== this.gameId) return;
     }
     this.el.choices.hidden = true;
+    this.stopDemo();
     const fenBefore = this.game.fen;
     const move = this.game.play(from + to + promotion);
     const ply = this.game.moves.length;
@@ -735,6 +872,7 @@ export class App {
       this.say(remark);
       let choice: 'takeback' | 'play-on' | 'show' = 'play-on';
       const moment = remark.moment ? this.record?.moments.at(-1) : undefined;
+      this.react(remark, fenBefore, moment);
       if (remark.offerTakeback && this.mode.takebacks) {
         choice = await this.askTakeback();
         // "Show me": the coach plays its answer in a sideline; afterwards the choice is offered again.
@@ -750,6 +888,8 @@ export class App {
           choice = await this.askTakeback();
         }
         if (moment) moment.outcome = choice === 'takeback' ? 'taken-back' : 'played-on';
+      } else if (!this.demo?.running) {
+        this.stopDemo();
       }
       if (choice === 'takeback') {
         if (this.stale(id, ply)) return;
@@ -879,6 +1019,7 @@ export class App {
     this.board.set({ orientation: saved.playerColor, lastMove: undefined });
     this.board.setAutoShapes([]);
     this.el.choices.hidden = true;
+    this.stopDemo();
     this.status('Reviewing a saved game.');
     this.sync();
     // Review looks at the whole game once, both sides, every pattern (task 1.7e); older records get it now.
@@ -1199,6 +1340,7 @@ export class App {
     const last = ply > 0 ? this.game.moves[ply - 1]?.san : undefined;
     this.forkLabel = last ? plyLabel(this.game.startFen, ply, last) : 'Start';
     this.el.choices.hidden = true;
+    this.stopDemo();
     this.board.setAutoShapes([]);
     sl.root.notes.push(
       intro ??
@@ -1433,18 +1575,48 @@ export class App {
     this.cursorMoved(sl);
   }
 
-  /** Shows "Take back" / "Play on" in the bubble and waits for a choice. */
+  /**
+   * The three choices after a flagged move: Take back, Explore (a sideline on what happened), Play on.
+   * A tap on the board is Play on (once the ghost line has finished; a tap during it skips to the end).
+   */
   private askTakeback(): Promise<'takeback' | 'play-on' | 'show'> {
     const box = this.el.choices;
-    box.innerHTML = `<button data-choice="takeback" class="primary">Take back</button><button data-choice="show">Show me</button><button data-choice="play-on">Play on</button>`;
+    const hasDemo = !!this.demo;
+    box.innerHTML =
+      `<button data-choice="takeback">Take back</button><button data-choice="show" class="primary">Explore</button><button data-choice="play-on">Play on</button>` +
+      (hasDemo ? `<button data-choice="replay" class="icon" aria-label="Replay the line">↻</button>` : '') +
+      `<p class="choices-hint">Tap the board to play on.</p>`;
     box.hidden = false;
-    this.status('Take it back, or play on?');
+    this.status('Take it back, explore it, or play on?');
+    const shown = Date.now();
     return new Promise((resolve) => {
+      const board = this.el.board;
+      const finish = (c: 'takeback' | 'play-on' | 'show') => {
+        box.hidden = true;
+        box.onclick = null;
+        board.removeEventListener('click', tap, true);
+        if (c !== 'show') this.stopDemo();
+        else {
+          this.demoToken++;
+          if (this.demo) this.demo.running = false;
+        } // the sideline takes the board; the line can be replayed afterwards
+        resolve(c);
+      };
+      const tap = () => {
+        if (Date.now() - shown < 600) return; // the tap that made the move
+        if (this.demo?.running) this.endDemo();
+        else finish('play-on');
+      };
+      board.addEventListener('click', tap, true);
       box.onclick = (e) => {
         const btn = (e.target as HTMLElement).closest('button');
         if (!btn) return;
-        box.hidden = true;
-        resolve(btn.dataset.choice as 'takeback' | 'play-on' | 'show');
+        if (btn.dataset.choice === 'replay') {
+          this.sync();
+          void this.playDemo();
+          return;
+        }
+        finish(btn.dataset.choice as 'takeback' | 'play-on' | 'show');
       };
     });
   }

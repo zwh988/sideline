@@ -204,9 +204,8 @@ button:disabled {
   }
 
   .coach .portrait {
-    width: 40px;
-    height: 40px;
-    font-size: 1.2rem;
+    width: 76px;
+    height: 76px;
   }
 
   .coach .bubble {
@@ -224,7 +223,7 @@ button:disabled {
   /* A tap opens the whole remark over the top of the board. */
   .coach.expanded .bubble {
     position: absolute;
-    left: 50px;
+    left: 86px;
     right: 0;
     top: 0;
     z-index: 30;
@@ -368,8 +367,8 @@ button:disabled {
 }
 
 .portrait {
-  width: 56px;
-  height: 56px;
+  width: 88px;
+  height: 88px;
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--coach-accent);
@@ -379,6 +378,33 @@ button:disabled {
   font-size: 1.6rem;
   font-weight: 700;
   transition: transform 0.2s;
+  overflow: hidden;
+}
+
+.portrait svg {
+  width: 82%;
+  height: 82%;
+}
+
+/* A mistake or blunder makes the coach's face start: it is the signal to look at the board. */
+.portrait.alert {
+  animation: alert-pop 0.5s ease-out;
+}
+
+.portrait.alert-big {
+  animation: alert-pop 0.7s ease-out, alert-flash 1.4s ease-out;
+}
+
+@keyframes alert-pop {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.22) rotate(-4deg); }
+  60% { transform: scale(1.1) rotate(3deg); }
+  100% { transform: scale(1); }
+}
+
+@keyframes alert-flash {
+  0%, 40% { box-shadow: 0 0 0 6px #d63a3a; }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 
@@ -936,4 +962,63 @@ button.primary {
   stroke: var(--coach-accent);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
+}
+
+/* The coach reacts on the board (task 1.12a) */
+.mark-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ring-pulse 1s ease-in-out infinite;
+}
+
+@keyframes ring-pulse {
+  0%, 100% { opacity: 0.95; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.9); }
+}
+
+.mark-badge {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: badge-pop 0.35s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes badge-pop {
+  from { transform: scale(0); }
+}
+
+/* While the coach's line plays, the board is tinted: it is not the game. */
+.board-area.ghosting #board {
+  position: relative;
+  box-shadow: 0 0 0 5px #7c5cc4;
+}
+
+.board-area.ghosting #board::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(124 92 196 / 0.18);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.board-area.blunder #board {
+  filter: saturate(0.55);
+}
+
+.choices .icon {
+  min-width: 48px;
+  padding-inline: 0;
+}
+
+.choices-hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark-ring, .mark-badge, .portrait.alert, .portrait.alert-big {
+    animation: none;
+  }
 }
