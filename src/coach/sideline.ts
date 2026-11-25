@@ -5,7 +5,6 @@
 // neither of them found, and when no concept is found the coach says so.
 import { Chess } from 'chess.js';
 import { conceptNote, HABIT, type NoteConcept } from './explain';
-import type { MoveFacts } from './facts';
 import type { LineVerdict } from './linecheck';
 import type { LineStep } from './lineexplain';
 import { evalPhrase, moveWithWhich, winsPhrase } from './templates';
@@ -62,31 +61,16 @@ export function narrateSidelineMove(fenBefore: string, v: LineVerdict, seen: Set
 }
 
 /**
- * One step of a line in words, for the coach's reply and for "show me what's good": the move, what the
- * board code found in it (with later pay-offs), and the concept's habit the first time it comes up.
- * A move with nothing to say is only named.
+ * A move of a Line in words (task 1.9): `lead` (what the engine says about its lane), then what the board code
+ * found in the move, and the concept's habit the first time it comes up.
  */
-export function stepNote(step: LineStep, seen: Set<NoteConcept>, lead = ''): string {
-  const parts = [`${lead}${step.san}.`];
-  if (step.text) parts.push(step.text);
-  const c = step.concept as NoteConcept | undefined;
+export function moveNote(lead: string, step: LineStep | undefined, seen: Set<NoteConcept>): string {
+  const parts = [lead];
+  if (step?.text) parts.push(step.text);
+  const c = step?.concept as NoteConcept | undefined;
   if (c && c in HABIT && !seen.has(c)) {
     seen.add(c);
     parts.push(HABIT[c]);
   }
   return parts.join(' ');
-}
-
-/** The coach's own move in a sideline: "I'd play Nxd4, which takes the queen." plus the concept, if one is found. */
-export function sidelineReplyText(fenBefore: string, f: MoveFacts, seen: Set<NoteConcept>): string {
-  const sentences = [`I'd play ${moveWithWhich(f)}.`];
-  const note = conceptNote(fenBefore, f.uci, 'me');
-  if (note) {
-    sentences.push(note.text);
-    if (!seen.has(note.concept)) {
-      seen.add(note.concept);
-      sentences.push(HABIT[note.concept]);
-    }
-  }
-  return sentences.join(' ');
 }

@@ -92,6 +92,15 @@ button:disabled {
   flex-shrink: 0;
 }
 
+/* Two columns: in a sideline the chart is as important as the board, so the side column grows to hold it. */
+.layout:has(.sidelining) .side {
+  width: 420px;
+}
+
+.layout:has(.sidelining) .board-area {
+  width: min(calc(100vh - 90px), 640px, calc(100vw - 468px));
+}
+
 #board {
   width: 100%;
   aspect-ratio: 1;
@@ -280,8 +289,42 @@ button:disabled {
     margin: 0 12px;
   }
 
-  .layout:has(.sidelining) .actions {
-    display: none; /* disabled in a sideline anyway; the room goes to the banner */
+  .layout:has(.sidelining) .actions,
+  .layout:has(.sidelining) .status,
+  .chart-key {
+    display: none; /* disabled in a sideline anyway; the room goes to the chart */
+  }
+
+  /* In a sideline the stepper sits right under the board, the chart below it. */
+  .board-area.sidelining .nav {
+    order: 3;
+  }
+
+  .layout:has(.sidelining) {
+    --board: clamp(220px, calc(100dvh - 470px), 100vw);
+  }
+
+  .layout:has(.sidelining) .coach,
+  .layout:has(.sidelining) .coach .bubble {
+    height: 80px;
+  }
+
+  .board-area.sidelining .nav button {
+    min-height: 40px;
+  }
+
+  .chart-wrap {
+    max-height: 150px;
+    overflow-y: auto;
+  }
+
+  .sideline-buttons button {
+    min-height: 40px;
+    padding: 4px;
+  }
+
+  .sidelinebar {
+    padding: 6px;
   }
 
   .moves {
@@ -615,16 +658,49 @@ button.primary {
   display: none;
 }
 
-.sideline-title {
-  margin: 0 0 4px;
+.chart-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+}
+
+.chart-wrap svg {
+  display: block;
+}
+
+.chart-node {
+  cursor: pointer;
+}
+
+.chart-node:focus-visible {
+  outline: 2px solid #378add;
+  outline-offset: 2px;
+}
+
+.chart-key {
+  margin: 4px 0 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.entry.verdict {
   font-weight: 600;
 }
 
-.sideline-line {
-  margin: 0 0 8px;
-  min-height: 1.4em;
+.entry.reason {
   color: var(--muted);
-  overflow-wrap: anywhere;
+}
+
+.entry.verdict.you {
+  color: #1d9e75;
+}
+
+.entry.verdict.them {
+  color: #e24b4a;
+}
+
+#sideline-arrows.on {
+  background: #c77d1a;
+  color: #fff;
 }
 
 .sideline-buttons {
@@ -641,7 +717,6 @@ button.primary {
   box-shadow: 0 0 0 5px #c77d1a;
 }
 
-.board-area.sidelining .nav,
 .board-area.sidelining .material {
   display: none;
 }
@@ -861,29 +936,4 @@ button.primary {
   stroke: var(--coach-accent);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
-}
-
-/* Universes: other ways the sideline could go, as chips under the line */
-.universes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 8px;
-}
-
-.universes:empty {
-  display: none;
-}
-
-.universes button {
-  min-height: 40px;
-  padding: 4px 10px;
-  font-size: 0.9rem;
-}
-
-.universe-note {
-  flex: 1 0 100%;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
 }

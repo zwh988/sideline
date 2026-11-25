@@ -2,8 +2,7 @@ import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
 import type { PositionEval } from './analyst';
 import { checkLine, lineMoveLabel, type Line, type LineEvaluator } from './linecheck';
-import { playAndDescribe } from './facts';
-import { narrateSidelineMove, sidelineReplyText } from './sideline';
+import { narrateSidelineMove } from './sideline';
 
 /** Hand-checked engine output per position; unknown positions are quiet (0.00, no line). */
 type Script = Record<string, { cp: number; pv?: string[] }>;
@@ -197,29 +196,5 @@ describe('narrateSidelineMove (one move, checked by the engine, named by the boa
     expect(narrateSidelineMove(root, v, new Set())).toBe(
       "f3 doesn't hold up. I'd answer with e5, and the engine then rates the position +4.0 for me. I can't name a reason I can check.",
     );
-  });
-});
-
-describe('sidelineReplyText (the coach moves first, "Show me")', () => {
-  it('says what the move does, without calling it good', () => {
-    const root = 'r1bqkbnr/ppp2ppp/2np4/8/3QP3/5N2/PPP2PPP/RNB1KB1R w KQkq - 1 5';
-    const after = new Chess(root);
-    after.move('Bc4');
-    const f = playAndDescribe(new Chess(after.fen()), 'c6d4');
-    // The queen on d4 was the only guard of the bishop on c4, so the capture also leaves it loose (true on the board).
-    expect(sidelineReplyText(after.fen(), f, new Set())).toBe(
-      "I'd play Nxd4, which takes the queen. That takes the only defender of your bishop on c4: it is now undefended. " +
-        'Habit: when a piece is guarded, ask what happens if you take its guard.',
-    );
-  });
-
-  it('adds the concept and the habit for a fork by the coach', () => {
-    const fen = '4k3/8/8/8/3n4/8/8/R3K3 b Q - 0 1';
-    const f = playAndDescribe(new Chess(fen), 'd4c2');
-    const seen = new Set<never>();
-    const t = sidelineReplyText(fen, f, seen);
-    expect(t).toContain("That's a fork: my knight on c2 attacks your king on e1 and your rook on a1 at once.");
-    expect(t).toContain('Habit: look for a square');
-    expect(sidelineReplyText(fen, f, seen)).not.toContain('Habit');
   });
 });

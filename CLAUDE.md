@@ -70,6 +70,7 @@ npx tsc              # type-check only
 ## Gotchas
 
 - `vite.config.ts` aliases `onnxruntime-web` to `onnxruntime-web/wasm`; the default build tries to load a WebGPU file and fails.
+- Chessground measures the board once and re-measures only on a window resize. If CSS changes the board's size (a sideline widens the side column), clicks land on the wrong square: `ui.ts` has a `ResizeObserver` on the board that calls `redrawAll()`.
 - chess.js `history()` and `moves` cover only moves since the start FEN; `Game.startFen` matters for games started from a position (Maia needs it as `baseFen`).
 - The analyst's Stockfish handles one search at a time; `Analyst.run` queues jobs. Don't call `Stockfish.analyse` concurrently on one instance.
 - Stockfish scores are from the side to move. Convert carefully (`scoreToCp`, negate across a move).

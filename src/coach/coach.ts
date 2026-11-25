@@ -13,22 +13,23 @@
 // small talk, takeback offers and thinking aloud, and flags a mistake without
 // saying how the coach would punish it.
 import { Chess, type Color, type Square } from 'chess.js';
-import { scoreToCp } from '../engine/stockfish';
+import { scoreToCp, type Score } from '../engine/stockfish';
 import type { Level } from '../app/levels';
 import { MODES, type Mode } from '../app/modes';
 import type { Analyst, PositionEval } from './analyst';
 import { isMereRecapture, type TaughtLine } from './lines';
 import { checkLine, type LineEvaluator, type LineMove } from './linecheck';
 import { lineConceptOf, offeredMaterial, type NoteConcept } from './explain';
-import { explainLine, taughtFrom } from './lineexplain';
-import { narrateSidelineMove, sidelineReplyText, stepNote } from './sideline';
+import { explainLine } from './lineexplain';
+import { moveNote, narrateSidelineMove } from './sideline';
+import { COMMON_P, rateOptions, rateOther, sanOf, type Option, type Rating } from '../app/linetree';
+import { reasonsFor } from './position';
 import { failedRecapture, PIECE_NAME, playAndDescribe, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
 import type { OpeningBook } from './openings';
 import {
   byImportance,
   capitalize,
-  evalPhrase,
   failedRecapturePhrase,
   moveWithWhich,
   narrateCoachMove,
@@ -455,105 +456,107 @@ export class Coach {
   /** Concepts named this game: a concept's habit is said only once. */
   private seenConcepts = new Set<NoteConcept>();
 
-  /** The coach's reply in a sideline: the engine's best move (UCI), not the level-matched opponent's. */
-  async sidelineReply(fen: string): Promise<string | undefined> {
-    const ev = await this.evaluator.evaluate(fen, 1);
-    return ev.lines[0]?.pv[0];
-  }
-
-  /** What the coach says about a move it plays itself in a sideline ("Show me"): what it does, and the concept. */
-  describeSidelineReply(fenBefore: string, uci: string): string {
-    const f = playAndDescribe(new Chess(fenBefore), uci);
-    return sidelineReplyText(fenBefore, f, this.seenConcepts);
-  }
-
-  /** The player's colour as the long name `explainLine` takes. */
-  private get me(): Color {
-    return this.playerColor;
+  /** The engine's top moves at `fen`, ranked into lanes (Best / Great / Good / Other) against its best move there. */
+  async options(fen: string, count = 5): Promise<Option[]> {
+    const ev = await this.evaluator.evaluate(fen, count);
+    return rateOptions(fen, ev.lines, this.me);
   }
 
   /**
-   * The words for the last move of a sideline `line` (moves from `rootFen`, UCI): what it does, and
-   * what it completes from earlier in the line (a skewered piece taken, a defender lured away).
-   * `skipIfNamed`: the move was already described by the verdict (a refuting reply), so only a pay-off is added.
+   * Adds the moves players at the level often choose (`likely`, from Maia: move and probability) to the
+   * engine's options: a move that is already there is marked common, one that is not is rated (one search)
+   * and added, so a tempting move the engine dislikes can still be explored and judged.
    */
-  describeSidelineMove(line: { rootFen: string; ucis: string[] }, skipIfNamed = false): string {
-    const step = explainLine(line.rootFen, line.ucis, { player: this.me }).at(-1);
-    if (!step) return '';
-    if (skipIfNamed) return step.payoff ?? '';
-    return stepNote(step, this.seenConcepts, 'I play ');
-  }
-
-  /**
-   * "Show me what's good here": the engine's best line from `fen`, cut to the taught part, with the
-   * words for each move. `intro` says what it wins (or that no pattern was found), and each step
-   * carries its own note.
-   */
-  async bestLine(fen: string): Promise<{ ucis: string[]; intro: string; notes: string[] } | undefined> {
-    const ev = await this.evaluator.evaluate(fen, 1);
-    const pv = ev.lines[0]?.pv ?? [];
-    if (!pv.length) return undefined;
-    const cut = this.analyst.taughtLine(ev, { maxPlies: 8, minGain: 1 });
-    const ucis = cut.kind === 'line' ? cut.line.moves.map((m) => m.uci) : pv.slice(0, 3);
-    return this.lineNotes(fen, ucis, ev.bestCp);
-  }
-
-  /**
-   * The opponent's other real choices at `fen` (the engine's next-best moves, within 3 pawns of its best),
-   * so the player can see what happens "if they don't". `played` is the move already shown.
-   */
-  async deviations(fen: string, played: string, count = 2): Promise<{ uci: string; san: string; lossCp: number }[]> {
-    const ev = await this.evaluator.evaluate(fen, 3);
-    const best = ev.lines[0] ? scoreToCp(ev.lines[0].score) : 0;
-    const out: { uci: string; san: string; lossCp: number }[] = [];
-    for (const l of ev.lines) {
-      const uci = l.pv[0];
-      if (!uci || uci === played) continue;
-      const lossCp = best - scoreToCp(l.score);
-      if (lossCp > 300) continue;
-      out.push({ uci, san: playAndDescribe(new Chess(fen), uci).san, lossCp });
-      if (out.length === count) break;
+  async withCommon(fen: string, options: Option[], likely: { uci: string; p: number }[], minP = COMMON_P, max = 2): Promise<Option[]> {
+    const out = options.map((o) => ({ ...o }));
+    let added = 0;
+    for (const l of likely) {
+      if (l.p < minP) continue;
+      const hit = out.find((o) => o.uci === l.uci);
+      if (hit) {
+        hit.common = true;
+        continue;
+      }
+      if (added >= max) continue;
+      try {
+        const r = await this.rateMove(fen, l.uci);
+        out.push({ ...r, uci: l.uci, san: sanOf(fen, l.uci), common: true });
+        added++;
+      } catch {
+        /* no engine: leave it out */
+      }
     }
     return out;
   }
 
   /**
-   * What the player can do after the opponent's reply (`fen`, player to move): the engine's line cut to
-   * its taught part when it wins something (`wins`), else its first moves and the engine's score.
+   * What stands out in the position after the last move of a Line, when the engine says one side is clearly
+   * better and no concept was named for the move: board facts that favour that side (passed pawn, the
+   * other side's weaknesses, the bishop pair), with their squares. They are facts that are there, not the
+   * engine's reasons; when none is found the coach says so (rule 1).
    */
-  async punishment(fen: string): Promise<{ ucis: string[]; intro: string; notes: string[]; wins: boolean } | undefined> {
-    const ev = await this.evaluator.evaluate(fen, 1);
-    const pv = ev.lines[0]?.pv ?? [];
-    if (!pv.length) return undefined;
-    const cut = this.analyst.taughtLine(ev, { maxPlies: 8, minGain: 1 });
-    const wins = cut.kind === 'line';
-    const ucis = cut.kind === 'line' ? cut.line.moves.map((m) => m.uci) : pv.slice(0, 3);
-    return { ...this.lineNotes(fen, ucis, ev.bestCp), wins };
+  reason(rootFen: string, ucis: string[], fenAfter: string, rating: Rating): { text: string; squares: string[] } | undefined {
+    const evalCp = rating.evalCp;
+    // A move in Other is worded with its refutation (lineNote), which is the reason.
+    if (rating.lane === 'other' || Math.abs(evalCp) < 100 || Math.abs(evalCp) >= 90000) return undefined;
+    if (explainLine(rootFen, ucis, { player: this.me }).at(-1)?.concept) return undefined;
+    const better = evalCp > 0 ? this.playerColor : this.playerColor === 'w' ? 'b' : 'w';
+    const facts = reasonsFor(fenAfter, better).slice(0, 2);
+    if (!facts.length) return Math.abs(evalCp) >= 150 ? { text: "I can't name a reason I can check for that.", squares: [] } : undefined;
+    return { text: `What stands out: ${facts.map((f) => f.text).join(' ')}`, squares: [...new Set(facts.flatMap((f) => f.squares))] };
   }
 
   /**
-   * The words for a given line from `fen` (a moment's better line in Review, or the engine's):
-   * what it wins, one note per move. `cp` (the engine's score for the side to move, when known)
-   * is stated only for a line that wins no material.
+   * The rating of the move `uci` played at `fen`: from the engine's top lines when it is among them, else one
+   * more search of the position after it (its loss against the best move there).
    */
-  lineNotes(fen: string, ucis: string[], cp?: number, lead?: string): { ucis: string[]; intro: string; notes: string[] } {
-    const steps = explainLine(fen, ucis, { player: this.me });
-    const sans = steps.map((x) => x.san).join(' ');
-    const side = new Chess(fen).turn();
-    lead ??= side === this.me ? 'The engine likes' : 'The engine would play';
-    const t = taughtFrom(fen, ucis);
-    const result = t?.mate
-      ? ' It ends in checkmate.'
-      : t && t.gain >= 1
-        ? ` It wins ${winsPhrase(t)}.`
-        : t && t.gain <= -1
-          ? ` It costs ${side === this.me ? 'you' : 'them'} ${Math.abs(t.gain)} pawns of material.`
-          : cp === undefined
-          ? ''
-          : ` The engine rates the position ${evalPhrase(cp, side === this.me ? 'you' : 'me')} after the first move.`;
-    const named = steps.some((x) => x.concept);
-    const intro = `${lead} ${sans}.${result}${named ? '' : " I can't name a pattern in it that I can check."}`;
-    return { ucis, intro, notes: steps.map((x) => stepNote(x, this.seenConcepts)) };
+  async rateMove(fen: string, uci: string): Promise<Rating> {
+    const ev = await this.evaluator.evaluate(fen, 5);
+    const opts = rateOptions(fen, ev.lines, this.me);
+    const hit = opts.find((o) => o.uci === uci);
+    if (hit) return hit;
+    const chess = new Chess(fen);
+    chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    let after: Score;
+    if (chess.isCheckmate()) after = { kind: 'cp', value: -100000 };
+    else if (chess.isDraw() || chess.isStalemate()) after = { kind: 'cp', value: 0 };
+    else after = (await this.evaluator.evaluate(chess.fen(), 1)).lines[0]?.score ?? { kind: 'cp', value: 0 };
+    const bestCp = ev.lines[0] ? scoreToCp(ev.lines[0].score) : 0;
+    return rateOther(fen, bestCp, after, this.me, opts[0]?.san);
+  }
+
+  /**
+   * The words for the last move of a Line (`ucis` from `rootFen`) given its rating: what the engine says about its
+   * lane, then what the board code found in it. A move far below the best is judged like a sideline move
+   * ("doesn't hold up, I'd answer with ..."), which names the refutation.
+   */
+  async lineNote(rootFen: string, ucis: string[], rating?: Rating): Promise<string> {
+    const steps = explainLine(rootFen, ucis, { player: this.me });
+    const step = steps.at(-1);
+    if (!step) return '';
+    if (!rating) return moveNote(`${step.san}.`, step, this.seenConcepts);
+    const pawns = (rating.lossCp / 100).toFixed(1);
+    const best = rating.bestSan ?? 'another move';
+    if (rating.lane === 'best') return moveNote("The engine's top choice here.", step, this.seenConcepts);
+    if (rating.lane === 'great') return moveNote(`A great move: the engine's top pick is ${best}, only ${pawns} pawns better.`, step, this.seenConcepts);
+    if (rating.lane === 'good') return moveNote(`A good move that holds up, though the engine prefers ${best}.`, step, this.seenConcepts);
+    const parent = new Chess(rootFen);
+    for (const u of ucis.slice(0, -1)) parent.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
+    const uci = ucis.at(-1)!;
+    const m = new Chess(parent.fen()).move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    const move: LineMove = { from: m.from, to: m.to, promotion: m.promotion, uci, san: m.san, mine: (m.color === 'w') === (this.playerColor === 'w') };
+    try {
+      const r = await this.judgeSidelineMove(parent.fen(), move, { rootFen, ucis });
+      if (r.text) return r.text;
+    } catch {
+      /* no engine: the plain sentence below */
+    }
+    return moveNote(`The engine rates it ${pawns} pawns worse than ${best}.`, step, this.seenConcepts);
+  }
+
+  /** The player's colour as the long name `explainLine` takes. */
+  private get me(): Color {
+    return this.playerColor;
   }
 
   /**

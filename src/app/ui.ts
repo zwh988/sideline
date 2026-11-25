@@ -9,7 +9,8 @@ import type { Square } from 'chess.js';
 import { Analyst } from '../coach/analyst';
 import { loadOpeningBook, openingBookIfLoaded, type OpeningBook } from '../coach/openings';
 import { Coach, joinRemarks, type Remark, type Shape } from '../coach/coach';
-import { Branch } from './branches';
+import { drawChart } from './linechart';
+import { LANE_NAME, LineTree, isCommon, verdictOf, type LineNode, type Option } from './linetree';
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
@@ -77,14 +78,24 @@ export class App {
   private log = new RemarkLog();
   /** True while the board shows arrows from a viewed position's remark. */
   private viewShapes = false;
-  /** The sideline the player is trying, if any ("Try a sideline"): one level, the game is paused. */
-  private sideline?: Branch;
+  /** The sideline the player is trying, if any ("Try a sideline"): a tree of Lines, the game is paused. */
+  private sideline?: LineTree;
   /** Resolves the wait for the sideline to be closed (used by "Show me" after a mistake). */
   private onSidelineClosed?: () => void;
-  /** Bumped whenever the sideline changes, so a late engine reply for an old state is dropped. */
+  /** Bumped whenever the cursor or the tree changes, so a late engine answer for an old state is dropped. */
   private sidelineToken = 0;
-  /** True while the coach picks its reply in the sideline. */
+  /** True while the engine ranks the options at the cursor. */
   private sidelineBusy = false;
+  /** The options for the next move, ranked for one position (the cursor's). */
+  private optionsAt?: { nodeId: number; options: Option[] };
+  /** Moves of the sideline that are being rated or worded now. */
+  private pendingNodes = new Set<LineNode>();
+  /** Options are also drawn as numbered arrows on the board. */
+  private arrowsOn = false;
+  /** Options stay hidden until asked for (a Review moment or a tactic: the player is to think first). */
+  private hideOptions = false;
+  /** The last move before the fork, for the chart ("4…d6"). */
+  private forkLabel = 'Start';
   /** Saved games on this device (localStorage). */
   private store = new GameStore();
   /** The record of the game in progress, saved as it changes. */
@@ -105,12 +116,6 @@ export class App {
     analysing?: { done: number; total: number };
     abort?: AbortController;
   };
-  /** Universes: the lines a sideline starts with (a Review moment's), the forks taken, and the chips shown now. */
-  private rootUniverses: Universe[] = [];
-  private forks = 0;
-  private universeKey = '';
-  /** At most this many forks per sideline, so the screen stays readable. */
-  private static readonly MAX_FORKS = 3;
   /** The game ply a sideline started from (a sideline can start from an earlier viewed position). */
   private sidelinePly = 0;
 
@@ -188,16 +193,7 @@ export class App {
             <button id="nav-forward" aria-label="Next move">›</button>
             <button id="nav-live" aria-label="Latest position">»</button>
           </div>
-          <div id="sideline-bar" class="sidelinebar" hidden>
-            <p class="sideline-title">Sideline · nothing here changes your game</p>
-            <p id="sideline-line" class="sideline-line"></p>
-            <div id="sideline-universes" class="universes" aria-label="Other universes from here"></div>
-            <div class="sideline-buttons">
-              <button id="sideline-undo">Undo</button>
-              <button id="sideline-good">Show what's good</button>
-              <button id="sideline-exit" class="primary">Back to game</button>
-            </div>
-          </div>
+          <div id="review-bar"
           <div id="review-bar" class="viewbar reviewbar" hidden>
             <span id="review-text"></span>
             <svg id="review-strip" class="review-strip" viewBox="0 0 300 44" preserveAspectRatio="none" role="img" aria-label="The evaluation through the game. Tap to jump to a move." hidden></svg>
@@ -235,6 +231,15 @@ export class App {
           </div>
           <div id="choices" class="choices" hidden></div>
           <p id="status" class="status"></p>
+          <div id="sideline-bar" class="sidelinebar" hidden>
+            <div id="chart-wrap" class="chart-wrap"><svg id="chart" role="group" aria-label="Lines: moves in lanes by quality"></svg></div>
+            <p class="chart-key">Row: how good the move was. Colour: gray game, amber engine, purple you. Dot: who is better.</p>
+            <div class="sideline-buttons">
+              <button id="sideline-arrows" aria-pressed="false">Show options</button>
+              <button id="sideline-undo">Remove move</button>
+              <button id="sideline-exit" class="primary">Back to game</button>
+            </div>
+          </div>
           <div class="actions">
             <button id="hint">Hint</button>
             <button id="sideline">Try a sideline</button>
@@ -246,7 +251,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'sideline-line', 'sideline-universes', 'sideline-undo', 'sideline-good', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'material', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'settings-toggle', 'review-bar', 'review-text', 'review-strip', 'review-prev', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -284,7 +289,10 @@ export class App {
     this.el['restore-file'].addEventListener('change', () => void this.restore());
     this.el.sideline.addEventListener('click', () => this.startSideline());
     this.el['sideline-undo'].addEventListener('click', () => this.sidelineUndo());
-    this.el['sideline-good'].addEventListener('click', () => void this.showGood());
+    this.el['sideline-arrows'].addEventListener('click', () => {
+      this.arrowsOn = !this.arrowsOn;
+      this.renderSideline();
+    });
     this.el['sideline-exit'].addEventListener('click', () => this.exitSideline());
 
     this.importDialog = new ImportDialog(this.root, {
@@ -294,10 +302,11 @@ export class App {
       onChange: () => this.renderHistory(),
     });
 
-    this.el['nav-start'].addEventListener('click', () => this.navigate(() => this.nav.start()));
-    this.el['nav-back'].addEventListener('click', () => this.navigate(() => this.nav.back()));
-    this.el['nav-forward'].addEventListener('click', () => this.navigate(() => this.nav.forward()));
-    this.el['nav-live'].addEventListener('click', () => this.navigate(() => this.nav.goLive()));
+    // The same four buttons step through a sideline, one move per tap.
+    this.el['nav-start'].addEventListener('click', () => (this.sideline ? this.sideStep('start') : this.navigate(() => this.nav.start())));
+    this.el['nav-back'].addEventListener('click', () => (this.sideline ? this.sideStep('back') : this.navigate(() => this.nav.back())));
+    this.el['nav-forward'].addEventListener('click', () => (this.sideline ? this.sideStep('forward') : this.navigate(() => this.nav.forward())));
+    this.el['nav-live'].addEventListener('click', () => (this.sideline ? this.sideStep('end') : this.navigate(() => this.nav.goLive())));
     this.el['back-to-game'].addEventListener('click', () => this.navigate(() => this.nav.goLive()));
     this.el.moves.addEventListener('click', (e) => {
       const cell = (e.target as HTMLElement).closest<HTMLElement>('[data-ply]');
@@ -317,6 +326,18 @@ export class App {
         events: { after: (orig, dest) => void this.onPlayerMove(orig as Square, dest as Square) },
       },
     });
+    // Chessground measures the board once and only re-measures on a window resize. A sideline changes the
+    // board's size through CSS alone (the side column grows), so clicks would land on the wrong square.
+    let pending = 0;
+    new ResizeObserver(() => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => this.board.redrawAll());
+    }).observe(this.el.board);
+    // Belt and braces: whatever moved or resized the board since, every press measures it afresh (capture
+    // phase, so before chessground reads its cached size).
+    for (const type of ['mousedown', 'touchstart', 'pointerdown']) {
+      this.el.board.addEventListener(type, () => this.board.state.dom.bounds.clear(), { capture: true, passive: true });
+    }
   }
 
   private updateSettings(change: Partial<Settings>): void {
@@ -533,7 +554,12 @@ export class App {
     if (e.target instanceof Element && e.target.closest('select, input, textarea')) return;
     if (this.sideline) {
       if (e.key === 'Escape') this.exitSideline();
-      return; // no move navigation in a sideline
+      const steps: Record<string, 'start' | 'back' | 'forward' | 'end'> = { ArrowLeft: 'back', ArrowRight: 'forward', Home: 'start', End: 'end' };
+      if (steps[e.key]) {
+        e.preventDefault();
+        this.sideStep(steps[e.key]);
+      }
+      return;
     }
     const actions: Record<string, () => void> = {
       ArrowLeft: () => this.nav.back(),
@@ -573,18 +599,33 @@ export class App {
     const bubble = this.el.bubble;
     const sideline = this.sideline;
     if (sideline) {
-      // In a sideline the bubble shows what the coach said there, not the game's log.
-      bubble.replaceChildren(
-        ...sideline.notes.slice(-6).map((text, i, all) => {
-          const p = document.createElement('p');
-          p.className = i < all.length - 1 ? 'entry old' : 'entry';
-          p.textContent = text;
-          return p;
-        }),
-      );
+      // In a sideline the bubble shows only what the coach said about the move on the board (and its lane
+      // and who is better after it); earlier moves are one tap back (‹).
+      const node = sideline.cursor;
+      const lines = node.notes.length ? node.notes : node === sideline.root ? [] : ['Thinking…'];
+      const entries = lines.map((text) => {
+        const p = document.createElement('p');
+        p.className = 'entry';
+        p.textContent = text;
+        return p;
+      });
+      if (node.rating) {
+        const v = verdictOf(node.rating.evalCp);
+        const p = document.createElement('p');
+        p.className = `entry verdict ${v.side}`;
+        p.textContent = `${LANE_NAME[node.rating.lane]} · ${v.text}${node.rating.common ? ' · common at your level' : ''}`;
+        entries.unshift(p); // first, so it stays visible when the note is long
+      }
+      if (node.reason) {
+        const p = document.createElement('p');
+        p.className = 'entry reason';
+        p.textContent = node.reason.text;
+        entries.push(p);
+      }
+      bubble.replaceChildren(...entries);
       this.el.mood.textContent = '';
       this.el.portrait.dataset.mood = 'neutral';
-      bubble.scrollTop = bubble.scrollHeight;
+      bubble.scrollTop = 0;
       return;
     }
     const say = this.reviewing?.say;
@@ -659,7 +700,7 @@ export class App {
     const remark = joinRemarks(narration, await coach.onPlayerTurn(this.game.fen, ply));
     if (!this.stale(id, ply) && remark) {
       this.say(remark);
-      if (remark.offerSideline && this.mode.prompts && this.mode.sidelines) this.offerSideline(remark.line);
+      if (remark.offerSideline && this.mode.prompts && this.mode.sidelines) this.offerSideline();
     }
   }
 
@@ -701,9 +742,9 @@ export class App {
           if (moment) moment.showedMe = true;
           // From the position before the move, with its universes: what happens now, and what the engine wanted.
           if (moment?.answer?.length) {
-            await this.openSideline(moment.fen, 'Here is what would happen, and what you could play instead. Nothing here changes your game; tap Back to game when you are ready.', this.game.moves.length - 1, [moment.played, ...moment.answer], momentUniverses(moment));
+            await this.openSideline(moment.fen, 'Gray is what happened, amber is what the engine wanted. Step through with the arrows, or try your own move. Nothing here changes your game; tap Back to game when you are ready.', this.game.moves.length - 1, momentUniverses(moment));
           } else {
-            await this.openSideline(this.game.fen, 'Here is what I would play. Nothing here changes your game; tap Back to game when you are ready.');
+            await this.openSideline(this.game.fen, 'Here are the moves I could play. Tap one to see it. Nothing here changes your game; tap Back to game when you are ready.');
           }
           if (this.stale(id, ply)) return;
           choice = await this.askTakeback();
@@ -955,7 +996,7 @@ export class App {
       box.onclick = (e) => {
         const choice = (e.target as HTMLElement).closest('button')?.dataset.choice;
         if (choice === 'line') void this.showMomentLine(m);
-        else if (choice === 'try') void this.openSideline(m.fen, 'Try your idea from here. Nothing here changes your game.', m.ply - 1, undefined, momentUniverses(m));
+        else if (choice === 'try') void this.openSideline(m.fen, 'Try your idea from here. Tap Show options if you want to see what the engine would play. Nothing here changes your game.', m.ply - 1, [], true);
       };
     } else if (!this.sideline) {
       box.hidden = true;
@@ -996,7 +1037,7 @@ export class App {
   private async showMomentLine(m: SavedMoment): Promise<void> {
     if (!m.line?.length || this.sideline) return;
     const fresh = m.kind === 'mistake' || m.kind === 'missed-tactic' ? 'Here is the line the engine preferred.' : 'Here is the line.';
-    await this.openSideline(m.fen, `${fresh} Nothing here changes your game.`, m.ply - 1, m.line, momentUniverses(m));
+    await this.openSideline(m.fen, `${fresh} Gray is what happened, amber is what the engine wanted. Nothing here changes your game.`, m.ply - 1, momentUniverses(m));
   }
 
   // --- Saved games: history, PGN and backup ------------------------------
@@ -1112,57 +1153,76 @@ export class App {
     this.renderHistory();
   }
 
-  // --- Try a sideline -----------------------------------------------------
-  // The player plays a move or a short line on the board without committing.
-  // The coach answers with Stockfish's best move (not the level-matched
-  // opponent), and after each of the player's moves says whether it holds up
-  // and names the concept, or says it can't. One level deep; the game is
-  // paused and untouched. Lesson only.
+  // --- Lines (task 1.9) ---------------------------------------------------
+  // "Try a sideline" opens a tree of Lines from a position: the chart next to the board shows every
+  // opened move in its lane (how good it was against the engine's best move in its own position),
+  // and at the cursor the options for the next move as dashed moves. The player chooses both sides'
+  // moves (a tap on an option, or a move on the board); nothing here changes the game. The coach
+  // words the move on the board (its lane, then what the board code found) and nothing else.
+  // The game is paused and untouched. Lesson only.
 
   /** A button in the bubble that opens a sideline (the coach suggests it, e.g. at a tactic). */
-  private offerSideline(line?: string[]): void {
+  private offerSideline(): void {
     const box = this.el.choices;
     box.innerHTML = `<button data-choice="try" class="primary">Try it out</button>`;
     box.hidden = false;
     box.onclick = (e) => {
       if (!(e.target as HTMLElement).closest('button')) return;
       box.hidden = true;
-      this.startSideline(line?.length ? [{ label: 'The tactic', ucis: line }] : []);
+      this.startSideline();
     };
   }
 
   /** From the button: the position shown (the live one, or an earlier one being viewed). */
-  private startSideline(universes: Universe[] = []): void {
+  private startSideline(): void {
     if (!this.mode.sidelines || this.sideline || this.thinking) return;
-    void this.openSideline(this.nav.viewing ? this.game.positionAt(this.nav.ply).fen : this.game.fen, undefined, this.nav.viewing ? this.nav.ply : this.game.moves.length, undefined, universes);
+    void this.openSideline(this.nav.viewing ? this.game.positionAt(this.nav.ply).fen : this.game.fen, undefined, this.nav.viewing ? this.nav.ply : this.game.moves.length, [], true);
   }
 
-  /** Opens a sideline from `fen`. Resolves when the player goes back to the game. */
-  private async openSideline(fen: string, intro?: string, ply = this.game.moves.length, autoLine?: string[], universes: Universe[] = []): Promise<void> {
-    const sl = new Branch(fen, this.game.playerColor);
+  /**
+   * Opens a sideline from `fen`. `seeds` are Lines opened at the start: what happened in the game
+   * (gray) and what the engine wanted (amber). Resolves when the player goes back to the game.
+   */
+  private async openSideline(fen: string, intro?: string, ply = this.game.moves.length, seeds: Universe[] = [], spoilerFree = false): Promise<void> {
+    const sl = new LineTree(fen, this.game.playerColor);
     if (sl.result.over) {
       this.status('The game is over here, so there is nothing to try.');
       return;
     }
     this.sideline = sl;
-    this.rootUniverses = universes;
-    this.forks = 0;
-    this.universeKey = '';
     this.sidelinePly = ply;
     this.sidelineToken++;
+    this.optionsAt = undefined;
+    this.pendingNodes.clear();
+    this.arrowsOn = false;
+    this.hideOptions = spoilerFree;
+    const last = ply > 0 ? this.game.moves[ply - 1]?.san : undefined;
+    this.forkLabel = last ? plyLabel(this.game.startFen, ply, last) : 'Start';
     this.el.choices.hidden = true;
     this.board.setAutoShapes([]);
-    sl.notes.push(
+    sl.root.notes.push(
       intro ??
         (sl.isPlayerTurn
-          ? 'Try a move and I will tell you what happens. Nothing here changes your game.'
-          : 'Let me show you. Nothing here changes your game.'),
+          ? (spoilerFree ? 'Play a move on the board, or tap Show options to see what the engine would play. Nothing here changes your game.' : 'Tap a dashed move to try it, or play any move on the board. Nothing here changes your game.')
+          : 'Here is what I could play. Tap one to see it. Nothing here changes your game.'),
     );
+    const roots: LineNode[] = [];
+    for (const s of seeds) {
+      let node = sl.root;
+      try {
+        for (const [i, uci] of s.ucis.entries()) {
+          node = sl.open(node, uci, s.label === 'What happened' ? 'game' : 'engine');
+          if (i === 0) roots.push(node);
+        }
+      } catch {
+        /* a saved line that does not fit the position: keep what opened */
+      }
+    }
     this.status('Trying a sideline.');
     const closed = new Promise<void>((resolve) => (this.onSidelineClosed = resolve));
     this.sync();
-    if (autoLine?.length) void this.playLine(sl, this.sidelineToken, async () => (await this.coach).lineNotes(fen, autoLine));
-    else if (!sl.isPlayerTurn) await this.sidelineReply(sl, undefined, true);
+    void this.rateSeeded(sl);
+    void this.loadOptions(sl, this.sidelineToken);
     return closed;
   }
 
@@ -1170,18 +1230,20 @@ export class App {
   private exitSideline(): void {
     if (!this.sideline) return;
     const sl = this.sideline;
-    // Kept with the game (as a PGN variation) when something was actually tried.
-    if (sl.moves.length && this.record) {
+    // Kept with the game (as a PGN variation) when the player explored something: the path to the cursor.
+    const path = sl.path();
+    if (path.some((n) => n.author !== 'game') && this.record) {
       this.record.sidelines.push({
         ply: this.sidelinePly,
         rootFen: sl.rootFen,
-        moves: sl.moves.map((m) => ({ uci: m.uci, san: m.san, mine: m.mine })),
+        moves: path.map((n) => ({ uci: n.uci, san: n.san, mine: (n.color === 'w') === (this.game.playerColor === 'white') })),
       });
       if (this.reviewing) this.store.save(this.record);
     }
     this.sideline = undefined;
     this.sidelineToken++;
-    this.sidelineBusy = false;
+    this.optionsAt = undefined;
+    this.pendingNodes.clear();
     this.board.setAutoShapes(this.shapesAt(this.nav.ply));
     this.sync();
     this.status('Back to the game.');
@@ -1189,257 +1251,186 @@ export class App {
     this.onSidelineClosed = undefined;
   }
 
-  /** Takes back the player's last move in the sideline (and the coach's answer). */
+  /** Removes the move on the board (and everything after it) from the chart. */
   private sidelineUndo(): void {
     const sl = this.sideline;
-    if (!sl || !sl.undo()) return;
+    if (!sl || sl.cursor === sl.root) return;
+    sl.removeFrom(sl.cursor);
+    this.cursorMoved(sl);
+    this.status('Move removed.');
+  }
+
+  /** After the cursor moved: redraw, and rank the options for the new position. */
+  private cursorMoved(sl: LineTree): void {
     this.sidelineToken++;
-    this.sidelineBusy = false;
-    this.status('Try another move.');
+    this.optionsAt = undefined;
     this.sync();
+    void this.loadOptions(sl, this.sidelineToken);
   }
 
-  private async onSidelineMove(from: Square, to: Square): Promise<void> {
+  /** Steps along the Lines: to the fork, back, forward (an opened move, else the engine's best option), to the end. */
+  private sideStep(to: 'start' | 'back' | 'forward' | 'end'): void {
     const sl = this.sideline;
-    if (!sl || this.sidelineBusy || !sl.isPlayerTurn) return;
-    let token = this.sidelineToken;
-    let promotion = '';
-    if (sl.isPromotion(from, to)) {
-      promotion = await this.askPromotion(this.game.playerColor);
-      if (token !== this.sidelineToken) return;
+    if (!sl) return;
+    if (to === 'start') sl.start();
+    else if (to === 'back') sl.prev();
+    else if (to === 'end') sl.end();
+    else {
+      const next = sl.nextOf(sl.cursor);
+      if (next) sl.goto(next);
+      else {
+        const best = this.optionsAt?.nodeId === sl.cursor.id ? this.optionsAt.options[0] : undefined;
+        if (!best) return;
+        this.openOption(best);
+        return;
+      }
     }
-    const fenBefore = sl.fen;
-    const move = sl.play(from + to + promotion);
-    token = ++this.sidelineToken;
-    this.sidelineBusy = true;
-    this.sync();
-    this.status('Thinking…');
-    const coach = await this.coach;
-    // The coach judges the move and picks its reply together (one engine search serves both).
-    const playerLine = { rootFen: sl.rootFen, ucis: sl.moves.map((m) => m.uci) };
-    const [remark] = await Promise.all([
-      coach.judgeSidelineMove(fenBefore, move, playerLine),
-      this.sidelineReply(sl, token),
-      sleep(MIN_THINK_MS),
-    ]);
-    if (token !== this.sidelineToken || this.sideline !== sl) return;
-    sl.notes.push(remark.text);
-    // The coach's reply gets its words too (what it does, the concept, what it completes). A refuting reply
-    // was already named by the verdict, so only a pay-off is added then.
-    if (sl.moves.length > playerLine.ucis.length) {
-      const reply = coach.describeSidelineMove({ rootFen: sl.rootFen, ucis: sl.moves.map((m) => m.uci) }, remark.mood === 'concerned');
-      if (reply) sl.notes.push(reply);
-    }
-    this.renderBubble();
-    this.sidelineEnded(sl);
+    this.cursorMoved(sl);
   }
 
-  /**
-   * The coach's reply in a sideline: the engine's best move. Called with a
-   * token when the player's move is being judged at the same time (that call
-   * then plays the move and leaves the bubble to the judge).
-   */
-  private async sidelineReply(sl: Branch, token = ++this.sidelineToken, announce = false): Promise<void> {
-    if (sl.result.over) {
-      this.sidelineBusy = false;
-      this.sync();
-      return;
-    }
+  /** Rates the cursor's position: the options for the next move. */
+  private async loadOptions(sl: LineTree, token: number): Promise<void> {
+    const node = sl.cursor;
+    if (sl.result.over) return;
     this.sidelineBusy = true;
-    this.sync();
-    this.status('Thinking…');
-    let uci: string | undefined;
+    this.renderSideline();
+    let options: Option[] = [];
     try {
       const coach = await this.coach;
-      uci = await coach.sidelineReply(sl.fen);
+      options = await coach.options(node.fen, 4);
+      // What players at the level often choose, even if the engine rates it lower.
+      const h = this.maiaHistory(sl, node);
+      const likely = await (await this.opponent).likelyMoves(node.fen, h.moves, h.base).catch(() => []);
+      if (token === this.sidelineToken && this.sideline === sl) options = await coach.withCommon(node.fen, options, likely);
     } catch {
-      /* engine trouble: fall back below */
-    }
-    if (token !== this.sidelineToken || this.sideline !== sl) return; // left or changed meanwhile
-    this.sidelineBusy = false;
-    const legal = [...sl.dests].flatMap(([f, ts]) => ts.map((t) => f + t));
-    const reply = uci && legal.includes(uci.slice(0, 4)) ? uci : legal[0];
-    const fenBefore = sl.fen;
-    const move = sl.play(reply);
-    // The coach says what it plays when it moves first ("Show me"); after the player's move the
-    // judgement of that move is the remark, so the reply is only played.
-    if (announce) sl.notes.push((await this.coach).describeSidelineReply(fenBefore, reply));
-    this.sync();
-    this.status(`I played ${move.san}.${sl.inCheck ? ' Check!' : ''} Your move.`);
-    this.sidelineEnded(sl, true);
-  }
-
-  /** Says so when the line has ended: a board fact (mate or a draw). `byCoach`: the coach just moved. */
-  private sidelineEnded(sl: Branch, byCoach = false): void {
-    const r = sl.result;
-    if (!r.over) return;
-    // The player's own mate is announced by the judgement of that move.
-    if (r.winner && r.winner !== this.game.playerColor) sl.notes.push('Checkmate: in this line I win.');
-    else if (!r.winner) sl.notes.push(`This line ends in a draw by ${r.reason}.`);
-    else if (byCoach) sl.notes.push('Checkmate: in this line you win.');
-    this.status('The line is over. Undo a move or go back.');
-    this.renderBubble();
-  }
-
-  /**
-   * "Show what's good": the engine's best line from here, played out on the sideline's board one move at a
-   * time with the words for each (what it wins, the concept, what it completes later), or a plain statement
-   * that no pattern could be named. Undo takes it back.
-   */
-  private async showGood(): Promise<void> {
-    const sl = this.sideline;
-    if (!sl || this.sidelineBusy || sl.result.over) return;
-    const token = ++this.sidelineToken;
-    this.status('Looking for the best line…');
-    await this.playLine(sl, token, async () => (await this.coach).bestLine(sl.fen));
-  }
-
-  /**
-   * Plays a line on the sideline's board one move at a time, with the coach's note for each (and what the
-   * line is up front). `get` supplies the line and its words; the sideline stays busy meanwhile.
-   */
-  private async playLine(
-    sl: Branch,
-    token: number,
-    get: () => Promise<{ ucis: string[]; intro: string; notes: string[] } | undefined>,
-  ): Promise<void> {
-    this.sidelineBusy = true;
-    this.sync();
-    let best: Awaited<ReturnType<typeof get>>;
-    try {
-      best = await get();
-    } catch {
-      best = undefined;
+      /* no engine: the player can still play moves on the board */
     }
     if (token !== this.sidelineToken || this.sideline !== sl) return;
-    if (!best) {
-      this.sidelineBusy = false;
-      this.status('I could not find a line here.');
+    this.sidelineBusy = false;
+    this.optionsAt = { nodeId: node.id, options };
+    this.renderSideline();
+  }
+
+  /** The options at the cursor that are not opened yet. */
+  private ghosts(sl: LineTree): Option[] {
+    if (this.optionsAt?.nodeId !== sl.cursor.id || (this.hideOptions && !this.arrowsOn)) return [];
+    return this.optionsAt.options.filter((o) => !sl.cursor.kids.some((k) => k.uci === o.uci));
+  }
+
+  /** Opens an option (the engine's move, from the chart) and goes to it. */
+  private openOption(o: Option): void {
+    const sl = this.sideline;
+    if (!sl) return;
+    if (!sl.canOpen(sl.cursor, o.uci)) return void this.status('That is as many Lines as fit on one chart. Remove a move, or go back to the game.');
+    const node = sl.open(sl.cursor, o.uci, o.lane === 'other' ? 'you' : 'engine', o);
+    sl.goto(node);
+    this.cursorMoved(sl);
+    void this.noteFor(sl, node);
+  }
+
+  /** A move played on the board at the cursor: any side, opened as the player's own Line. */
+  private async onSidelineMove(from: Square, to: Square): Promise<void> {
+    const sl = this.sideline;
+    if (!sl || sl.result.over) return;
+    let promotion = '';
+    if (sl.isPromotion(from, to)) promotion = await this.askPromotion(sl.turn);
+    if (this.sideline !== sl) return;
+    const uci = from + to + promotion;
+    if (!sl.canOpen(sl.cursor, uci)) {
+      this.status('That is as many Lines as fit on one chart. Remove a move, or go back to the game.');
       this.sync();
       return;
     }
-    sl.notes.push(best.intro);
-    this.renderBubble();
-    for (let i = 0; i < best.ucis.length; i++) {
-      await sleep(1200);
-      if (token !== this.sidelineToken || this.sideline !== sl) return;
-      try {
-        sl.play(best.ucis[i]);
-      } catch {
-        break;
-      }
-      sl.notes.push(best.notes[i]);
-      this.sync();
-      if (sl.result.over) break;
-    }
-    this.sidelineBusy = false;
-    this.sync();
-    if (sl.result.over) return this.sidelineEnded(sl, true);
-    this.status(sl.isPlayerTurn ? 'That is the line. Undo to try your own idea, or play on.' : 'That is the line.');
-    if (!sl.isPlayerTurn) await this.sidelineReply(sl, token, true);
+    const opt = this.optionsAt?.nodeId === sl.cursor.id ? this.optionsAt.options.find((o) => o.uci === uci) : undefined;
+    const node = sl.open(sl.cursor, uci, opt && opt.lane !== 'other' ? 'engine' : 'you', opt);
+    sl.goto(node);
+    this.cursorMoved(sl);
+    void this.noteFor(sl, node);
   }
 
-  /** The board, banner and buttons for the open sideline. */
+  /** The moves that led to `node`, for Maia: the game up to where the sideline starts, then the Line. */
+  private maiaHistory(sl: LineTree, node: LineNode): { moves: string[]; base: string } {
+    return { moves: [...this.game.moves.slice(0, this.sidelinePly).map((m) => m.uci), ...sl.ucis(node)], base: this.game.startFen };
+  }
+
+  /** Rates a move if needed (one search when it is not among the engine's lines) and words it. */
+  private async noteFor(sl: LineTree, node: LineNode): Promise<void> {
+    this.pendingNodes.add(node);
+    try {
+      const coach = await this.coach;
+      if (!node.rating) node.rating = await coach.rateMove(node.parent!.fen, node.uci);
+      // A move that is already open (the game's own, or one played on the board) is marked too.
+      if (!node.rating.common) {
+        const h = this.maiaHistory(sl, node.parent!);
+        const likely = await (await this.opponent).likelyMoves(node.parent!.fen, h.moves, h.base).catch(() => []);
+        if (isCommon(likely, node.uci)) node.rating = { ...node.rating, common: true };
+      }
+      if (this.sideline === sl) this.renderSideline();
+      node.notes = [await coach.lineNote(sl.rootFen, sl.ucis(node), node.rating)];
+      node.reason = coach.reason(sl.rootFen, sl.ucis(node), node.fen, node.rating);
+    } catch {
+      node.notes = ['I could not rate this move.'];
+    }
+    this.pendingNodes.delete(node);
+    if (this.sideline === sl) this.sync();
+  }
+
+  /** Rates the Lines a sideline opened with, one after the other (each costs a search at most). */
+  private async rateSeeded(sl: LineTree): Promise<void> {
+    for (const node of sl.all()) {
+      if (this.sideline !== sl) return;
+      await this.noteFor(sl, node);
+    }
+  }
+
+  /** The board, chart and buttons for the open sideline. */
   private renderSideline(): void {
-    const sl = this.sideline!;
-    const last = sl.lastMove;
+    const sl = this.sideline;
+    if (!sl) return;
+    const cur = sl.cursor;
+    const over = sl.result.over;
     const turn = sl.turn;
-    const canMove = sl.isPlayerTurn && !sl.result.over && !this.sidelineBusy;
+    const last = cur === sl.root ? undefined : cur;
     this.board.set({
-      fen: sl.fen,
+      fen: cur.fen,
       turnColor: turn,
       check: sl.inCheck ? turn : false,
-      lastMove: last ? [last.from as Key, last.to as Key] : undefined,
+      lastMove: last ? [last.uci.slice(0, 2) as Key, last.uci.slice(2, 4) as Key] : undefined,
       viewOnly: false,
-      movable: { color: canMove ? this.game.playerColor : undefined, dests: canMove ? (sl.dests as Map<Key, Key[]>) : new Map() },
+      movable: { color: over ? undefined : turn, dests: over ? new Map() : (sl.dests as Map<Key, Key[]>) },
     });
-    this.el['sideline-line'].textContent = sl.lineText || 'Make a move on the board.';
-    (this.el['sideline-undo'] as HTMLButtonElement).disabled = !sl.moves.some((m) => m.mine) || this.sidelineBusy;
-    (this.el['sideline-good'] as HTMLButtonElement).disabled = this.sidelineBusy || sl.result.over;
+    const ghosts = this.ghosts(sl);
+    const at = drawChart(
+      this.el.chart as unknown as SVGSVGElement,
+      { tree: sl, ghosts, forkLabel: this.forkLabel, thinking: this.sidelineBusy, pending: this.pendingNodes },
+      { node: (n) => this.pickNode(n), ghost: (o) => this.openOption(o) },
+    );
+    const wrap = this.el['chart-wrap'];
+    wrap.scrollLeft = at.x - wrap.clientWidth / 2;
+    wrap.scrollTop = at.y - wrap.clientHeight / 2;
+    const reasonShapes: DrawShape[] = (cur.reason?.squares ?? []).map((s) => ({ orig: s as Key, brush: 'yellow' }));
+    this.board.setAutoShapes([...reasonShapes, ...(this.arrowsOn ? ghosts.map((g, i) => ({ orig: g.uci.slice(0, 2) as Key, dest: g.uci.slice(2, 4) as Key, brush: g.lane === 'best' ? 'green' : g.lane === 'other' ? 'red' : 'blue', label: { text: String(i + 1) } })) : [])]);
+    const opts = this.el['sideline-arrows'];
+    opts.classList.toggle('on', this.arrowsOn);
+    opts.setAttribute('aria-pressed', String(this.arrowsOn));
+    opts.textContent = this.arrowsOn ? 'Hide options' : 'Show options';
+    (this.el['sideline-undo'] as HTMLButtonElement).disabled = cur === sl.root;
+    (this.el['nav-start'] as HTMLButtonElement).disabled = cur === sl.root;
+    (this.el['nav-back'] as HTMLButtonElement).disabled = cur === sl.root;
+    (this.el['nav-forward'] as HTMLButtonElement).disabled = !sl.nextOf(cur) && !ghosts.length;
+    (this.el['nav-live'] as HTMLButtonElement).disabled = !sl.nextOf(cur);
     this.el.viewbar.hidden = true;
     this.el['board-area'].classList.remove('viewing');
     for (const id of ['hint', 'sideline', 'takeback']) (this.el[id] as HTMLButtonElement).disabled = true;
     this.el.portrait.classList.toggle('busy', this.sidelineBusy);
     this.renderBubble();
-    void this.refreshUniverses(sl);
   }
 
-  // --- Universes: other ways the line could have gone -----------------------
-  // Chips under the sideline: the moment's own universes (what happened, what the engine wanted) and,
-  // after the coach's reply, "if they don't": the opponent's next-best real choices. A chip plays that
-  // universe from its fork point with notes, and shows how the player punishes the deviation (or says
-  // nothing is won). Every line is the engine's; at most MAX_FORKS forks per sideline.
-
-  private async refreshUniverses(sl: Branch): Promise<void> {
-    const box = this.el['sideline-universes'];
-    const last = sl.moves.at(-1);
-    const idle = !this.sidelineBusy && !sl.result.over;
-    const key = `${sl.fen}|${idle}|${this.forks}`;
-    if (key === this.universeKey) return;
-    this.universeKey = key;
-    box.replaceChildren();
-    if (!idle) return;
-    const chips: { label: string; title?: string; run: () => void }[] = this.rootUniverses.map((u) => ({
-      label: u.label,
-      run: () => void this.runUniverse(sl, u),
-    }));
-    if (last && !last.mine && sl.isPlayerTurn) {
-      const idx = sl.moves.length - 1;
-      try {
-        const coach = await this.coach;
-        const devs = await coach.deviations(sl.fenAt(idx), last.uci);
-        if (this.sideline !== sl || this.universeKey !== key) return;
-        for (const d of devs) {
-          chips.push({ label: `If they play ${d.san}`, title: `The engine rates it ${(d.lossCp / 100).toFixed(1)} pawns worse for them than ${last.san}.`, run: () => void this.runDeviation(sl, idx, d.uci, d.san) });
-        }
-      } catch {
-        /* no engine: only the moment's own universes */
-      }
-    }
-    const capped = this.forks >= App.MAX_FORKS;
-    for (const c of chips) {
-      const b = document.createElement('button');
-      b.textContent = c.label;
-      if (c.title) b.title = c.title;
-      b.disabled = capped;
-      b.addEventListener('click', c.run);
-      box.append(b);
-    }
-    if (capped && chips.length) {
-      const p = document.createElement('p');
-      p.className = 'universe-note';
-      p.textContent = 'That is as many forks as fit on one board. Undo, or go back to the game.';
-      box.append(p);
-    }
-  }
-
-  /** A universe from the sideline's start: its line played out, with the coach's notes. */
-  private async runUniverse(sl: Branch, u: Universe): Promise<void> {
-    if (this.sideline !== sl || this.sidelineBusy) return;
-    this.forks++;
-    const token = ++this.sidelineToken;
-    sl.truncate(0);
-    this.universeKey = '';
-    await this.playLine(sl, token, async () => {
-      const r = (await this.coach).lineNotes(sl.rootFen, u.ucis, undefined, `${u.label}:`);
-      return r;
-    });
-  }
-
-  /** "If they play X": back to the fork, their other move, then how the player punishes it. */
-  private async runDeviation(sl: Branch, index: number, uci: string, san: string): Promise<void> {
-    if (this.sideline !== sl || this.sidelineBusy) return;
-    this.forks++;
-    const token = ++this.sidelineToken;
-    sl.truncate(index);
-    sl.play(uci);
-    sl.notes.push(`If they play ${san} instead:`);
-    this.universeKey = '';
-    this.sync();
-    await this.playLine(sl, token, async () => {
-      const p = await (await this.coach).punishment(sl.fen);
-      return p && { ...p, intro: p.wins ? p.intro : `That reply gives you nothing by force. ${p.intro}` };
-    });
+  private pickNode(n: LineNode): void {
+    const sl = this.sideline;
+    if (!sl || sl.cursor === n) return;
+    sl.goto(n);
+    this.cursorMoved(sl);
   }
 
   /** Shows "Take back" / "Play on" in the bubble and waits for a choice. */

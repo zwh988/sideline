@@ -122,14 +122,29 @@ User's direction: a sideline should show the different universes play out (what 
 ### ✅ 1.7g Universes in live games
 Done: live mistakes, missed tactics and found tactics save `line` (what the engine wanted) and, for a mistake, `answer` (the coach's winning line); "Show me" now opens the sideline from the position before the mistake with "What happened" played out and the chips "What happened" / "What the engine wanted" / "If they play X"; a tactic prompt's "Try it out" offers "The tactic" as a chip (`Remark.line`). STATE decision 31. Not done: deviation chips at every opponent node of the path (only the latest), the player's tempting alternatives, universes saved with the game, renaming the UI around universes.
 
-### ⬜ 1.9 UI/UX pass on sidelines and Review (both live and Review)
-Found in play (user): navigating inside one sideline is already really hard; it is hard to follow the coach when he talks while the pieces move at the same time. Apply one design to both live games and Review. Ideas to weigh with the user before building:
-- **Step, don't autoplay:** a line plays one move per tap (› ‹ and a move list for the sideline, like the game's), the coach's note for that move shows with it; autoplay only on request. Words and board always agree (the note belongs to the move on the board).
-- **A sideline move list** with the universe's name, the current move highlighted, tap to jump; Undo and Back to game stay; the fork points marked.
-- **One place for the chips** (universes) and one for the notes: the bubble shows only the note for the shown move, with the earlier ones one tap away, instead of the last six.
-- **Fewer controls on a phone** (Undo / Show what's good / Back to game / chips / review bar / action row): decide what is always visible and what folds; fit one screen at 375×650.
-- **Review:** the same stepper for a moment's line; the strip and Moment ‹ › stay; the text for a moment is shorter (what happened, why, what instead) with details on tap.
-- Check on a real phone.
+### ✅ 1.9 Lines chart: the sideline as a flowchart (UI/UX pass, live and Review)
+Found in play (user): navigating inside one sideline is really hard, and it is hard to follow the coach when he talks while the pieces move. Designed with the user (mock-ups and a clickable prototype, Nov 25); STATE decision 32 has the vocabulary and rules. **The chart is as important as the board** and is the same in live games and Review.
+
+**Vocabulary (use it in the UI and the code):** a **Line** is a path of moves from a **fork** (the last shared move; "universe" is retired). The chart is one grid: columns are moves, rows are **lanes**, the same fixed lanes everywhere: **Best / Great / Good / Other** (quality of a move compared with the engine's best move *in its own position*). A Line is a path that crosses lanes, so a bend means a change in quality. Authors, by colour: **Game** (gray, the trunk, always shown), **Engine** (amber), **You** (purple). Move fill = who moved; a small dot = who is better after it (you / them / level).
+
+**Behaviour (agreed):**
+- One cursor. The board and the coach's note always follow the selected move; the bubble shows only that move's note.
+- At the cursor the **options** for the next move are drawn as dashed ghost moves in the next column: the engine's top moves (Best, Great, Good) and, in Other, moves that matter (the move played in the game, moves Maia says players at the level often choose). Tap one to open it (extends or forks a Line); or play any move on the board. The player chooses both sides' moves unless they tap an engine option ("I choose unless I choose the engine move").
+- **Lanes are recalculated for every new position**: opening a move searches its position (MultiPV) and ranks the next column; the rating of a custom move that is not among the candidate lines costs one more search. Cached by position; the likely next step is searched ahead.
+- Stepper « ‹ › »: ‹ to the parent, › to the Line's next move (at the end it opens the engine's best option), « to the fork, » to the end of the path; arrow keys. Tap any move in the chart to jump.
+- Max 3 forks per sideline (as before) and a column limit; a longer line scrolls sideways.
+- **Evaluation without a bar:** each move has a verdict ("clearly better for you", "about level", …) and the *reason* shown on the board: a Line (its arrows), or, for position-level reasons, squares (the pinned piece, the king's open squares). If no detector fires, the coach says so (rule 1). Badges only on notable moves (best, mistake), not on every move.
+- Side lines are tinted on the board (orange border); the game has none.
+- Same screen in live play and Review: in live play the lines from the current position are possible futures, one "Back to game" closes them all; looking at an earlier move is Review behaviour.
+- Layouts: folded phone (375×650: coach strip, board, stepper, chart fill one screen), unfolded (~850×850: board and coach above, chart across the full width below), desktop (board left, chart right, note card pinned to the selected move). Text and nodes small but not below 11px.
+
+**Split:**
+- ✅ **1.9a** Line tree model: `src/app/linetree.ts` (nodes, authors, lanes, forks, cursor, path, `rateOptions`, `verdictOf`), pure, 13 tests.
+- ✅ **1.9b** Engine options per position: `Coach.options` (MultiPV into lanes), `Coach.rateMove`, `Coach.lineNote`; tests in `sidelinecoach.test.ts`.
+- ✅ **1.9c** The chart in the sideline screen: `linechart.ts`, ghost options, the stepper, board play at any node, options arrows, moment Lines as gray and amber; replaces `branches.ts`, the sideline bar, universe chips and played-out lines. Checked in the browser at 375×650 and desktop 800×600 with the real engine (live "Show me" after 5.Bc4??, a custom 5.Be2, options, forward and back).
+- ✅ **1.9d** Reasons and badges: `coach/position.ts` (passed pawn, isolated and doubled pawns, open king, bishop pair: geometry only, 7 tests) and `Coach.reason` (what stands out when the engine says one side is clearly better and no concept was named; "I can't name a reason I can check" when none), lit up on the board; badges on notable moves only (`!` only move, `?` mistake, `??` blunder); Maia's "common at your level" options (`Opponent.likelyMoves`, `Coach.withCommon`: a common move the engine rates low is rated and added); the unused coach methods removed (`sidelineReply`, `bestLine`, `deviations`, `punishment`, `lineNotes`, `describeSidelineMove`, `describeSidelineReply`) with their tests; the unfolded size (850×850) and an 8-move Line checked in the browser. Dropped: "stale lanes" (each move's lane is relative to its own parent position, so nothing goes stale when an earlier move changes: the tree keeps the Lines that are still true).
+- Moved to 1.12 (visual polish): the desktop note card pinned to the selected move, the shorter Review moment text with details on tap, the bubble's room on a phone (verdict, note and reason compete for 80 px).
+- Still to do by the developer: time the option search on a real phone (about 0.3 s on the desktop, same CPU with the emulated phone).
 
 ### ⬜ 1.10 Ask the coach (an LLM layer over the engine's lines)
 Found in play (user): wanting to ask more questions about a line ("why not Bxc6?", "what if they take?"). The model never judges: it reads the structured facts the app already has (the engine's lines for the shown position, `explainLine` steps, concept notes, evaluations) and answers questions about them, or turns a question into an engine query (a candidate move to check) whose result the templates word. Rule 1 holds: anything it says must be traceable to those facts; when it can't, it says so. Needs: a fact bundle per position, a question-to-query step (JSON, the feasibility test showed small models are good at that), an answer-from-facts step, and a refusal path. Depends on the WebLLM model download (rule 4) and on 1.9's single place for the bubble.
@@ -161,12 +176,26 @@ Found in play (task 1.4 follow-ups): the Queen's Gambit 2.c4 gets "Bold! c4 offe
 - Pins and skewers in `facts.ts` (needed for Level 3).
 - Check the coach's analysis depth is fine on a phone.
 
-### ⬜ 1.9 Deploy to GitHub Pages
+### ⬜ 1.11 Deploy to GitHub Pages
 - Decide on the public repo (GPL). Install `gh` or create the repo by hand; push.
 - GitHub Actions workflow: `npm ci`, `npm test`, `npm run build`, deploy `dist/`.
 - Check the live site on desktop and phone, including offline after the first load.
 
-### ⬜ 1.10 Spec sync (can run in parallel with any task)
+### ⬜ 1.12 Visual polish pass (review and decide together)
+Found in play (user, Nov 25): the app works but looks barebones and functional. Goal: **one coherent look** across the game screen, the Lines chart, Review, History and Import, on phone (folded and unfolded) and desktop. **Not to be built before the user and Claude have reviewed it together:** start with mock-ups of 2–3 directions at the three sizes, pick or mix, write the decisions in STATE, then build tokens first and migrate screen by screen. Ideas to put on the table (nothing here is decided):
+- **Design tokens:** one palette (light and dark), type scale, spacing, radii and elevation in CSS variables. Today colours are ad hoc (`#c77d1a`, `#888780`, `#7F77DD`, `#1D9E75` in code and CSS; the app's own variables are `--bg`, `--panel`, `--muted`). Author and lane colours of the chart become tokens that also work for colour-blind players (a second cue besides hue: line style, shape).
+- **Typography:** a typeface pair and a clear hierarchy (coach voice vs controls vs numbers like move labels); readable at the 11 px floor.
+- **The coach:** a real portrait and bubble (tail, mood, the "thinking" state), tied to Phase 5 personas so the art is not thrown away; the verdict line ("Best · Slightly better for you") as a designed element, not plain text.
+- **The Lines chart as the hero:** node shape and weight, curve style, lane band styling and names inside the band, a quieter key instead of the caption, the selected move's emphasis, motion when stepping (the cursor glides, options fade in, a re-rated lane shifts), touch targets of at least 44 px for moves on a phone.
+- **The board:** square colours and coordinates from the theme pack, last-move, check and selected highlights, arrow style (numbered options), the tinted border for a sideline.
+- **Controls:** one button hierarchy (primary / secondary / ghost), icons with labels, a bottom action bar on phones, a simpler header (settings as a sheet), consistent sizes and spacing.
+- **Motion and feedback:** one duration and easing set, reduced-motion respected; loading and empty states ("Getting ready…", engine thinking) instead of bare text.
+- **Dialogs and lists:** History, Import and the review strip styled with the same system.
+- **Layouts by device:** phone 375×650, unfolded about 850×850, desktop; check each with the real engine at size. Includes the desktop note card pinned to the selected move from the mock-up.
+- **Accessibility:** contrast in both themes, focus rings, keyboard flow through the chart, screen-reader names (the chart's moves already have labels).
+- **Process:** a screenshot checklist per screen and size, taken before and after, kept out of the repo; one commit per screen migrated.
+
+### ⬜ 1.13 Spec sync (can run in parallel with any task)
 - Fold the "Decisions" from `docs/STATE.md` into the product spec: templates as the main voice, the Maia rating floor, the adapted line-cutting rules, loose piece, licensing.
 
 ---

@@ -16,7 +16,7 @@ export type Result =
   | { over: false }
   | { over: true; winner: Color | null; reason: string };
 
-/** Whether the position is over, and how (shared with branches). */
+/** Whether the position is over, and how (shared with linetree). */
 export function resultOf(c: Chess): Result {
   if (c.isCheckmate()) return { over: true, winner: c.turn() === 'w' ? 'black' : 'white', reason: 'checkmate' };
   if (c.isStalemate()) return { over: true, winner: null, reason: 'stalemate' };

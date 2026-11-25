@@ -9,6 +9,8 @@ export interface Opponent {
   /** Rating to play at; can change between games without reloading. */
   elo: number;
   chooseMove(game: Game): Promise<string>;
+  /** The moves players at `elo` most often choose at `fen`, most likely first (empty without Maia). */
+  likelyMoves(fen: string, priorMoves?: string[], baseFen?: string): Promise<{ uci: string; p: number }[]>;
 }
 
 /** Moves below this probability are dropped, so Maia never plays truly random moves. */
@@ -33,6 +35,12 @@ class MaiaOpponent implements Opponent {
     const likely = new Map([...policy].filter(([, p]) => p >= MIN_PROBABILITY));
     return sampleMove(likely.size ? likely : policy);
   }
+
+  async likelyMoves(fen: string, priorMoves: string[] = [], baseFen?: string): Promise<{ uci: string; p: number }[]> {
+    // The moves so far (from `baseFen`) give Maia the history a human would have.
+    const [policy] = await movePolicies(this.maia, fen, [this.elo], priorMoves, baseFen);
+    return [...policy].map(([uci, p]) => ({ uci, p })).sort((a, b) => b.p - a.p).slice(0, 3);
+  }
 }
 
 class StockfishOpponent implements Opponent {
@@ -45,6 +53,10 @@ class StockfishOpponent implements Opponent {
   async chooseMove(game: Game): Promise<string> {
     const a = await this.sf.analyse(game.fen, { depth: 8 });
     return a.bestMove;
+  }
+
+  async likelyMoves(): Promise<{ uci: string; p: number }[]> {
+    return [];
   }
 }
 
