@@ -176,10 +176,10 @@ Found in play (task 1.4 follow-ups): the Queen's Gambit 2.c4 gets "Bold! c4 offe
 - Pins and skewers in `facts.ts` (needed for Level 3).
 - Check the coach's analysis depth is fine on a phone.
 
-### ⬜ 1.11 Deploy to GitHub Pages
-- Decide on the public repo (GPL). Install `gh` or create the repo by hand; push.
-- GitHub Actions workflow: `npm ci`, `npm test`, `npm run build`, deploy `dist/`.
-- Check the live site on desktop and phone, including offline after the first load.
+### 🟨 1.11 Deploy to GitHub Pages
+- Done: `.github/workflows/pages.yml` (push to main: `npm ci`, `npm test`, `npm run build`, deploy `dist/` with the Pages actions); the production build checked from a `/sideline/` subpath on a local static server (Stockfish, the Maia model and ONNX runtime load; every request stays on the same host; the sideline options and Maia's common moves work). `dist/` is 45 MB (the Maia model is 22.6 MB).
+- To decide with the user before anything goes public: (1) the repo (owner, name, public: STATE decision 7 says GPL-3.0 open source; a LICENSE file is not added yet); (2) **the Maia3 weights' licence is unconfirmed** and the site would serve them (ask CSSLab, or ship the weakened-Stockfish fallback until confirmed); (3) **all 40 commits carry the developer's personal email as author**: keep, or use GitHub's no-reply address from now on, or rewrite the history before the first push; (4) `gh` is not installed: install it, or create the repository on github.com and give the URL.
+- Then: push, enable Settings > Pages > Source "GitHub Actions", check the live site on desktop and phone. **Offline after the first load is not built** (there is no service worker; the browser cache covers repeat loads but a fresh offline start fails): add one here or as its own task.
 
 ### ⬜ 1.12 Visual polish pass (review and decide together)
 Found in play (user, Nov 25): the app works but looks barebones and functional. Goal: **one coherent look** across the game screen, the Lines chart, Review, History and Import, on phone (folded and unfolded) and desktop. **Not to be built before the user and Claude have reviewed it together:** start with mock-ups of 2–3 directions at the three sizes, pick or mix, write the decisions in STATE, then build tokens first and migrate screen by screen. Ideas to put on the table (nothing here is decided):
