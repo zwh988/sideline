@@ -328,7 +328,7 @@ select:focus-visible {
     align-items: stretch;
     gap: 6px;
     padding: 0 0 12px;
-    --board: clamp(280px, calc(100dvh - 318px), 100vw);
+    --board: clamp(200px, calc(100dvh - 450px), 100vw);
   }
 
   /* The wrappers disappear so that each piece can be ordered on its own. */
@@ -427,7 +427,7 @@ select:focus-visible {
   }
 
   .chart-wrap {
-    max-height: 168px;
+    max-height: 110px;
     overflow-y: auto;
   }
 
