@@ -73,7 +73,6 @@
   --r-lg: 12px;
   --r-pill: 999px;
   --shadow-pop: 0 6px 20px rgb(0 0 0 / 0.4);
-  --ring-off-game: 0 0 0 5px var(--off-game);
   --dur: 0.2s;
   --ease: ease-out;
 
@@ -312,6 +311,8 @@ body {
 
 /* Board + side panel: side by side on wide screens, stacked on phones. */
 .layout {
+  /* The board's width on wide screens, named here so the side column can line up with the board itself. */
+  --board-w: min(calc(100vh - 250px), 640px, calc(100vw - 468px - var(--rail-w)));
   display: flex;
   gap: var(--sp-4);
   padding: 0 16px 16px;
@@ -323,7 +324,7 @@ body {
   position: relative;
   /* Never wider than the room left beside the side column (foldables, small tablets). The column is
      sized for the chart from the start, so the board never moves or resizes when a sideline opens. */
-  width: min(calc(100vh - 250px), 640px, calc(100vw - 468px - var(--rail-w)));
+  width: var(--board-w);
   flex-shrink: 0;
 }
 
@@ -333,6 +334,8 @@ body {
 }
 
 .side {
+  /* The coach's top edge is level with the board's: skip the strip of captured pieces above it. */
+  margin-top: calc(clamp(18px, var(--board-w) * 0.0875, 56px) + 6px);
   width: 420px;
   display: flex;
   flex-direction: column;
@@ -391,7 +394,7 @@ body {
     align-items: stretch;
     gap: 6px;
     padding: 0 0 12px;
-    --board: clamp(200px, calc(100dvh - 450px), 100vw);
+    --board: clamp(200px, calc(100dvh - 490px), 100vw);
   }
 
   /* The wrappers disappear so that each piece can be ordered on its own. */
@@ -403,31 +406,37 @@ body {
   .coach {
     order: 1;
     position: relative;
-    height: 96px;
+    height: 140px;
     margin: 0 12px;
+    gap: 8px;
   }
 
   .coach .portrait {
-    width: 76px;
-    height: 76px;
+    width: 56px;
+    height: 56px;
   }
 
+  /* The speech box is tall enough to read a whole remark without opening it; a longer one scrolls. */
   .coach .bubble {
-    height: 96px;
+    height: 140px;
     overflow: hidden;
     min-height: 0;
-    padding: 4px 10px;
+    padding: 2px 10px 4px;
+  }
+
+  .coach .coach-name {
+    display: none;
   }
 
   .coach .log {
-    max-height: 4.4em;
-    overflow: hidden;
+    max-height: 132px;
+    overflow-y: auto;
   }
 
   /* A tap opens the whole remark over the top of the board. */
   .coach.expanded .bubble {
     position: absolute;
-    left: 86px;
+    left: 64px;
     right: 0;
     top: 0;
     z-index: 30;
@@ -825,7 +834,7 @@ button.primary {
 
 /* Coach log: newest at the bottom, older remarks dimmed, scrollable */
 .log {
-  max-height: 9.5em;
+  max-height: min(22em, 45vh);
   overflow-y: auto;
 }
 
@@ -959,16 +968,6 @@ button.primary {
 
 .board-area.sidelining #takeback {
   display: none;
-}
-
-/* The strips stay in a sideline and show its position's material, in the off-game tint. */
-.board-area.sidelining .captured {
-  background: color-mix(in srgb, var(--off-game) 14%, transparent);
-  border-radius: var(--r-sm);
-}
-
-.board-area.sidelining .cap-plus {
-  border-color: var(--off-game);
 }
 
 /* Game review: a full screen of saved games (live and imported), PGN export and backup */
@@ -1332,15 +1331,6 @@ button.primary {
       color-mix(in srgb, var(--board-light) 72%, var(--off-game-soft)) 0% 50%
     )
     0 0 / 25% 25%;
-}
-
-.board-area.ghosting #board,
-.board-area.sidelining #board {
-  box-shadow: var(--ring-off-game);
-}
-
-body:has(.board-area.sidelining) .top {
-  background: color-mix(in srgb, var(--bg) 82%, var(--off-game));
 }
 
 .board-area.blunder #board {

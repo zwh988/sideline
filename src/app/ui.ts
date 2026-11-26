@@ -662,6 +662,11 @@ export class App {
       this.board.setAutoShapes(this.shapesAt(nav.live));
       this.viewShapes = false;
     }
+    // In Review nothing is played in the game: a move of either side on the shown position opens a sideline with it.
+    if (this.reviewing && !this.reviewing.analysing) {
+      const dests = new LineTree(shown.fen, g.playerColor).dests;
+      this.board.set({ movable: { color: shown.turn, dests: dests as Map<Key, Key[]> } });
+    }
     this.renderMaterial(shown.fen);
     this.renderEndSignals(shown.fen, !nav.viewing && !this.reviewing && g.result.over);
     this.renderMoves();
@@ -1112,6 +1117,7 @@ export class App {
 
   private async onPlayerMove(from: Square, to: Square): Promise<void> {
     if (this.sideline) return this.onSidelineMove(from, to);
+    if (this.reviewing) return this.sidelineFromReview(from, to);
     this.clearOpportunity();
     const id = this.gameId;
     let promotion = '';
@@ -1719,6 +1725,16 @@ export class App {
     void this.rateSeeded(sl);
     void this.loadOptions(sl, this.sidelineToken);
     return closed;
+  }
+
+  /** A move made on the board in Review: a sideline opens at the position shown, with that move already played. */
+  private async sidelineFromReview(from: Square, to: Square): Promise<void> {
+    if (this.reviewing?.analysing) return;
+    const ply = this.nav.ply;
+    const fen = this.nav.viewing ? this.game.positionAt(ply).fen : this.game.fen;
+    // Not awaited: the promise resolves when the sideline closes; the sideline itself is open at once.
+    void this.openSideline(fen, 'You are in a sideline now. Nothing here changes your game.', ply, [], true);
+    await this.onSidelineMove(from, to);
   }
 
   /** Back to the game, exactly as it was. */
