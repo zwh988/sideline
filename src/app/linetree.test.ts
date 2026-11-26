@@ -144,7 +144,7 @@ describe('LineTree', () => {
     const t = new LineTree(SCOTCH, 'white');
     t.open(t.root, 'f1c4', 'game');
     expect(t.forks).toBe(0);
-    for (const uci of ['f1b5', 'd4d3', 'd4e3']) {
+    for (const uci of ['f1b5', 'd4d3', 'd4e3', 'd4a4', 'd4c4']) {
       expect(t.canOpen(t.root, uci)).toBe(true);
       t.open(t.root, uci, 'engine');
     }

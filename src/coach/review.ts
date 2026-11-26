@@ -15,6 +15,7 @@ import type { Level } from '../app/levels';
 import type { SavedMoment } from '../app/store';
 import type { Analyst, PositionEval } from './analyst';
 import { lineConceptOf } from './explain';
+import { materialBalance } from './facts';
 import { isMereRecapture, type TaughtLine } from './lines';
 import { moveLoss } from './linecheck';
 import type { Moment, Remark } from './coach';
@@ -44,6 +45,8 @@ const TACTIC_PLIES = 10;
 /** Moments kept per game, most costly first: in practice every moment the analysis flags. */
 export const MAX_MOMENTS = 40;
 export const CURVE_CAP = 1000;
+/** Raised when the moment-finding changes, so saved games are analysed again the next time they are opened. */
+export const REVIEW_VERSION = 2;
 const MATE_CP = 90000;
 
 type Draft = Moment & { ply: number };
@@ -114,8 +117,29 @@ export async function reviewGame(
     };
 
     if (mover === me) {
-      if (tactic && uci === tactic.moves[0].uci) {
+      const played = tactic?.moves[0].uci === uci;
+      // A mate or a win the player passed up is listed even when they stay far ahead, where `moveLoss` counts no loss.
+      const waived = lossCp === 0 && !top;
+      const missedMate = !!tactic?.mate && !played && -after.bestCp < MATE_CP;
+      const missedWin = !!tactic && !tactic.mate && !played && waived && materialAfter(fen, [uci, ...(after.lines[0]?.pv ?? [])], tactic.moves.length) < tactic.gain;
+      if (tactic && played) {
         add({ kind: 'found-tactic', fen, played: uci, line: ucisOf(tactic), concept: lineConceptOf(fen, ucisOf(tactic), previous, tactic.motif), beyond: beyond(tactic) || undefined }, 50 + tactic.gain * 20);
+      } else if (tactic && (missedMate || missedWin)) {
+        // A missed mate stays a missed mate when the move also blunders: what it allows is kept as the answer.
+        const refutation = missedMate && lossCp >= cutoff ? taught(after) : undefined;
+        add(
+          {
+            kind: 'missed-tactic',
+            fen,
+            played: uci,
+            better: tactic.moves[0].uci,
+            line: ucisOf(tactic),
+            answer: refutation ? ucisOf(refutation) : undefined,
+            concept: lineConceptOf(fen, ucisOf(tactic), previous, tactic.motif),
+            beyond: beyond(tactic) || undefined,
+          },
+          missedMate ? MATE_CP : 50 + tactic.gain * 20,
+        );
       } else if (lossCp >= cutoff && !top && !inBook) {
         const refutation = taught(after);
         if (refutation) {
@@ -183,13 +207,35 @@ export async function reviewGame(
       kind: moment.kind === 'mistake' ? 'mistake' : moment.kind === 'missed-tactic' ? 'missed-tactic' : moment.kind === 'found-tactic' ? 'praise' : 'narration',
       text: words.text,
       mood: moment.kind === 'mistake' || moment.kind === 'missed-tactic' ? 'concerned' : moment.kind === 'found-tactic' ? 'pleased' : 'thinking',
-      shapes: words.shapes,
       moment,
     };
     out.remarks.push({ ply, remark });
     out.moments.push({ ...moment, ply, text: words.text });
   }
   return out;
+}
+
+/**
+ * The material (pawns) the side to move at `fen` has gained after the first `plies` moves of `ucis`, read on
+ * through any captures still pending, so a count is never taken in the middle of an exchange.
+ */
+function materialAfter(fen: string, ucis: string[], plies: number): number {
+  const chess = new Chess(fen);
+  const side = chess.turn();
+  const start = materialBalance(chess, side);
+  let gain = 0;
+  for (let i = 0; i < ucis.length; i++) {
+    let move;
+    try {
+      move = new Chess(chess.fen()).move({ from: ucis[i].slice(0, 2), to: ucis[i].slice(2, 4), promotion: ucis[i][4] });
+    } catch {
+      break;
+    }
+    if (i >= plies && !move.captured) break;
+    chess.move(move.san);
+    gain = materialBalance(chess, side) - start;
+  }
+  return gain;
 }
 
 /** White's evaluation of a position, in whole centipawns, clamped (mates count as the cap). */

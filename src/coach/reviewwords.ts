@@ -8,7 +8,7 @@ import { Chess, type Color } from 'chess.js';
 import { plyLabel } from '../app/navigation';
 import { HABIT, type NoteConcept } from './explain';
 import { explainLine, taughtFrom } from './lineexplain';
-import type { Moment, Shape } from './coach';
+import type { Moment } from './coach';
 import { winsPhrase } from './templates';
 
 export interface WordsContext {
@@ -40,8 +40,19 @@ const HABIT_OF: Record<string, NoteConcept | undefined> = {
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const pawns = (cp: number) => (Math.abs(cp) / 100).toFixed(1);
 
-/** The text and arrows for one moment (`ply` = moves played once the player's or opponent's move was made). */
-export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: string; shapes: Shape[] } {
+/** Whether playing `ucis` from `fen` ends in checkmate. */
+export function endsInMate(fen: string, ucis: string[]): boolean {
+  const chess = new Chess(fen);
+  try {
+    for (const u of ucis) chess.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
+  } catch {
+    return false;
+  }
+  return chess.isCheckmate();
+}
+
+/** The text for one moment (`ply` = moves played once the player's or opponent's move was made). */
+export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: string } {
   const before = new Chess(m.fen);
   const move = before.move({ from: m.played.slice(0, 2), to: m.played.slice(2, 4), promotion: m.played[4] });
   const fenAfter = before.fen();
@@ -49,7 +60,6 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
   const opp = ctx.opponent ?? 'your opponent';
   const previous = { fen: m.fen, uci: m.played };
   const sentences: string[] = [];
-  const shapes: Shape[] = [];
 
   /** What a line wins: "winning a rook and a pawn" / "ending in checkmate" / "" when material doesn't change. */
   const winning = (fen: string, ucis: string[]) => {
@@ -75,13 +85,7 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
     const lower = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
     return { texts: named.map((s) => `${s.san}: ${lower(s.text)}`), first: named[0]?.concept as string | undefined };
   };
-  /** Numbered arrows for the moves of a line that are still to come on the board shown (the position after the played move). */
-  const arrows = (fen: string, ucis: string[], from: number) =>
-    explainLine(fen, ucis, { player: ctx.me, voice: 'review' }).forEach((st, i) => {
-      if (i < from) return;
-      shapes.push({ orig: st.uci.slice(0, 2) as never, dest: st.uci.slice(2, 4) as never, brush: st.mine ? 'green' : 'red', label: String(i - from + 1) });
-    });
-  const runs = (fen: string, ucis: string[]) => (ucis.length > 1 ? ` The line runs ${sans(fen, ucis)}; the arrows on the board show it.` : '');
+  const runs = (fen: string, ucis: string[]) => (ucis.length > 1 ? ` The line runs ${sans(fen, ucis)}.` : '');
   const habit = (concept: string | undefined) => {
     const h = concept ? HABIT_OF[concept] : undefined;
     if (h && !ctx.seen.has(h)) {
@@ -104,7 +108,6 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
         if (m.answer.length > 1 && m.answer.length <= 4) sentences.push(runs(fenAfter, m.answer).trim());
         const c = concepts(fenAfter, m.answer, previous);
         sentences.push(...c.texts);
-        arrows(fenAfter, m.answer.slice(0, 4), 0);
         if (m.line?.length) sentences.push(`The engine preferred ${sans(m.fen, m.line)}.`);
         habit(c.first);
       } else if (m.line?.length) {
@@ -115,7 +118,12 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
     }
     case 'missed-tactic': {
       const line = m.line ?? [];
-      sentences.push(`${slip} played ${label}, but you had something stronger: ${sans(m.fen, line)}${wins(m.fen, line)}.`);
+      sentences.push(
+        endsInMate(m.fen, line)
+          ? `${slip} played ${label} and missed checkmate: ${sans(m.fen, line)}.`
+          : `${slip} played ${label}, but you had something stronger: ${sans(m.fen, line)}${wins(m.fen, line)}.`,
+      );
+      if (m.answer?.length) sentences.push(`It also lets ${opp} play ${sans(fenAfter, [m.answer[0]])}${wins(fenAfter, m.answer)}.`);
       const c = concepts(m.fen, line);
       sentences.push(...c.texts);
       habit(c.first);
@@ -125,7 +133,6 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
     case 'found-tactic': {
       const line = m.line ?? [m.played];
       sentences.push(`Good find: ${label}.${m.prompted ? ' Your opponent had just given something away.' : ''}${itWins(m.fen, line)}${runs(m.fen, line)}`);
-      arrows(fenAfter, line.slice(1), 0);
       const c = concepts(m.fen, line, undefined);
       sentences.push(...c.texts);
       habit(c.first);
@@ -134,7 +141,6 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
     case 'their-tactic': {
       const line = m.line ?? [m.played];
       sentences.push(`${cap(opp)} played ${label}.${itWins(m.fen, line)}${runs(m.fen, line)}`);
-      arrows(fenAfter, line.slice(1), 0);
       const c = concepts(m.fen, line, undefined);
       sentences.push(...c.texts);
       habit(c.first);
@@ -155,5 +161,5 @@ export function momentWords(m: Moment, ply: number, ctx: WordsContext): { text: 
       break;
     }
   }
-  return { text: sentences.filter(Boolean).join(' '), shapes };
+  return { text: sentences.filter(Boolean).join(' ') };
 }

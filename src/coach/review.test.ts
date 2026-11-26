@@ -54,12 +54,13 @@ describe('reviewGame: every pattern, both sides, at any level', () => {
     expect(m).toMatchObject({ kind: 'mistake', fen: SCOTCH_FEN, played: 'f1c4', better: 'd4a4', line: ['d4a4'], answer: ['c6d4', 'f3d4'], ply: 9 });
     expect(m.lossCp).toBeGreaterThan(500);
     expect(m.text).toBe(
-      'You played 5.Bc4. After that, your opponent can play Nxd4, winning a queen for a knight. The line runs Nxd4 Nxd4; the arrows on the board show it. ' +
+      'You played 5.Bc4. After that, your opponent can play Nxd4, winning a queen for a knight. The line runs Nxd4 Nxd4. ' +
         'Nxd4: that takes the only defender of your bishop on c4: it is now undefended. The engine preferred Qa4. ' +
         'Habit: when a piece is guarded, ask what happens if you take its guard.',
     );
     // Looking back: no takeback offer, no "Careful: after Bc4, I can play…".
-    expect(r!.remarks).toEqual([{ ply: 9, remark: expect.objectContaining({ kind: 'mistake', shapes: [{ orig: 'c6', dest: 'd4', brush: 'red', label: '1' }, { orig: 'f3', dest: 'd4', brush: 'green', label: '2' }] }) }]);
+    expect(r!.remarks).toEqual([{ ply: 9, remark: expect.objectContaining({ kind: 'mistake', }) }]);
+    expect(r!.remarks[0].remark.shapes).toBeUndefined(); // no arrows in Review: Show line plays it
     expect(r!.remarks[0].remark.offerTakeback).toBeUndefined();
   });
 
@@ -81,7 +82,7 @@ describe('reviewGame: every pattern, both sides, at any level', () => {
     const r = await reviewGame(new FakeAnalyst(FORK_SCRIPT) as unknown as Analyst, asGame(FORK_PGN, 'black'), { level: level2 });
     expect(r?.moments).toHaveLength(1);
     expect(r!.moments[0]).toMatchObject({ kind: 'their-tactic', played: 'd5c7', concept: 'fork' });
-    expect(r!.moments[0].text).toMatch(/^Your opponent played 1\.Nxc7\+\. It wins a rook and a pawn\. The line runs Nxc7\+ Kd7 Nxa8; the arrows on the board show it\. Nxc7\+: that's a fork: their knight on c7 attacks your king on e8 and your rook on a8 at once\./);
+    expect(r!.moments[0].text).toMatch(/^Your opponent played 1\.Nxc7\+\. It wins a rook and a pawn\. The line runs Nxc7\+ Kd7 Nxa8\. Nxc7\+: that's a fork: their knight on c7 attacks your king on e8 and your rook on a8 at once\./);
   });
 
   it('finds the tactic the player missed', async () => {
@@ -90,6 +91,22 @@ describe('reviewGame: every pattern, both sides, at any level', () => {
     const r = await reviewGame(new FakeAnalyst(missed) as unknown as Analyst, game, { level: level2 });
     expect(r?.moments[0]).toMatchObject({ kind: 'missed-tactic', played: 'h1g1', better: 'd5c7' });
     expect(r!.moments[0].text).toMatch(/^You played 1\.Rg1, but you had something stronger: Nxc7\+ Kd7 Nxa8, winning a rook and a pawn\./);
+  });
+
+  it('lists a missed mate even when the player stays far ahead, and names it', async () => {
+    const fen = '6k1/5ppp/8/8/8/8/5PPP/3QR1K1 w - - 0 1';
+    const script: Script = { [fen]: { cp: 99999, pv: ['e1e8'] }, [after(fen, 'h2h3')]: { cp: -1500 } };
+    const r = await reviewGame(new FakeAnalyst(script) as unknown as Analyst, { startFen: fen, moves: ['h2h3'], playerColor: 'white' }, { level: level2 });
+    expect(r!.moments[0]).toMatchObject({ kind: 'missed-tactic', better: 'e1e8' });
+    expect(r!.moments[0].lossCp).toBeUndefined();
+    expect(r!.moments[0].text).toMatch(/^You played 1\.h3 and missed checkmate: Re8#\./);
+  });
+
+  it('lists a missed win of material while still winning, unless the move wins as much', async () => {
+    const quiet: Script = { [FORK_FEN]: FORK_SCRIPT[FORK_FEN], [after(FORK_FEN, 'h1g1')]: { cp: -600 } };
+    const game = { startFen: FORK_FEN, moves: ['h1g1'], playerColor: 'white' as const };
+    const r = await reviewGame(new FakeAnalyst(quiet) as unknown as Analyst, game, { level: level2 });
+    expect(r!.moments.map((m) => m.kind)).toEqual(['missed-tactic']);
   });
 
   it('the level never hides a pattern: Level 1 finds the fork too, and says it is beyond the level', async () => {

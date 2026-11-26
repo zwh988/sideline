@@ -158,7 +158,7 @@ export interface LineNode {
 }
 
 /** At most this many forks per sideline, so the chart stays readable. */
-export const MAX_FORKS = 3;
+export const MAX_FORKS = 5;
 
 export class LineTree {
   readonly root: LineNode;

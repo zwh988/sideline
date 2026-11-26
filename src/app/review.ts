@@ -5,7 +5,8 @@
 // board fact (the move and its number); the verdict is the saved moment's text.
 import { Chess } from 'chess.js';
 import type { SavedGame, SavedMoment } from './store';
-import type { ReviewedGame } from '../coach/review';
+import { REVIEW_VERSION, type ReviewedGame } from '../coach/review';
+import { endsInMate } from '../coach/reviewwords';
 import { plyLabel } from './navigation';
 
 export const KIND_LABEL: Record<SavedMoment['kind'], string> = {
@@ -15,6 +16,11 @@ export const KIND_LABEL: Record<SavedMoment['kind'], string> = {
   'their-tactic': 'their tactic',
   'their-blunder': 'their mistake',
 };
+
+/** A moment's kind in words; a passed-up checkmate is named as one. */
+export function kindLabel(m: SavedMoment): string {
+  return m.kind === 'missed-tactic' && m.line?.length && endsInMate(m.fen, m.line) ? 'missed mate' : KIND_LABEL[m.kind];
+}
 
 /** The game's moments in the order they happened (a takeback can leave them out of order). */
 export function sortedMoments(game: SavedGame): SavedMoment[] {
@@ -54,7 +60,7 @@ export function reviewBarText(index: number, total: number, revealed: boolean, m
   if (!total) return 'No moments found in this game.';
   if (index < 0) return `${total} moment${total === 1 ? '' : 's'} found`;
   const cost = revealed && m ? costText(m) : undefined;
-  return `Moment ${index + 1} of ${total}${revealed && m ? ` · ${KIND_LABEL[m.kind]}${cost ? ` · about ${cost} pawns` : ''}` : ''}`;
+  return `Moment ${index + 1} of ${total}${revealed && m ? ` · ${kindLabel(m)}${cost ? ` · about ${cost} pawns` : ''}` : ''}`;
 }
 
 /** A turning point of the game: the move after which White's evaluation changed most. */
@@ -97,10 +103,11 @@ export interface MomentDot {
 /** Costs from this many centipawns are a blunder (the board's ?? badge). */
 export const BLUNDER_DOT_CP = 300;
 
-export function momentDot(m: Pick<SavedMoment, 'kind' | 'lossCp'>): MomentDot {
+export function momentDot(m: Pick<SavedMoment, 'kind' | 'lossCp' | 'answer'>): MomentDot {
   if (m.kind === 'found-tactic') return { glyph: '!', tone: 'good' };
   if (m.kind === 'their-tactic' || m.kind === 'their-blunder') return { glyph: '•', tone: 'theirs' };
-  return (m.lossCp ?? 0) >= BLUNDER_DOT_CP ? { glyph: '??', tone: 'blunder' } : { glyph: '?', tone: 'bad' };
+  // A missed mate that also gave something away carries the answer.
+  return (m.lossCp ?? 0) >= BLUNDER_DOT_CP || (m.kind === 'missed-tactic' && !!m.answer?.length) ? { glyph: '??', tone: 'blunder' } : { glyph: '?', tone: 'bad' };
 }
 
 /**
@@ -114,7 +121,7 @@ export function reviewIntro(total: number, opponent: string | undefined, turning
   const rest = summary.replace(/^\d+ moments?\.\s*/, '');
   const sum = rest ? ` ${rest}` : '';
   if (!total) return `Here is your game${vs}. I found no moments to look at in it.${swings}${sum} Step through the moves with the arrows, or try a sideline from any position.`;
-  return `Here is your game${vs}. I found ${total} moment${total === 1 ? '' : 's'} worth a look.${swings}${sum} Tap a dot below to go through them, or step through the moves with the arrows.`;
+  return `Here is your game${vs}. I found ${total} moment${total === 1 ? '' : 's'} worth a look.${swings}${sum} Tap Next moment, or a dot on the line, to go through them, or step through the moves with the arrows.`;
 }
 
 /**
@@ -130,6 +137,7 @@ export function mergeAnalysis(game: SavedGame, result: ReviewedGame): void {
   });
   game.remarks = [...game.remarks.filter((r) => !r.remark.moment), ...result.remarks].sort((a, b) => a.ply - b.ply);
   game.curve = result.curve;
+  game.reviewVersion = REVIEW_VERSION;
 }
 
 /** One universe of a moment: a line from the position before the played move. */

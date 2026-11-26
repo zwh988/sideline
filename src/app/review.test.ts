@@ -98,7 +98,7 @@ describe('the timeline dots', () => {
   it('the intro carries the game summary', () => {
     const text = reviewIntro(3, undefined, [], '3 moments. You took back 2 moves, both on loose pieces.');
     expect(text).toContain('You took back 2 moves, both on loose pieces.');
-    expect(text).toContain('Tap a dot below');
+    expect(text).toContain('a dot on the line');
     expect(text).not.toContain('3 moments.'); // the count is already said once
   });
 });

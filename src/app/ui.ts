@@ -14,8 +14,8 @@ import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
-import { KIND_LABEL, momentDot, momentUniverses, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
-import { reviewGame } from '../coach/review';
+import { kindLabel, momentDot, momentUniverses, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
+import { REVIEW_VERSION, reviewGame } from '../coach/review';
 import { Game, resultOf, type Color } from './game';
 import { LEVELS, levelInfo } from './levels';
 import { MODES, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
@@ -136,6 +136,21 @@ export function faceSvg(mood: Mood): string {
 }
 
 
+const TIMELINE_W = 300;
+const TIMELINE_H = 100;
+
+/** Where a ply and an evaluation fall on the Review timeline. */
+function timelineScale(curve: number[]): { x: (ply: number) => number; y: (cp: number) => number } {
+  const most = Math.max(300, ...curve.map(Math.abs));
+  return {
+    x: (ply) => (ply / (curve.length - 1)) * TIMELINE_W,
+    y: (cp) => TIMELINE_H / 2 - (cp / most) * (TIMELINE_H / 2 - 4),
+  };
+}
+
+/** How many of the game's own moves a sideline in Review starts with (each is rated, so not the whole game). */
+const REVIEW_SEED_PLIES = 8;
+
 const RAIL_ICONS = {
   play: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M9 4l9 8-9 8z" fill="currentColor"/></svg>',
   review: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>',
@@ -171,10 +186,8 @@ export class App {
   private optionsAt?: { nodeId: number; options: Option[] };
   /** Moves of the sideline that are being rated or worded now. */
   private pendingNodes = new Set<LineNode>();
-  /** Options are also drawn as numbered arrows on the board. */
+  /** The engine's moves are shown (dashed on the chart, arrows on the board). */
   private arrowsOn = false;
-  /** Options stay hidden until asked for (a Review moment or a tactic: the player is to think first). */
-  private hideOptions = false;
   /** The last move before the fork, for the chart ("4…d6"). */
   private forkLabel = 'Start';
   /** Saved games on this device (localStorage). */
@@ -304,14 +317,6 @@ export class App {
             <button id="nav-live" aria-label="Latest position">»</button>
             <button id="takeback" class="undo">↶ Take back</button>
           </div>
-          <div id="review-bar" class="viewbar reviewbar" hidden>
-            <span id="review-text"></span>
-            <svg id="review-strip" class="review-strip" viewBox="0 0 300 44" preserveAspectRatio="none" role="img" aria-label="The evaluation through the game. Tap to jump to a move." hidden></svg>
-            <div class="review-buttons">
-              <div id="review-dots" class="review-dots" role="group" aria-label="Moments in this game"></div>
-              <button id="review-exit" class="primary">Back to my game</button>
-            </div>
-          </div>
           <div id="viewbar" class="viewbar" hidden>
             <span id="viewtext"></span>
             <button id="back-to-game" class="primary">Back to game</button>
@@ -334,12 +339,12 @@ export class App {
               <div id="portrait" class="portrait" aria-hidden="true">
                 ${faceSvg('neutral')}
               </div>
-              <button id="ask" class="ask" aria-haspopup="menu" aria-expanded="false" aria-controls="ask-menu">Ask ▾</button>
+              <button id="ask" class="ask" aria-haspopup="menu" aria-expanded="false" aria-controls="ask-menu">Ask</button>
             </div>
             <div id="ask-menu" class="menu ask-menu" role="menu" hidden>
-              <button id="hint" role="menuitem">Hint</button>
-              <button id="sideline" role="menuitem">Try a sideline</button>
-              <button id="flip" role="menuitem">Flip board</button>
+              <button id="hint" role="menuitem"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.5.4.6 1 .6 1.7v.5h6v-.5c0-.7.1-1.3.6-1.7A6 6 0 0 0 12 3z"/></svg><span>Hint</span></button>
+              <button id="sideline" role="menuitem"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M6 14c0-5 4-4 9-6M14 5l4 3-3 4"/></svg><span>Try a sideline</span></button>
+              <button id="flip" role="menuitem"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v16M4 8l4-4 4 4M16 20V4M12 16l4 4 4-4"/></svg><span>Flip board</span></button>
             </div>
             <div id="bubble-box" class="bubble">
               <div class="coach-name">${COACH_NAME} <span id="mood" class="mood"></span></div>
@@ -351,9 +356,22 @@ export class App {
           <div id="sideline-bar" class="sidelinebar" hidden>
             <div id="chart-wrap" class="chart-wrap"><svg id="chart" role="group" aria-label="Lines: moves in lanes by quality"></svg></div>
             <div class="sideline-buttons">
-              <button id="sideline-arrows" aria-pressed="false">Show options</button>
+              <button id="sideline-arrows" aria-pressed="false">Show engine moves</button>
               <button id="sideline-undo">Remove move</button>
               <button id="sideline-exit" class="primary">Back to game</button>
+            </div>
+          </div>
+          <div id="review-bar" class="viewbar reviewbar" hidden>
+            <span id="review-text"></span>
+            <div id="review-timeline" class="timeline">
+              <div class="plot">
+                <svg id="review-strip" class="review-strip" viewBox="0 0 300 100" preserveAspectRatio="none" role="img" aria-label="The evaluation through the game. Tap to jump to a move."></svg>
+                <div id="review-dots" class="review-dots" role="group" aria-label="Moments in this game"></div>
+              </div>
+            </div>
+            <div class="review-buttons">
+              <button id="review-next" class="primary">Next moment ›</button>
+              <button id="review-exit">Back to game</button>
             </div>
           </div>
           <ol id="moves" class="moves"></ol>
@@ -361,7 +379,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-timeline', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -410,6 +428,7 @@ export class App {
       this.importDialog.open();
     });
     this.el['review-exit'].addEventListener('click', () => void this.exitReview());
+    this.el['review-next'].addEventListener('click', () => this.gotoMoment((this.reviewing?.index ?? -1) + 1));
     this.el.backup.addEventListener('click', () => this.backup());
     this.el.restore.addEventListener('click', () => this.el['restore-file'].click());
     this.el['restore-file'].addEventListener('change', () => void this.restore());
@@ -822,6 +841,7 @@ export class App {
   }
 
   private shapesAt(ply: number): DrawShape[] {
+    if (this.reviewing) return []; // Review draws no arrows: a line is played through in a sideline (Show line)
     return this.log
       .at(ply)
       .flatMap((e) => remarkShapes(e.remark));
@@ -1320,7 +1340,7 @@ export class App {
     this.status('Reviewing a saved game.');
     this.sync();
     // Review looks at the whole game once, both sides, every pattern (task 1.7e); older records get it now.
-    if (!saved.curve) void this.analyseForReview(saved);
+    if (!saved.curve || saved.reviewVersion !== REVIEW_VERSION) void this.analyseForReview(saved);
   }
 
   /** Looks at the whole game with the engine and replaces the saved moments with what Review finds. */
@@ -1388,7 +1408,9 @@ export class App {
   /** The timeline: one dot per moment, marked like the board's badges; a dot opens that moment with the question first. */
   private renderDots(r: { moments: SavedMoment[]; index: number }, busy: boolean): void {
     const box = this.el['review-dots'];
-    box.hidden = !r.moments.length;
+    const curve = this.reviewing?.curve;
+    box.hidden = !r.moments.length || !curve || curve.length < 2;
+    const scale = curve && curve.length > 1 ? timelineScale(curve) : undefined;
     box.replaceChildren(
       ...r.moments.map((m, i) => {
         const dot = momentDot(m);
@@ -1396,10 +1418,15 @@ export class App {
         b.type = 'button';
         b.className = `dot ${dot.tone}${i === r.index ? ' current' : ''}`;
         b.textContent = dot.glyph;
+        if (scale && curve) {
+          // On the evaluation line, where the move of the moment left it.
+          b.style.left = `${(scale.x(m.ply) / TIMELINE_W) * 100}%`;
+          b.style.top = `${(scale.y(curve[m.ply] ?? 0) / TIMELINE_H) * 100}%`;
+        }
         b.disabled = busy;
         const label = moveLabels(this.record!)[m.ply - 1];
-        b.setAttribute('aria-label', `Moment ${i + 1} of ${r.moments.length}: ${KIND_LABEL[m.kind]}, ${label}`);
-        b.title = `${label} · ${KIND_LABEL[m.kind]}`;
+        b.setAttribute('aria-label', `Moment ${i + 1} of ${r.moments.length}: ${kindLabel(m)}, ${label}`);
+        b.title = `${label} · ${kindLabel(m)}`;
         if (i === r.index) b.setAttribute('aria-current', 'true');
         b.addEventListener('click', () => this.gotoMoment(i));
         return b;
@@ -1434,11 +1461,14 @@ export class App {
     if (!r) return;
     const m = r.moments[r.index];
     const revealed = !!m && !r.say && this.nav.ply === m.ply;
+    // The moment on the board, however the player got there (Next moment, a dot, or stepping with the arrows).
+    const here = m?.ply === this.nav.ply ? m : r.moments.find((x) => x.ply === this.nav.ply);
     const busy = r.analysing;
     this.el['review-text'].textContent = busy
       ? `Looking at the game… move ${busy.done} of ${busy.total}`
       : reviewBarText(r.index, r.moments.length, revealed, m);
     this.renderDots(r, !!busy);
+    (this.el['review-next'] as HTMLButtonElement).disabled = !!busy || r.index >= r.moments.length - 1;
     this.renderStrip();
     if (busy) {
       box.hidden = true;
@@ -1448,42 +1478,39 @@ export class App {
       box.onclick = (e) => {
         if ((e.target as HTMLElement).closest('button')) this.revealMoment();
       };
-    } else if (revealed && !this.sideline) {
-      // The drill: after the answer, see the engine's line played out, or try the position yourself.
-      box.innerHTML = `${m.line?.length ? '<button data-choice="line" class="primary">Show the line</button>' : ''}<button data-choice="try">Try it yourself</button>`;
+    } else if (here && !r.say && !this.sideline) {
+      // The drill: after the answer, open the line in a sideline, or try the position yourself.
+      box.innerHTML = `${here.line?.length || here.answer?.length ? '<button data-choice="line" class="primary">Show line</button>' : ''}<button data-choice="try">Try it yourself</button>`;
       box.hidden = false;
       box.onclick = (e) => {
         const choice = (e.target as HTMLElement).closest('button')?.dataset.choice;
-        if (choice === 'line') void this.showMomentLine(m);
-        else if (choice === 'try') void this.openSideline(m.fen, 'Try your idea from here. Tap Show options if you want to see what the engine would play. Nothing here changes your game.', m.ply - 1, [], true);
+        if (choice === 'line') void this.showMomentLine(here);
+        else if (choice === 'try') void this.openSideline(here.fen, 'Try your idea from here. Tap Show engine moves if you want to see what the engine would play. Nothing here changes your game.', here.ply - 1, [], true);
       };
     } else if (!this.sideline) {
       box.hidden = true;
     }
   }
 
-  /** The evaluation through the game, White's view, with the moments marked and the position shown. Tap to jump. */
+  /**
+   * The evaluation through the game (White's view; tap to jump to a move) with the moments sitting on the line.
+   * The scale fits this game's own swings (never tighter than ±3 pawns), so they stand out.
+   */
   private renderStrip(): void {
     const r = this.reviewing;
     const strip = this.el['review-strip'] as unknown as SVGElement;
     const curve = r?.curve;
-    strip.toggleAttribute('hidden', !r || !curve || curve.length < 3);
-    if (!r || !curve || curve.length < 3) return;
-    const W = 300;
-    const H = 44;
-    const x = (ply: number) => (ply / (curve.length - 1)) * W;
-    const y = (cp: number) => H / 2 - (cp / 1000) * (H / 2 - 2);
+    this.el['review-timeline'].hidden = !r || !curve || curve.length < 2;
+    if (!r || !curve || curve.length < 2) return;
+    const { x, y } = timelineScale(curve);
+    const W = TIMELINE_W;
+    const H = TIMELINE_H;
+    const points = curve.map((cp, i) => `${x(i).toFixed(1)},${y(cp).toFixed(1)}`).join(' ');
     const mid = `<line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" class="strip-mid"/>`;
-    const area = `<polygon points="0,${H / 2} ${curve.map((cp, i) => `${x(i).toFixed(1)},${y(cp).toFixed(1)}`).join(' ')} ${W},${H / 2}" class="strip-area"/>`;
-    const line = `<polyline points="${curve.map((cp, i) => `${x(i).toFixed(1)},${y(cp).toFixed(1)}`).join(' ')}" class="strip-line"/>`;
-    const marks = r.moments
-      .map((m, i) => {
-        const kind = m.kind === 'mistake' || m.kind === 'missed-tactic' ? 'bad' : m.kind === 'found-tactic' ? 'good' : 'theirs';
-        return `<line x1="${x(m.ply).toFixed(1)}" y1="0" x2="${x(m.ply).toFixed(1)}" y2="${H}" class="strip-mark ${kind}${i === r.index ? ' current' : ''}"/>`;
-      })
-      .join('');
+    const area = `<polygon points="0,${H / 2} ${points} ${W},${H / 2}" class="strip-area"/>`;
+    const line = `<polyline points="${points}" class="strip-line"/>`;
     const here = `<line x1="${x(this.nav.ply).toFixed(1)}" y1="0" x2="${x(this.nav.ply).toFixed(1)}" y2="${H}" class="strip-here"/>`;
-    strip.innerHTML = mid + area + line + marks + here;
+    strip.innerHTML = mid + area + line + here;
     strip.onclick = (e) => {
       if (this.sideline) return;
       const box = strip.getBoundingClientRect();
@@ -1494,9 +1521,9 @@ export class App {
 
   /** "Show the line": a sideline from the position before the moment, with the engine's better line played out. */
   private async showMomentLine(m: SavedMoment): Promise<void> {
-    if (!m.line?.length || this.sideline) return;
+    if ((!m.line?.length && !m.answer?.length) || this.sideline) return;
     const fresh = m.kind === 'mistake' || m.kind === 'missed-tactic' ? 'Here is the line the engine preferred.' : 'Here is the line.';
-    await this.openSideline(m.fen, `${fresh} Gray is what happened, amber is what the engine wanted. Nothing here changes your game.`, m.ply - 1, momentUniverses(m));
+    await this.openSideline(m.fen, `${fresh} Gray is what was played in the game. Tap along the other moves to see what the engine wanted. Nothing here changes your game.`, m.ply - 1, momentUniverses(m));
   }
 
   // --- Saved games: history, PGN and backup ------------------------------
@@ -1694,8 +1721,8 @@ export class App {
     this.sidelineToken++;
     this.optionsAt = undefined;
     this.pendingNodes.clear();
-    this.arrowsOn = false;
-    this.hideOptions = spoilerFree;
+    // The engine's moves are shown from the start, except where seeing them would give the answer away.
+    this.arrowsOn = !spoilerFree;
     const last = ply > 0 ? this.game.moves[ply - 1]?.san : undefined;
     this.forkLabel = last ? plyLabel(this.game.startFen, ply, last) : 'Start';
     this.el.choices.hidden = true;
@@ -1704,10 +1731,18 @@ export class App {
     sl.root.notes.push(
       intro ??
         (sl.isPlayerTurn
-          ? (spoilerFree ? 'Play a move on the board, or tap Show options to see what the engine would play. Nothing here changes your game.' : 'Tap a dashed move to try it, or play any move on the board. Nothing here changes your game.')
+          ? (spoilerFree ? 'Play a move on the board, or tap Show engine moves to see what the engine would play. Nothing here changes your game.' : 'Tap a dashed move to try it, or play any move on the board. Nothing here changes your game.')
           : 'Here is what I could play. Tap one to see it. Nothing here changes your game.'),
     );
     const roots: LineNode[] = [];
+    // In Review the moves the game really went on with are always there, as the gray Line.
+    if (this.reviewing) {
+      const played = this.game.moves.slice(ply, ply + REVIEW_SEED_PLIES).map((m) => m.uci);
+      if (played.length) {
+        // A moment's own "What happened" carries the coach's reply, not necessarily what was played.
+        seeds = [{ label: 'What happened', ucis: played }, ...seeds.map((s) => (s.label === 'What happened' ? { ...s, label: 'The reply' } : s))];
+      }
+    }
     for (const s of seeds) {
       let node = sl.root;
       try {
@@ -1824,7 +1859,7 @@ export class App {
 
   /** The options at the cursor that are not opened yet. */
   private ghosts(sl: LineTree): Option[] {
-    if (this.optionsAt?.nodeId !== sl.cursor.id || (this.hideOptions && !this.arrowsOn)) return [];
+    if (this.optionsAt?.nodeId !== sl.cursor.id || !this.arrowsOn) return [];
     return this.optionsAt.options.filter((o) => !sl.cursor.kids.some((k) => k.uci === o.uci));
   }
 
@@ -1915,7 +1950,7 @@ export class App {
     const ghosts = this.ghosts(sl);
     const at = drawChart(
       this.el.chart as unknown as SVGSVGElement,
-      { tree: sl, ghosts, forkLabel: this.forkLabel, thinking: this.sidelineBusy, pending: this.pendingNodes },
+      { tree: sl, ghosts, forkLabel: this.forkLabel, thinking: this.sidelineBusy, pending: this.pendingNodes, minWidth: this.el['chart-wrap'].clientWidth },
       { node: (n) => this.pickNode(n), ghost: (o) => this.openOption(o) },
     );
     const wrap = this.el['chart-wrap'];
@@ -1931,7 +1966,7 @@ export class App {
     const opts = this.el['sideline-arrows'];
     opts.classList.toggle('on', this.arrowsOn);
     opts.setAttribute('aria-pressed', String(this.arrowsOn));
-    opts.textContent = this.arrowsOn ? 'Hide options' : 'Show options';
+    opts.textContent = this.arrowsOn ? 'Hide engine moves' : 'Show engine moves';
     (this.el['sideline-undo'] as HTMLButtonElement).disabled = cur === sl.root;
     (this.el['nav-start'] as HTMLButtonElement).disabled = cur === sl.root;
     (this.el['nav-back'] as HTMLButtonElement).disabled = cur === sl.root;

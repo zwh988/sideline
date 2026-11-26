@@ -55,6 +55,8 @@ export interface ChartInput {
   ghosts: Option[];
   /** The last move before the fork ("4…d6"), or "Start" (spoken, not drawn). */
   forkLabel: string;
+  /** The box the chart sits in: the lane colours run at least to its edge. */
+  minWidth?: number;
   /** The engine is still ranking the options. */
   thinking: boolean;
   /** Which node asks for a pulse: the one being rated. */
@@ -102,7 +104,7 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
     g.sort((a, b) => a.loss - b.loss).forEach((it, i) => place.set(it.key, { x: columnX(it.depth), y: laneTop[it.lane] + 3 + SLOT / 2 + i * SLOT }));
   }
   const maxDepth = Math.max(cursor.depth + (ghosts.length ? 1 : 0), ...nodes.map((n) => n.depth), 1);
-  const width = Math.max(MIN_WIDTH, columnX(maxDepth) + PILL_W / 2 + 12);
+  const width = Math.max(MIN_WIDTH, input.minWidth ?? 0, columnX(maxDepth) + PILL_W / 2 + 12);
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.setAttribute('width', String(width));
   svg.setAttribute('height', String(height));

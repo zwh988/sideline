@@ -883,11 +883,11 @@ button.primary {
   min-height: var(--h-md);
 }
 
-/* Sideline ("Try a sideline"): a banner under the board and a tinted board border, always visible */
+/* Sideline ("Try a sideline"): the chart and its buttons; the board's tinted squares say we are off the game */
 .sidelinebar {
   margin-top: 8px;
   padding: 8px;
-  border: 2px solid var(--off-game);
+  border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--panel);
 }
@@ -938,9 +938,8 @@ button.primary {
 }
 
 #sideline-arrows.on {
-  background: var(--off-game);
-  border-color: var(--off-game);
-  color: var(--on-accent);
+  background: color-mix(in srgb, var(--coach-accent) 24%, transparent);
+  border-color: var(--coach-accent);
 }
 
 .chart-thinking circle {
@@ -1186,52 +1185,9 @@ button.primary {
 
 .review-buttons {
   flex: 1 0 100%;
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
   gap: 6px;
-}
-
-.review-buttons > .primary {
-  flex: none;
-  padding-inline: 10px;
-  font-size: 0.92rem;
-}
-
-/* The timeline: one dot per moment, marked like the board's badges (task 1.12i) */
-.review-dots {
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.review-dots[hidden] {
-  display: none;
-}
-
-.review-dots .dot {
-  min-width: var(--h-sm);
-  height: var(--h-sm);
-  padding: 0 6px;
-  border-radius: var(--r-pill);
-  border: 2px solid transparent;
-  color: var(--on-accent);
-  font-weight: 800;
-  font-size: var(--fs-sm);
-}
-
-.review-dots .dot.bad { background: var(--mark-bad); }
-.review-dots .dot.blunder { background: var(--mark-blunder); }
-.review-dots .dot.good { background: var(--mark-good); }
-.review-dots .dot.theirs {
-  background: transparent;
-  border-color: var(--game-line);
-  color: var(--text);
-}
-
-.review-dots .dot.current {
-  outline: 3px solid var(--text);
-  outline-offset: 1px;
 }
 
 /* The board and its promotion picker: the picker covers the board only */
@@ -1240,17 +1196,85 @@ button.primary {
   overflow-x: clip;
 }
 
-/* Review: the evaluation through the game (White's view), moments marked, tap to jump */
-.review-strip {
+/* Review: the evaluation through the game (White's view) with the moments on the line; tap to jump */
+.timeline {
   flex: 1 0 100%;
+  height: 128px;
+  padding: 14px 14px; /* room for the dots at the edges */
+  box-sizing: border-box;
+}
+
+.timeline[hidden] {
+  display: none;
+}
+
+.timeline .plot {
+  position: relative;
+  height: 100%;
+}
+
+.review-strip {
+  display: block;
   width: 100%;
-  height: 30px;
+  height: 100%;
+  overflow: visible;
   cursor: pointer;
   touch-action: manipulation;
 }
 
-.review-strip[hidden] {
+/* One dot per moment, marked like the board's badges, sitting where its move left the evaluation */
+.review-dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.review-dots[hidden] {
   display: none;
+}
+
+.review-dots .dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  width: 26px;
+  min-width: 0;
+  height: 26px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--panel);
+  color: var(--on-accent);
+  font-weight: 800;
+  font-size: var(--fs-xs);
+  line-height: 1;
+}
+
+/* A bigger touch target than the dot itself */
+.review-dots .dot::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+
+.review-dots .dot:active {
+  transform: translate(-50%, -50%) scale(0.94);
+}
+
+.review-dots .dot.bad { background: var(--mark-bad); }
+.review-dots .dot.blunder { background: var(--mark-blunder); }
+.review-dots .dot.good { background: var(--mark-good); }
+.review-dots .dot.theirs {
+  background: var(--panel);
+  border-color: var(--game-line);
+  color: var(--text);
+}
+
+.review-dots .dot.current {
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  outline: 3px solid var(--text);
 }
 
 .review-strip .strip-mid {
@@ -1269,29 +1293,6 @@ button.primary {
   stroke: var(--text);
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
-}
-
-.review-strip .strip-mark {
-  stroke-width: 3;
-  stroke-opacity: 0.55;
-  vector-effect: non-scaling-stroke;
-}
-
-.review-strip .strip-mark.bad {
-  stroke: var(--danger);
-}
-
-.review-strip .strip-mark.good {
-  stroke: var(--good);
-}
-
-.review-strip .strip-mark.theirs {
-  stroke: var(--warn);
-}
-
-.review-strip .strip-mark.current {
-  stroke-opacity: 1;
-  stroke-width: 5;
 }
 
 .review-strip .strip-here {
@@ -1473,9 +1474,66 @@ button.primary {
   white-space: nowrap;
 }
 
-.ask-menu {
+/* Ask opens out of the coach, like something the coach offers: the speech box's own surface, with a tail
+   pointing back at the Ask chip, and the choices side by side as pills. */
+.menu.ask-menu {
   left: 0;
-  top: 100%;
+  top: calc(100% + 10px);
+  flex-direction: row;
+  gap: var(--sp-1);
+  min-width: 0;
+  width: max-content;
+  max-width: 100%;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  transform-origin: 40px top;
+  animation: ask-in var(--dur) var(--ease) both;
+}
+
+.menu.ask-menu[hidden] {
+  display: none;
+}
+
+.ask-menu::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 36px;
+  width: 10px;
+  height: 10px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+
+.menu.ask-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 84px;
+  min-height: var(--h-lg);
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--coach-accent) 14%, transparent);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.menu.ask-menu button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--coach-accent) 30%, transparent);
+}
+
+.menu.ask-menu button[hidden] {
+  display: none;
+}
+
+@keyframes ask-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.94); }
 }
 
 .nav .undo {

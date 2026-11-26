@@ -55,6 +55,8 @@ export interface SavedGame {
   moments: SavedMoment[];
   /** Review's evaluation curve: White's score after 0..n moves (centipawns, clamped). Present once Review has analysed the game. */
   curve?: number[];
+  /** The version of the moment-finding that made the curve and moments (see `REVIEW_VERSION`). */
+  reviewVersion?: number;
   hintsUsed: number;
   /** Moves the player took back (task 1.12b), with the concept of the flagged ones. */
   takebacks?: Takeback[];

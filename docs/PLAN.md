@@ -147,6 +147,7 @@ Found in play (user): navigating inside one sideline is really hard, and it is h
 - Still to do by the developer: time the option search on a real phone (about 0.3 s on the desktop, same CPU with the emulated phone).
 
 ### ⬜ 1.10 Ask the coach (an LLM layer over the engine's lines)
+**Next up (the user's plan, Nov 27: the LLM pass, in its own session).** It overlaps Phase 2: the model download and warm-up (2.1) is needed first. Read STATE's feasibility results (templates stay the voice; small models invented facts) and rule 1. Align on the design with the user before building.
 Found in play (user): wanting to ask more questions about a line ("why not Bxc6?", "what if they take?"). The model never judges: it reads the structured facts the app already has (the engine's lines for the shown position, `explainLine` steps, concept notes, evaluations) and answers questions about them, or turns a question into an engine query (a candidate move to check) whose result the templates word. Rule 1 holds: anything it says must be traceable to those facts; when it can't, it says so. Needs: a fact bundle per position, a question-to-query step (JSON, the feasibility test showed small models are good at that), an answer-from-facts step, and a refusal path. Depends on the WebLLM model download (rule 4) and on 1.9's single place for the bubble.
 
 ### ✅ 1.7b Known openings and gambits
