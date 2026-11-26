@@ -539,10 +539,6 @@ body {
     padding: 0 6px;
   }
 
-  .credits {
-    order: 10;
-    padding: 0 12px;
-  }
 }
 
 /* Coach: portrait placeholder (initial in a circle) and speech bubble */
@@ -689,12 +685,6 @@ body {
 
 .moves .num {
   color: var(--muted);
-}
-
-.credits {
-  font-size: 0.75rem;
-  color: var(--muted);
-  margin: 0;
 }
 
 /* Promotion picker over the board */
@@ -1662,5 +1652,74 @@ button.primary {
   .board-area.checking cg-board square.check,
   .board-area.shake #board {
     animation: none;
+  }
+}
+
+/* The coach's choices and the status line. On phones each is placed on its own. */
+.turn {
+  display: contents;
+}
+
+/*
+ * Wide screens: the side column has fixed slots, so nothing in it moves when the coach says more or less.
+ * It ends level with the move buttons under the board; the speech box and the move list scroll inside theirs.
+ * (The opposite of the phone layout's media query.)
+ */
+@media (min-width: 1001px), (min-width: 761px) and (min-aspect-ratio: 1001/1000) {
+  .side {
+    height: calc(var(--board-w) + clamp(18px, var(--board-w) * 0.0875, 56px) + 70px);
+  }
+
+  .side > * {
+    flex: none;
+  }
+
+  .side .coach {
+    height: clamp(150px, var(--board-w) * 0.42, 260px);
+    align-items: stretch;
+  }
+
+  .side .coach-face {
+    align-self: flex-start;
+  }
+
+  .side .coach .bubble {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .side .coach .log {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .turn {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--sp-1);
+    height: 72px;
+  }
+
+  .turn .choices {
+    margin-top: 0;
+  }
+
+  .turn .status {
+    margin-top: auto;
+  }
+
+  .side .timeline {
+    height: 112px;
+  }
+
+  /* The move list takes what is left. */
+  .side .moves {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
   }
 }

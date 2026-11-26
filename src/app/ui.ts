@@ -351,8 +351,10 @@ export class App {
               <div id="bubble" class="log" aria-live="polite"></div>
             </div>
           </div>
-          <div id="choices" class="choices" hidden></div>
-          <p id="status" class="status"></p>
+          <div class="turn">
+            <div id="choices" class="choices" hidden></div>
+            <p id="status" class="status"></p>
+          </div>
           <div id="sideline-bar" class="sidelinebar" hidden>
             <div id="chart-wrap" class="chart-wrap"><svg id="chart" role="group" aria-label="Lines: moves in lanes by quality"></svg></div>
             <div class="sideline-buttons">
@@ -375,7 +377,6 @@ export class App {
             </div>
           </div>
           <ol id="moves" class="moves"></ol>
-          <p class="credits">${this.theme.credits ?? ''}</p>
         </aside>
       </main>`;
 
