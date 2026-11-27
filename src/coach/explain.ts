@@ -122,6 +122,8 @@ const MOTIF_THEME: Record<string, string | undefined> = {
   'mate-in-2': 'mateIn2',
   mate: 'mate',
   fork: 'fork',
+  skewer: 'skewer',
+  pin: 'pin',
   'discovered-attack': 'discoveredAttack',
   'hanging-piece': 'hangingPiece',
   'winning-material': undefined,

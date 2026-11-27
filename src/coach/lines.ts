@@ -7,12 +7,15 @@
 //   3. Material matches the engine's evaluation (else extend, or flag the rest as positional).
 import { Chess, type Color } from 'chess.js';
 import { VALUE, materialBalance, playAndDescribe, type MoveFacts } from './facts';
+import { lineUps } from './motifs';
 
 export type Motif =
   | 'mate-in-1'
   | 'mate-in-2'
   | 'mate'
   | 'fork'
+  | 'skewer'
+  | 'pin'
   | 'discovered-attack'
   | 'hanging-piece'
   | 'winning-material';
@@ -109,18 +112,27 @@ export function cutLine(rootFen: string, pv: string[], opts: CutOptions): CutRes
       moves,
       gain: mate ? 0 : kept(cut),
       mate,
-      motif: motifOf(moves, side, mate),
+      motif: motifOf(moves, side, mate, rootFen),
       positionalRest: !mate && !matches(cut),
       laterLoss: mate ? 0 : Math.max(0, kept(cut) - gains[gains.length - 1]),
     },
   };
 }
 
-/** Names the line's main pattern from the winning side's moves. */
-export function motifOf(moves: MoveFacts[], side: Color, mate: boolean): Motif {
+/**
+ * Names the line's main pattern from the winning side's moves. With the root
+ * position, a skewer or pin made by the first move names the line when the
+ * line then takes the piece it exposes (the piece behind a skewer, the pinned
+ * piece): the first move's idea is what wins.
+ */
+export function motifOf(moves: MoveFacts[], side: Color, mate: boolean, rootFen?: string): Motif {
   const own = moves.filter((m) => m.color === side);
   if (mate) return own.length === 1 ? 'mate-in-1' : own.length === 2 ? 'mate-in-2' : 'mate';
-  if (own.some((m) => m.doubleAttack)) return 'fork';
+  const lineUp = rootFen ? firstMoveLineUp(rootFen, moves, side) : undefined;
+  if (lineUp) return lineUp;
+  // A double attack by a piece that is simply taken on the next move wins nothing (e.g. a queen trade with check).
+  const forks = moves.filter((m, i) => m.color === side && m.doubleAttack && !(moves[i + 1]?.captured && moves[i + 1].to === m.to));
+  if (forks.length) return 'fork';
   if (own.some((m) => m.discovered)) return 'discovered-attack';
   // Piece safety (Level 1): a piece that can simply be taken, either because
   // nobody defends it or because the taker is worth less, so a recapture
@@ -146,4 +158,21 @@ export function isMereRecapture(line: TaughtLine, previous: { fen: string; uci: 
   if (chess.fen().split(' ')[0] !== line.rootFen.split(' ')[0]) return false; // not the move that led here
   if (!taken.captured || line.moves[0].to !== taken.to) return false;
   return line.gain - VALUE[taken.captured] < minGain;
+}
+
+/** A skewer or pin made by the line's first move whose exposed piece the line then takes. */
+function firstMoveLineUp(rootFen: string, moves: MoveFacts[], side: Color): 'skewer' | 'pin' | undefined {
+  const first = moves[0];
+  if (!first || first.color !== side) return undefined;
+  const chess = new Chess(rootFen);
+  const key = (l: { kind: string; by: string; front: { square: string } }) => `${l.kind} ${l.by} ${l.front.square}`;
+  const before = new Set(lineUps(chess, side).map(key));
+  chess.move({ from: first.from, to: first.to, promotion: first.promotion });
+  const made = lineUps(chess, side).filter((l) => l.by === first.to && !before.has(key(l)));
+  const takes = (sq: string) => moves.slice(1).some((m) => m.color === side && m.captured && m.to === sq);
+  for (const l of made) {
+    if (l.kind === 'skewer' && takes(l.back.square)) return 'skewer';
+    if (l.kind === 'pin' && takes(l.front.square)) return 'pin';
+  }
+  return undefined;
 }

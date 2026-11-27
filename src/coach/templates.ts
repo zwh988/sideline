@@ -113,6 +113,8 @@ export const MOTIF_NAME: Record<Motif, string> = {
   'mate-in-2': 'mate in two',
   mate: 'a mating attack',
   fork: 'fork',
+  skewer: 'skewer',
+  pin: 'pin',
   'discovered-attack': 'discovered attack',
   'hanging-piece': 'loose piece',
   'winning-material': 'tactic',

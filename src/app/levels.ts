@@ -36,7 +36,7 @@ export interface Level {
 
 const L1: Motif[] = ['mate-in-1', 'hanging-piece'];
 const L2: Motif[] = [...L1, 'fork', 'mate-in-2'];
-const L3: Motif[] = [...L2, 'discovered-attack', 'winning-material'];
+const L3: Motif[] = [...L2, 'discovered-attack', 'skewer', 'pin', 'winning-material'];
 const L4: Motif[] = [...L3, 'mate'];
 
 export const LEVELS: Level[] = [

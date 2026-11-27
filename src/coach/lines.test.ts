@@ -135,3 +135,32 @@ describe('cutLine', () => {
     expect(r.kind === 'line' && r.line.positionalRest).toBe(true);
   });
 });
+
+describe('motif of a line', () => {
+  // A game (Nov 27): 24.Qg8+ checks along the 8th rank with the rook on a8 behind the king.
+  const SKEWER = 'r3k3/p1p1q3/1pn5/5b2/3PpB1N/2P3Q1/P1P3PP/R3R1K1 w - - 0 24';
+  const L4 = { maxPlies: 6, minGain: 2 };
+
+  it('names a skewer when the line takes the piece behind the king', () => {
+    const r = cutLine(SKEWER, ['g3g8', 'e8d7', 'g8a8'], { ...L4, evalCp: 900 });
+    expect(r.kind === 'line' && [r.line.motif, r.line.gain]).toEqual(['skewer', 5]);
+  });
+
+  it('a check that is a queen trade is not a fork (the line wins the loose bishop)', () => {
+    // Qg8+ Qf8 Qxf8+ "attacks" the king and the bishop on f5, but Kxf8 simply takes the queen.
+    const r = cutLine(SKEWER, ['g3g8', 'e7f8', 'g8f8', 'e8f8', 'h4f5'], { ...L4, evalCp: 900 });
+    expect(r.kind === 'line' && [r.line.motif, r.line.gain]).toEqual(['winning-material', 3]);
+  });
+
+  it('names a pin when the line takes the pinned piece', () => {
+    // Re1 pins the knight on e5 to the king on e8; the rook takes it.
+    const r = cutLine('4k3/8/8/4n3/8/8/8/K6R w - - 0 1', ['h1e1', 'e8d7', 'e1e5'], { ...L4, evalCp: 300 });
+    expect(r.kind === 'line' && [r.line.motif, r.line.gain]).toEqual(['pin', 3]);
+  });
+
+  it('a skewer that the line does not cash in is not named', () => {
+    // Same check, but the line wins the bishop instead of the rook: no skewer claim.
+    const r = cutLine(SKEWER, ['g3g8', 'e7f8', 'g8f8', 'e8f8', 'h4f5'], { ...L4, evalCp: 900 });
+    expect(r.kind === 'line' && r.line.motif).not.toBe('skewer');
+  });
+});
