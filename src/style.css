@@ -2055,3 +2055,81 @@ button.primary {
   min-height: var(--h-lg);
   font-size: var(--fs-lg);
 }
+
+/*
+ * The coach's theme reaches the whole app (task 1.14c, agreed with the user: "bold", light and dark).
+ * Surfaces are the neutral base mixed with a little of the coach's colour; the header is the coach's
+ * strong colour; the speech box is tinted and outlined in it; a frame in it surrounds the board. A pack
+ * can set exact surfaces in theme.json ("surfaces": {"light": {...}, "dark": {...}}), which win over these.
+ * Status, quality, off-game (violet) and board-mark colours never change with the coach: they carry meaning.
+ */
+:root {
+  --base-bg: #f6f4ef;
+  --base-panel: #ffffff;
+  --base-border: #dcd8cf;
+  --bg: color-mix(in srgb, var(--coach-accent) 8%, var(--base-bg));
+  --panel: color-mix(in srgb, var(--coach-accent) 3%, var(--base-panel));
+  --border: color-mix(in srgb, var(--coach-accent) 24%, var(--base-border));
+  --speech: color-mix(in srgb, var(--coach-accent) 10%, var(--panel));
+  --header: var(--coach-accent-strong);
+  --on-header: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --base-bg: #151817;
+    --base-panel: #202423;
+    --base-border: #333a37;
+    --bg: color-mix(in srgb, var(--coach-accent) 9%, var(--base-bg));
+    --panel: color-mix(in srgb, var(--coach-accent) 9%, var(--base-panel));
+    --border: color-mix(in srgb, var(--coach-accent) 26%, var(--base-border));
+    --speech: color-mix(in srgb, var(--coach-accent) 20%, var(--base-panel));
+  }
+}
+
+.top {
+  background: var(--header);
+  color: var(--on-header);
+}
+
+.top button.primary,
+.top button.primary:not(:disabled):hover {
+  background: var(--on-header);
+  border-color: transparent;
+  color: var(--header);
+}
+
+.top .more {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--on-header) 40%, transparent);
+  color: var(--on-header);
+}
+
+.top .more:not(:disabled):hover {
+  background: color-mix(in srgb, var(--on-header) 15%, transparent);
+}
+
+.bubble {
+  background: var(--speech);
+  border-color: var(--coach-accent);
+}
+
+.bubble::before {
+  background: var(--speech);
+  border-color: var(--coach-accent);
+}
+
+/* The frame sits behind the board and outside it, so the board keeps its size (chessground measures it). */
+.board-frame {
+  isolation: isolate;
+}
+
+.board-frame::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  z-index: -1;
+  border-radius: 5px;
+  background: var(--header);
+  pointer-events: none;
+}
