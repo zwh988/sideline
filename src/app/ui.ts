@@ -26,7 +26,7 @@ import { PracticeDeck, isDue as cardDue, newCard } from './practice';
 import { deckKeys, drillPath, drillSteps, openingCardId, whyChoices } from '../coach/opening-drill';
 import { courseLines, isCourseMove, judgeAlternative, lessonSteps, lineStatuses, nextLine, pathKey, quizNodes, sanOf, type CourseLine, type LessonStep } from '../coach/opening-lesson';
 import type { CourseTree } from '../coach/opening-tree';
-import { branchWords, compareWords, definingText, foundSentence, goalQuestion, ideaHint, ideaSentence, introWords, lineAfterReply, lineText, nodeLabel, punishWords, shownWords, trapWords } from '../coach/opening-words';
+import { branchWords, compareWords, definingText, foundSentence, foundTags, goalQuestion, goalShapes, shownTags, tagShapes, type IdeaShape, ideaHint, ideaSentence, introWords, lineAfterReply, lineText, nodeLabel, punishWords, shownWords, trapWords } from '../coach/opening-words';
 import { PuzzleRun, judgeOther, puzzleHint, solvedWords } from './puzzle';
 import { choosePuzzle, nextLevel, pickTheme, startLevel } from './puzzlechoice';
 import { POOL_BANDS, POOL_THEMES, bandsFor, loadBand, themeName, type Puzzle } from './puzzlepool';
@@ -38,6 +38,7 @@ import { createOpponent, type Opponent } from './opponent';
 import { applyLoaded, fetchTheme, portraitUrl, type LoadedTheme } from './theme';
 import { listAnd } from '../coach/templates';
 import { PIECE_NAME } from '../coach/facts';
+import { defends } from '../coach/opening-ideas';
 
 type ColorChoice = Color | 'random';
 
@@ -2847,9 +2848,10 @@ export class App {
     const live = () => token === this.lessonToken && this.lesson === ls;
     const tier = ls.level.level;
     let pending = '';
+    let pendingShapes: IdeaShape[] = [];
     while (live() && ls.index < ls.steps.length) {
       const step = ls.steps[ls.index];
-      if (step.kind === 'quiz') return this.askLessonMove(ls, pending);
+      if (step.kind === 'quiz') return this.askLessonMove(ls, pending, pendingShapes);
       ls.phase = 'auto';
       this.thinking = true;
       await sleep(ls.skip ? 200 : 350);
@@ -2859,13 +2861,17 @@ export class App {
       this.sync();
       ls.index++;
       const words = shownWords(ls.tree, step, tier);
+      // The board draws what the words say: red for their move's ideas, green for yours.
+      const shapes = tagShapes(shownTags(step.node, tier), step.node.uci.slice(2, 4) as Square, step.node.fen, step.node.who === 'player' ? 'green' : 'red');
       if (ls.steps[ls.index]?.kind === 'quiz' && step.node.who === 'opponent') {
         pending = words;
+        pendingShapes = shapes;
         continue;
       }
       pending = '';
+      pendingShapes = [];
       if (ls.skip) continue;
-      this.say({ kind: 'phase', text: words, mood: step.trap ? 'surprised' : 'neutral' });
+      this.say({ kind: 'phase', text: words, mood: step.trap ? 'surprised' : 'neutral', shapes });
       this.status('');
       if (ls.index < ls.steps.length && !(await this.waitNext(ls, token))) return;
     }
@@ -2906,7 +2912,7 @@ export class App {
   }
 
   /** The player's turn: in a lesson, the goal first (what is needed, from the course move's board facts); in practice and drills, asked cold. */
-  private askLessonMove(ls: LessonSession, pending = ''): void {
+  private askLessonMove(ls: LessonSession, pending = '', pendingShapes: IdeaShape[] = []): void {
     ls.phase = 'quiz';
     ls.hintStep = 0;
     ls.tries = 0;
@@ -2921,7 +2927,8 @@ export class App {
       const node = ls.steps[ls.index].node;
       const ask = ls.practice ? 'What would you play here?' : goalQuestion(this.game.fen, node);
       const text = `${pending ? `${pending} ` : ''}${prev?.trap ? 'Punish it. ' : ''}${ask}`;
-      this.say({ kind: 'phase', text, mood: 'thinking' });
+      const shapes = [...pendingShapes, ...(ls.practice ? [] : goalShapes(this.game.fen, node))];
+      this.say({ kind: 'phase', text, mood: 'thinking', shapes });
       this.status(`Your move${ls.practice ? ' (practice)' : ''}.`);
       return;
     }
@@ -3070,7 +3077,12 @@ export class App {
         ls.learnedNow++;
       }
     } else if (!ls.practice) text += altSan ? ' Play the course move next time to learn it.' : ls.shown ? ' I showed you this one, so it comes back next time.' : ' You had a hint, so this move comes back next time.';
-    this.say({ kind: 'praise', text, mood: altSan ? 'neutral' : 'pleased', marks: [{ square: node.uci.slice(2, 4) as Square, kind: 'good' }] });
+    // What the move does, drawn: green arrows to what it attacks, circles on the centre squares and on what it defends.
+    const shapes = [
+      ...tagShapes(foundTags(node.tags, tier), node.uci.slice(2, 4) as Square, node.fen, 'green'),
+      ...defends(prev.fen, node.uci).map((p) => ({ orig: p.square, brush: 'green' as const })),
+    ];
+    this.say({ kind: 'praise', text, mood: altSan ? 'neutral' : 'pleased', marks: [{ square: node.uci.slice(2, 4) as Square, kind: 'good' }], shapes });
     if (!altSan) this.setMood('pleased');
     ls.phase = 'auto';
     this.thinking = true;

@@ -408,6 +408,9 @@ Design agreed with the user (Nov 27).
 ### ✅ 6.2b Learn rework: the player sets the pace, goal first (Nov 27; STATE decision 42)
 After playing 6.2 the user found no understanding building, even in the Vienna they know: moves played by themselves too fast, "What would you play here?" left them guessing, and a wrong move got "the engine's line goes …" before the lesson moved on. Agreed: shown moves play on Next with a sentence each; the coach states the goal before asking (from the course move's board facts); a wrong move gets what it does against what was needed, and the player plays the course move themselves (shown with an arrow after two tries). The "why" of an opening (plans) stays 6.4, to be tried on the Vienna first.
 
+### ✅ 6.2c Arrows for the ideas (Nov 27; STATE decision 43)
+The user's idea: the board draws what the coach's words say (red for their move, green for yours, yellow for where the goal points), from the same board tags.
+
 ### ✅ 6.3 Drill (spaced repetition of the lines) (Nov 27; STATE decision 41)
 - **Cards are positions, not whole lines:** each player node learned in 6.2 becomes a card (per course and coach tier).
 - A drill plays a course from the start: you play your side; the opponent picks replies weighted by frequency at the coach's band, steering toward **due** cards. A miss shows the right move with its idea, and the card comes back sooner; a hit pushes it out (1, 3, 7, then 14, 30 days).

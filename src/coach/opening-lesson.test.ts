@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { Chess } from 'chess.js';
 import type { CourseTree } from './opening-tree';
 import { courseLines, isCourseMove, judgeAlternative, lessonSteps, lineStatuses, nextLine, pathKey, playerNodes, quizNodes, type CourseLine } from './opening-lesson';
-import { branchWords, compareWords, definingText, goalQuestion, ideaHint, ideaSentence, introWords, moveLabel, punishWords, shownWords, trapWords } from './opening-words';
-import { defends } from './opening-ideas';
+import { branchWords, compareWords, definingText, foundTags, goalQuestion, goalShapes, shownTags, tagShapes, ideaHint, ideaSentence, introWords, moveLabel, punishWords, shownWords, trapWords } from './opening-words';
+import { defends, openingIdeas } from './opening-ideas';
 import { OpeningProgress } from '../app/openingstore';
 
 const RAW = import.meta.glob('../../public/openings/*.json', { eager: true, query: '?raw', import: 'default' }) as Record<string, string>;
@@ -233,5 +233,48 @@ describe('goal first (the Learn rework)', () => {
     expect(shownWords(vienna, steps[4], 1)).toMatch(/^You know this one\. 3\.f4 offers a pawn/);
     expect(shownWords(vienna, steps[5], 1)).toMatch(/^3…exf4 takes the pawn\. At this level, most players reply 3…exf4 \(52%\)/);
     expect(shownWords(vienna, steps[7], 1)).toMatch(/At this level, the most common reply is 4…Ng8/);
+  });
+});
+
+describe('arrows for the ideas', () => {
+  it('draws their move in red and yours in green, from the same tags as the words', () => {
+    const l = find(vienna, 1, 'e4 e5 Nc3 Nf6 f4 exf4 e5 Ng8 Nf3');
+    const nf6 = l.nodes[3];
+    // 2…Nf6 attacks the pawn on e4.
+    expect(tagShapes(shownTags(nf6, 1), 'f6', nf6.fen, 'red')).toContainEqual({ orig: 'f6', dest: 'e4', brush: 'red' });
+    const f4 = l.nodes[4];
+    const found = tagShapes(foundTags(f4.tags, 1), 'f4', f4.fen, 'green');
+    expect(found).toContainEqual({ orig: 'f4', dest: 'e5', brush: 'green' });
+    expect(found.every((x) => x.brush === 'green')).toBe(true);
+  });
+
+  it('marks where the goal points without giving the move away', () => {
+    const l = find(vienna, 1, 'e4 e5 Nc3 Nf6 f4 exf4 e5 Ng8 Nf3');
+    const f4 = l.nodes[4];
+    expect(goalShapes(vienna.nodes[f4.parent].fen, f4)).toEqual([{ orig: 'e5', brush: 'yellow' }]);
+    // 1.e4 c6 2.d4 d5 3.Nc3: the attacker of e4 is shown, not the knight that defends it.
+    const nc3 = caro.nodes.find((n) => n.who === 'opponent' && n.san === 'Nc3' && caro.nodes[n.parent].san === 'd5' && caro.nodes[caro.nodes[n.parent].parent].san === 'd4');
+    const c = new Chess();
+    for (const m of ['e4', 'c6', 'd4', 'd5']) c.move(m);
+    const fake = { ...(nc3 ?? caro.nodes[1]), uci: 'b1c3', tags: [] };
+    expect(goalShapes(c.fen(), fake)).toEqual([{ orig: 'd5', dest: 'e4', brush: 'red' }]);
+    for (const n of quizNodes(l)) for (const x of goalShapes(vienna.nodes[n.parent].fen, n)) expect(x.orig).not.toBe(n.uci.slice(0, 2));
+  });
+
+  it('draws a pin and a mate threat', () => {
+    // 1.e4 e5 2.Nf3 d6 3.d4 Bg4: the bishop pins the knight on f3 to the queen.
+    const c = new Chess();
+    for (const m of ['e4', 'e5', 'Nf3', 'd6', 'd4']) c.move(m);
+    const before = c.fen();
+    c.move('Bg4');
+    const pin = tagShapes(openingIdeas(before, 'c8g4'), 'g4', c.fen(), 'red');
+    expect(pin).toContainEqual({ orig: 'g4', dest: 'd1', brush: 'red' });
+    expect(pin).toContainEqual({ orig: 'f3', brush: 'red' });
+    // 1.e4 e5 2.Bc4 Nc6 3.Qh5: threatens Qxf7#.
+    const d = new Chess();
+    for (const m of ['e4', 'e5', 'Bc4', 'Nc6']) d.move(m);
+    const b2 = d.fen();
+    d.move('Qh5');
+    expect(tagShapes(openingIdeas(b2, 'd1h5'), 'h5', d.fen(), 'red')).toContainEqual({ orig: 'h5', dest: 'f7', brush: 'red' });
   });
 });

@@ -99,9 +99,14 @@ export function ideaSentence(tags: IdeaTag[], tier: number, subject = 'It'): str
 
 /** The course move once found or shown: its goal first (as the question put it), then its other ideas, a gambit's offer last. */
 export function foundSentence(tags: IdeaTag[], tier: number): string {
-  const ordered = [...rankTags(tags.filter((t) => t.k !== 'offers' && t.k !== 'check')), ...tags.filter((t) => t.k === 'offers' || t.k === 'check')];
-  const shown = ordered.slice(0, tagsShown(Math.max(tier, 5))).map(ideaPhrase);
+  const shown = foundTags(tags, tier).map(ideaPhrase);
   return shown.length ? `It ${listAnd(shown)}.` : '';
+}
+
+/** The ideas `foundSentence` names, in its order (the board draws the same ones). */
+export function foundTags(tags: IdeaTag[], tier: number): IdeaTag[] {
+  const ordered = [...rankTags(tags.filter((t) => t.k !== 'offers' && t.k !== 'check')), ...tags.filter((t) => t.k === 'offers' || t.k === 'check')];
+  return ordered.slice(0, tagsShown(Math.max(tier, 5)));
 }
 
 /** Hint step 1: the idea of the course move, without the move. */
@@ -327,22 +332,91 @@ export function compareWords(fenBefore: string, uci: string, node: CourseNode, t
   return `${what ? `${what} But it` : `${san}`} doesn't ${listAnd(missing)}, and that is what this course does here.`;
 }
 
+/** The ideas `shownWords` names for a shown move, in its order: for their move, what it does to you first. */
+export function shownTags(n: CourseNode, tier: number): IdeaTag[] {
+  if (n.who === 'player') return rankTags(n.tags).slice(0, tagsShown(Math.max(tier, 3)));
+  const mine: IdeaTag[] = n.tags.filter((t) => t.k === 'attacks' || t.k === 'pins' || t.k === 'threatens-mate');
+  const rest = rankTags(n.tags.filter((t) => !mine.includes(t)));
+  return [...mine, ...rest].slice(0, tagsShown(Math.max(tier, 3)));
+}
+
 /** The sentence for a move the lesson shows (not asked): what it does, and for their move, how often it is played. */
 export function shownWords(tree: CourseTree, step: { node: CourseNode; branch?: CourseNode[]; trap?: boolean }, tier: number): string {
   const n = step.node;
   const label = nodeLabel(tree, n);
-  if (n.who === 'player') {
-    const idea = ideaSentence(n.tags, Math.max(tier, 3), label) || `${label}.`;
-    return n.defining ? idea : `You know this one. ${idea}`;
-  }
-  // Their move: what it does to you comes first (an attack on your pieces), then its other ideas.
-  const mine: IdeaTag[] = n.tags.filter((t) => t.k === 'attacks' || t.k === 'pins' || t.k === 'threatens-mate');
-  const rest = rankTags(n.tags.filter((t) => !mine.includes(t)));
-  const shown = [...mine, ...rest].slice(0, tagsShown(Math.max(tier, 3))).map(ideaPhrase);
+  const shown = shownTags(n, tier).map(ideaPhrase);
   const idea = shown.length ? `${label} ${listAnd(shown)}.` : `${label}.`;
+  if (n.who === 'player') return n.defining ? idea : `You know this one. ${idea}`;
   if (n.defining) return idea;
   if (step.trap) return trapWords(tree, n, tier);
   if (step.branch) return `${idea} ${branchWords(tree, step, tier)}`;
   const s = shareAt(n, tier);
   return s ? `${idea} At this level ${pct(s)} of players play it.` : idea;
+}
+
+// --- Arrows for the ideas (agreed with the user Nov 27) ------------------------
+// The board draws what the words say, from the same tags: red for what their
+// move does to you, green for what yours does, yellow for where the goal points.
+
+export interface IdeaShape {
+  orig: Square;
+  dest?: Square;
+  brush: 'green' | 'red' | 'yellow';
+}
+
+/** The same position with the other side to move (no en passant). */
+function passTurn(fen: string): string {
+  const parts = fen.split(' ');
+  parts[1] = parts[1] === 'w' ? 'b' : 'w';
+  parts[3] = '-';
+  return parts.join(' ');
+}
+
+const dedupe = (shapes: IdeaShape[]): IdeaShape[] => {
+  const seen = new Set<string>();
+  return shapes.filter((x) => {
+    const k = `${x.orig}${x.dest ?? ''}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+};
+
+/**
+ * Arrows and circles for a move's ideas (the tags the words named): an arrow from the moved piece (on `to`) to
+ * each piece it attacks, a pin's line to the piece behind, the mating move it threatens, circles on the centre
+ * squares it takes. `fenAfter` is the position after the move.
+ */
+export function tagShapes(tags: IdeaTag[], to: Square, fenAfter: string, brush: 'green' | 'red'): IdeaShape[] {
+  const out: IdeaShape[] = [];
+  for (const t of tags) {
+    if (t.k === 'attacks') for (const x of [...t.targets].sort((a, b) => VALUE[b.piece] - VALUE[a.piece]).slice(0, 2)) out.push({ orig: to, dest: x.square, brush });
+    else if (t.k === 'pins') out.push({ orig: t.by, dest: t.back.square, brush }, { orig: t.front.square, brush });
+    else if (t.k === 'centre') {
+      for (const q of t.squares) if (q !== to) out.push({ orig: q, brush });
+    } else if (t.k === 'threatens-mate') {
+      try {
+        const m = new Chess(passTurn(fenAfter)).move(t.san);
+        out.push({ orig: m.from, dest: m.to, brush });
+      } catch {
+        /* not legal as written: no arrow */
+      }
+    }
+  }
+  return dedupe(out);
+}
+
+/** The goal question's marks: red arrows onto your attacked piece the course move defends, else circles where the goal points. */
+export function goalShapes(fenBefore: string, node: CourseNode): IdeaShape[] {
+  const def = defends(fenBefore, node.uci);
+  if (def.length) {
+    const c = new Chess(fenBefore);
+    const enemy = c.turn() === 'w' ? 'b' : 'w';
+    return dedupe(def.flatMap((p) => c.attackers(p.square, enemy).slice(0, 2).map((a) => ({ orig: a, dest: p.square, brush: 'red' as const }))));
+  }
+  const top = rankTags(node.tags.filter((t) => t.k !== 'offers' && t.k !== 'check'))[0];
+  if (top?.k === 'attacks') return top.targets.slice(0, 2).map((x) => ({ orig: x.square, brush: 'yellow' }));
+  if (top?.k === 'centre') return top.squares.map((q) => ({ orig: q, brush: 'yellow' }));
+  if (top?.k === 'pins') return [{ orig: top.front.square, brush: 'yellow' }];
+  return [];
 }
