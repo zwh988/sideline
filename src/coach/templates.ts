@@ -7,7 +7,7 @@ import type { Motif, TaughtLine } from './lines';
 import type { CoachMoveFacts, Intent } from './narration';
 
 const a = (p: PieceSymbol) => `a ${PIECE_NAME[p]}`;
-const listAnd = (items: string[]) =>
+export const listAnd = (items: string[]) =>
   items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
 /**

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PuzzleRun, judgeOther, puzzleHint, solvedWords } from './puzzle';
-import { choosePuzzle, targetRating, START_AT, STEP_DOWN, STEP_UP } from './puzzlechoice';
-import { PuzzleResults, isClean } from './puzzlestore';
+import { LEVEL_MAX, LEVEL_MIN, LEVEL_STEP, choosePuzzle, nextLevel, pickTheme, startLevel } from './puzzlechoice';
+import { MASTERY_GOAL, PuzzleResults, isClean } from './puzzlestore';
 import { themeName, type Puzzle } from './puzzlepool';
 
 // Real puzzles from the Lichess database (CC0), as stored in the pool.
@@ -110,33 +110,45 @@ describe('the coach’s words when a puzzle is solved', () => {
   });
 });
 
-describe('choosing the next puzzle', () => {
-  const band: [number, number] = [800, 1200];
+describe('your level per theme and the next puzzle (task 3.2b)', () => {
   const set = Array.from({ length: 40 }, (_, i) => P(`p${i}`, '8/8/8/8/8/8/8/8 w - - 0 1', 'a1a2 a2a3', 800 + i * 10, ['fork']));
   const none = () => undefined;
 
-  it('starts low in the band, goes up after clean solves and down after misses, never leaving the band', () => {
-    expect(targetRating(band, [])).toBe(800 + START_AT * 400);
-    expect(targetRating(band, [true, true])).toBe(800 + START_AT * 400 + 2 * STEP_UP);
-    expect(targetRating(band, [true, false])).toBe(800 + START_AT * 400 - STEP_DOWN);
-    expect(targetRating(band, [false, false, false, false, false])).toBe(800);
-    expect(targetRating(band, Array(20).fill(true))).toBeLessThan(1200);
+  it('a theme starts 30% into the coach’s band, never under 400', () => {
+    expect(startLevel([600, 1000])).toBe(720);
+    expect(startLevel([0, 800])).toBe(520);
+    expect(startLevel([1600, 2000])).toBe(1720);
   });
 
-  it('picks near the target, never a puzzle of this session, unseen ones first', () => {
-    const p = choosePuzzle(set, none, { band, recent: [], exclude: new Set(), rand: () => 0 })!;
+  it('moves up after a clean solve and down otherwise, from 400 to 2200, not bound to the coach’s band', () => {
+    expect(nextLevel(720, { solved: true, misses: 0, hints: 0 })).toBe(720 + LEVEL_STEP.clean);
+    expect(nextLevel(720, { solved: true, misses: 1, hints: 0 })).toBe(720 + LEVEL_STEP.solved);
+    expect(nextLevel(720, { solved: true, misses: 0, hints: 3 })).toBe(720 + LEVEL_STEP.solved);
+    expect(nextLevel(720, { solved: false, misses: 0, hints: 0 })).toBe(720 + LEVEL_STEP.unsolved);
+    let level = 720;
+    for (let i = 0; i < 40; i++) level = nextLevel(level, { solved: true, misses: 0, hints: 0 });
+    expect(level).toBe(LEVEL_MAX); // a 2000+ mate in 1 is reachable from Coach 2
+    expect(nextLevel(420, { solved: false, misses: 0, hints: 0 })).toBe(LEVEL_MIN);
+  });
+
+  it('a mixed session plays the theme played least so far', () => {
+    const played = new Map([['fork', 2], ['mateIn2', 1], ['backRankMate', 1]]);
+    expect(pickTheme(['fork', 'mateIn2', 'backRankMate', 'trappedPiece'], played)).toBe('trappedPiece');
+    expect(pickTheme(['fork', 'mateIn2', 'backRankMate'], played, () => 0.99)).toBe('backRankMate');
+  });
+
+  it('picks near the level, never a puzzle of this session, unseen ones first', () => {
+    const p = choosePuzzle(set, none, { target: 920, exclude: new Set(), rand: () => 0 })!;
     expect(Math.abs(p.rating - 920)).toBeLessThanOrEqual(40);
     const seen = new Set(set.filter((x) => x.rating < 1150).map((x) => x.id));
-    const q = choosePuzzle(set, (id) => (seen.has(id) ? ({ clean: 1 } as never) : undefined), { band, recent: [], exclude: new Set(), rand: () => 0 })!;
+    const q = choosePuzzle(set, (id) => (seen.has(id) ? ({ clean: 1 } as never) : undefined), { target: 920, exclude: new Set(), rand: () => 0 })!;
     expect(q.rating).toBeGreaterThanOrEqual(1150);
-    const all = new Set(set.map((x) => x.id));
-    expect(choosePuzzle(set, none, { band, recent: [], exclude: all })).toBeUndefined();
+    expect(choosePuzzle(set, none, { target: 920, exclude: new Set(set.map((x) => x.id)) })).toBeUndefined();
   });
 
   it('gives puzzles not yet solved cleanly before ones already mastered', () => {
     const results = new Map(set.map((x) => [x.id, { clean: x.id === 'p39' ? 0 : 1 }]));
-    const p = choosePuzzle(set, (id) => results.get(id) as never, { band, recent: [], exclude: new Set() });
-    expect(p?.id).toBe('p39');
+    expect(choosePuzzle(set, (id) => results.get(id) as never, { target: 900, exclude: new Set() })?.id).toBe('p39');
   });
 });
 
@@ -163,15 +175,29 @@ describe('puzzle results on the device', () => {
     expect(back.themes).toEqual(['endgame', 'hangingPiece', 'knightEndgame']); // not 'crushing' or 'short'
   });
 
-  it('counts solved and missed puzzles per theme within a band', () => {
+  it('counts clean solves per theme toward mastery, at any rating', () => {
     const r = new PuzzleResults(storage());
-    r.record(KNIGHT, { solved: true, misses: 1, hints: 0 });
+    r.record(KNIGHT, { solved: true, misses: 1, hints: 0 }); // solved, not clean
     r.record(SMOTHERED, { solved: true, misses: 0, hints: 0 });
-    r.record(MATE1, { solved: false, misses: 0, hints: 0 });
-    const p = r.progress(['hangingPiece', 'mateIn1', 'fork'], [600, 800]);
-    expect(p.get('hangingPiece')).toEqual({ solved: 1, missed: 1 });
-    expect(p.get('mateIn1')).toEqual({ solved: 1, missed: 0 }); // MATE1 (542) is under the band
-    expect(p.get('fork')).toEqual({ solved: 0, missed: 0 });
+    r.record(MATE1, { solved: true, misses: 0, hints: 2 });
+    r.record(MATE1, { solved: true, misses: 0, hints: 0 }); // the same puzzle again counts once
+    const m = r.mastery(['hangingPiece', 'mateIn1', 'fork']);
+    expect(m.get('hangingPiece')).toBe(0);
+    expect(m.get('mateIn1')).toBe(2);
+    expect(m.get('fork')).toBe(0);
+    expect(MASTERY_GOAL).toBe(10);
+  });
+
+  it('keeps a level per theme across reloads, and a backup merge keeps the later one', () => {
+    const s = storage();
+    const r = new PuzzleResults(s);
+    expect(r.levelOf('fork', 720)).toBe(720);
+    r.setLevel('fork', 770, 5);
+    expect(new PuzzleResults(s).levelOf('fork', 720)).toBe(770);
+    r.importLevels({ fork: { level: 900, at: 3 }, pin: { level: 1100, at: 1 }, junk: 4 });
+    expect(r.levelOf('fork', 0)).toBe(770); // ours is later
+    expect(r.levelOf('pin', 0)).toBe(1100);
+    expect(Object.keys(r.allLevels()).sort()).toEqual(['fork', 'pin']);
   });
 
   it('restores a backup, keeping whichever try of a puzzle came last', () => {

@@ -1893,117 +1893,165 @@ button.primary {
   }
 }
 
-/* Puzzles tab (task 3.2): a card per coach, its themes as buttons with what was solved and missed */
-.puzzles-list li {
+/* Puzzles tab (task 3.2b): the coaches' faces in a row, then the chosen coach with theme tiles and mastery bars */
+.puzzles-list {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-3);
+  gap: var(--sp-3);
 }
 
-.puzzles-list .h-meta {
+.p-continue {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: var(--h-lg);
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  border: 2px solid var(--coach-accent);
+  border-radius: var(--r-md);
+}
+
+.p-continue span {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.p-picker {
+  display: flex;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  padding: 4px 2px 6px;
+  scrollbar-width: thin;
+}
+
+.p-pick {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 72px;
+  padding: 6px 4px;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: var(--r-md);
+}
+
+.p-pick[aria-pressed='true'] {
+  border-color: var(--coach-accent);
+  background: color-mix(in srgb, var(--coach-accent) 10%, transparent);
+}
+
+.p-pick-name {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.p-face {
+  --p-accent: var(--coach-accent);
+  border-radius: 50%;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--p-accent) 22%, var(--panel));
+  border: 3px solid var(--p-accent);
+  flex: 0 0 auto;
+}
+
+.p-face.sm {
+  width: 52px;
+  height: 52px;
+}
+
+.p-face.lg {
+  width: 96px;
+  height: 96px;
+}
+
+.p-face img,
+.p-face svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.p-focus {
+  --p-accent: var(--coach-accent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid color-mix(in srgb, var(--p-accent) 45%, var(--border));
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.p-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.p-hero h3 {
+  margin: 0 0 6px;
+  font-size: var(--fs-lg);
+}
+
+.p-say {
+  position: relative;
   margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--speech, var(--bg));
+  border: 1px solid var(--border);
 }
 
 .p-themes {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 6px;
-}
-
-.p-theme {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: var(--sp-2);
-  text-align: left;
 }
 
-.p-theme .p-count {
+.p-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-height: 76px;
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  border-radius: var(--r-md);
+}
+
+.p-tile .p-name {
+  font-weight: 800;
+}
+
+.p-bar {
+  display: block;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  overflow: hidden;
+}
+
+.p-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--p-accent);
+}
+
+.p-tile.mastered .p-bar i {
+  background: var(--good);
+}
+
+.p-meta {
   font-size: var(--fs-xs);
   color: var(--muted);
-  white-space: nowrap;
 }
 
-.puzzles-list li > button[data-level]:last-child {
-  align-self: flex-start;
-  min-width: 120px;
-}
-
-/*
- * The coach's theme reaches the whole app (task 1.14c, agreed with the user: "bold", light and dark).
- * Surfaces are the neutral base mixed with a little of the coach's colour; the header is the coach's
- * strong colour; the speech box is tinted and outlined in it; a frame in it surrounds the board. A pack
- * can set exact surfaces in theme.json ("surfaces": {"light": {...}, "dark": {...}}), which win over these.
- * Status, quality, off-game (violet) and board-mark colours never change with the coach: they carry meaning.
- */
-:root {
-  --base-bg: #f6f4ef;
-  --base-panel: #ffffff;
-  --base-border: #dcd8cf;
-  --bg: color-mix(in srgb, var(--coach-accent) 8%, var(--base-bg));
-  --panel: color-mix(in srgb, var(--coach-accent) 3%, var(--base-panel));
-  --border: color-mix(in srgb, var(--coach-accent) 24%, var(--base-border));
-  --speech: color-mix(in srgb, var(--coach-accent) 10%, var(--panel));
-  --header: var(--coach-accent-strong);
-  --on-header: #ffffff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --base-bg: #151817;
-    --base-panel: #202423;
-    --base-border: #333a37;
-    --bg: color-mix(in srgb, var(--coach-accent) 9%, var(--base-bg));
-    --panel: color-mix(in srgb, var(--coach-accent) 9%, var(--base-panel));
-    --border: color-mix(in srgb, var(--coach-accent) 26%, var(--base-border));
-    --speech: color-mix(in srgb, var(--coach-accent) 20%, var(--base-panel));
-  }
-}
-
-.top {
-  background: var(--header);
-  color: var(--on-header);
-}
-
-.top button.primary,
-.top button.primary:not(:disabled):hover {
-  background: var(--on-header);
-  border-color: transparent;
-  color: var(--header);
-}
-
-.top .more {
-  background: transparent;
-  border-color: color-mix(in srgb, var(--on-header) 40%, transparent);
-  color: var(--on-header);
-}
-
-.top .more:not(:disabled):hover {
-  background: color-mix(in srgb, var(--on-header) 15%, transparent);
-}
-
-.bubble {
-  background: var(--speech);
-  border-color: var(--coach-accent);
-}
-
-.bubble::before {
-  background: var(--speech);
-  border-color: var(--coach-accent);
-}
-
-/* The frame sits behind the board and outside it, so the board keeps its size (chessground measures it). */
-.board-frame {
-  isolation: isolate;
-}
-
-.board-frame::before {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  z-index: -1;
-  border-radius: 5px;
-  background: var(--header);
-  pointer-events: none;
+.p-start {
+  min-height: var(--h-lg);
+  font-size: var(--fs-lg);
 }

@@ -116,14 +116,26 @@ export function coachSet(puzzles: Puzzle[], f: PuzzleFilter): Puzzle[] {
   return puzzles.filter((p) => p.rating >= lo && p.rating < hi && p.themes.some((t) => want.has(t)));
 }
 
-/** Loads the pool files a band needs (the site's own static files, rule 4). */
+const files = new Map<string, Promise<Puzzle[]>>();
+
+/** One band file (the site's own static file, rule 4), fetched once. */
+export function loadBand(band: [number, number], base = import.meta.env.BASE_URL): Promise<Puzzle[]> {
+  const name = bandFile(band);
+  let p = files.get(name);
+  if (!p) {
+    p = fetch(`${base}${name}`).then(async (res) => {
+      if (!res.ok) throw new Error(`Puzzle file ${name}: ${res.status}`);
+      return decodeBand((await res.json()) as BandFile);
+    });
+    p.catch(() => files.delete(name)); // can be tried again
+    files.set(name, p);
+  }
+  return p;
+}
+
+/** Loads the pool files a range of ratings needs. */
 export async function loadPool(band: [number, number], base = import.meta.env.BASE_URL): Promise<Puzzle[]> {
-  const files = await Promise.all(bandsFor(band).map(async (b) => {
-    const res = await fetch(`${base}${bandFile(b)}`);
-    if (!res.ok) throw new Error(`Puzzle file ${bandFile(b)}: ${res.status}`);
-    return decodeBand((await res.json()) as BandFile);
-  }));
-  return files.flat();
+  return (await Promise.all(bandsFor(band).map((b) => loadBand(b, base)))).flat();
 }
 
 const THEME_NAMES: Record<string, string> = {

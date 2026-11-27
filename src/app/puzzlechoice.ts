@@ -1,47 +1,52 @@
-// Choosing the next puzzle of a coach's set (task 3.2): unseen puzzles first,
-// a little harder after a run of clean solves and easier after misses, always
-// within the coach's band.
-import type { PuzzleResult } from './puzzlestore';
+// Choosing the next puzzle (tasks 3.2, 3.2b): each theme keeps the player's own level, which starts in the
+// coach's band and moves with the results, anywhere from 400 to 2200 (the coach's band is only the start).
+// The next puzzle of a theme is one near that level: unseen first, then one not yet solved cleanly.
+import { isClean, type Attempt, type PuzzleResult } from './puzzlestore';
 import type { Puzzle } from './puzzlepool';
 
-/** Where in the band a session starts (0 = the band's bottom, 1 = its top). */
+export const LEVEL_MIN = 400;
+export const LEVEL_MAX = 2199;
+/** Where in the coach's band a theme's level starts (0 = the band's bottom, 1 = its top). */
 export const START_AT = 0.3;
-/** Rating points up per clean solve in a row (up to `MAX_STREAK`), and down per miss among the last five tries. */
-export const STEP_UP = 40;
-export const STEP_DOWN = 60;
-const MAX_STREAK = 5;
-/** The next puzzle is picked at random among this many closest to the target. */
+/** How a try moves the theme's level: a clean solve, a solve with a miss or 3+ hints, not solved (skipped). */
+export const LEVEL_STEP = { clean: 50, solved: -20, unsolved: -50 } as const;
+/** The next puzzle is picked at random among this many closest to the level. */
 const NEAREST = 8;
 
-/** The rating to aim at, from this session's tries (true = clean, newest last). */
-export function targetRating(band: [number, number], recent: boolean[]): number {
-  const [lo, hi] = band;
-  let streak = 0;
-  for (let i = recent.length - 1; i >= 0 && recent[i]; i--) streak++;
-  const misses = recent.slice(-5).filter((c) => !c).length;
-  const t = lo + START_AT * (hi - lo) + STEP_UP * Math.min(streak, MAX_STREAK) - STEP_DOWN * misses;
-  return Math.max(lo, Math.min(hi - 1, t));
+const clamp = (n: number) => Math.max(LEVEL_MIN, Math.min(LEVEL_MAX, Math.round(n)));
+
+/** A theme's first level with a coach: 30% into the coach's band (never under 400). */
+export function startLevel(band: [number, number]): number {
+  const lo = Math.max(band[0], LEVEL_MIN);
+  return clamp(lo + START_AT * (band[1] - lo));
+}
+
+/** The theme's level after a try. */
+export function nextLevel(level: number, a: Attempt): number {
+  return clamp(level + (isClean(a) ? LEVEL_STEP.clean : a.solved ? LEVEL_STEP.solved : LEVEL_STEP.unsolved));
+}
+
+/** In a mixed session: the coach's theme played least so far this session (ties at random). */
+export function pickTheme(themes: readonly string[], played: Map<string, number>, rand = Math.random): string {
+  const fewest = Math.min(...themes.map((t) => played.get(t) ?? 0));
+  const open = themes.filter((t) => (played.get(t) ?? 0) === fewest);
+  return open[Math.floor(rand() * open.length)];
 }
 
 /**
- * The next puzzle from `set`: never one played this session (`exclude`); first those never tried, then
- * those not yet solved cleanly, then any. Among them, one of the closest to the target rating.
+ * The next puzzle from `set` (one theme's puzzles): never one played this session (`exclude`); first those
+ * never tried, then those not yet solved cleanly, then any. Among them, one of the closest to `target`.
  */
 export function choosePuzzle(
   set: Puzzle[],
   result: (id: string) => PuzzleResult | undefined,
-  opts: { band: [number, number]; recent: boolean[]; exclude: Set<string>; rand?: () => number },
+  opts: { target: number; exclude: Set<string>; rand?: () => number },
 ): Puzzle | undefined {
   const rand = opts.rand ?? Math.random;
   const open = set.filter((p) => !opts.exclude.has(p.id));
-  const tiers = [
-    open.filter((p) => !result(p.id)),
-    open.filter((p) => !result(p.id)?.clean),
-    open,
-  ];
+  const tiers = [open.filter((p) => !result(p.id)), open.filter((p) => !result(p.id)?.clean), open];
   const pool = tiers.find((t) => t.length);
   if (!pool) return undefined;
-  const target = targetRating(opts.band, opts.recent);
-  const nearest = [...pool].sort((a, b) => Math.abs(a.rating - target) - Math.abs(b.rating - target) || (a.id < b.id ? -1 : 1)).slice(0, NEAREST);
+  const nearest = [...pool].sort((a, b) => Math.abs(a.rating - opts.target) - Math.abs(b.rating - opts.target) || (a.id < b.id ? -1 : 1)).slice(0, NEAREST);
   return nearest[Math.floor(rand() * nearest.length)];
 }

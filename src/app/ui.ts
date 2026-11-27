@@ -21,14 +21,15 @@ import { Game, resultOf, type Color } from './game';
 import { LEVELS, levelInfo, levelLabel, type Level } from './levels';
 import { MODES, PUZZLE, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
 import { PuzzleRun, judgeOther, puzzleHint, solvedWords } from './puzzle';
-import { choosePuzzle } from './puzzlechoice';
-import { POOL_THEMES, coachSet, loadPool, themeName, type Puzzle } from './puzzlepool';
-import { PuzzleResults, isClean, type Attempt } from './puzzlestore';
+import { choosePuzzle, nextLevel, pickTheme, startLevel } from './puzzlechoice';
+import { POOL_BANDS, POOL_THEMES, bandsFor, loadBand, themeName, type Puzzle } from './puzzlepool';
+import { MASTERY_GOAL, PuzzleResults, type Attempt } from './puzzlestore';
 import { materialOf } from './material';
 import { gameSummary } from './summary';
 import { Navigation, RemarkLog, plyLabel } from './navigation';
 import { createOpponent, type Opponent } from './opponent';
 import { applyLoaded, fetchTheme, portraitUrl, type LoadedTheme } from './theme';
+import { listAnd } from '../coach/templates';
 
 type ColorChoice = Color | 'random';
 
@@ -174,18 +175,18 @@ type Screen = 'play' | 'review' | 'settings' | 'puzzles';
 /** A puzzle session (task 3.2): the coach's set, the puzzle on the board and how this try is going. */
 interface PuzzleSession {
   level: Level;
-  /** The pool files of the coach's band (all themes), for "Another fork?". */
-  pool: Puzzle[];
   /** The theme picked in the Puzzles tab, or none for the coach's mix. */
   theme?: string;
-  /** This session's tries, clean or not (newest last): the next puzzle's difficulty follows them. */
-  recent: boolean[];
+  /** The theme of the puzzle on the board (its level moves with the result). */
+  current?: string;
+  /** Puzzles per theme this session (a mix plays the least played theme next). */
+  played: Map<string, number>;
   /** Puzzles played this session (not offered again). */
   seen: Set<string>;
   solvedCount: number;
   run?: PuzzleRun;
   /** The moves from the solver's first position: the player's and the replies. */
-  played: string[];
+  line: string[];
   attempt: Attempt;
   hintStep: number;
   phase: 'intro' | 'solving' | 'wrong' | 'solved';
@@ -249,6 +250,14 @@ export class App {
   /** A puzzle session (task 3.2): the board holds a puzzle; the game in progress waits in storage. */
   private puzzling?: PuzzleSession;
   private puzzleResults = new PuzzleResults();
+  /** The coach shown in the Puzzles tab (task 3.2b). */
+  private puzzlePick = 0;
+  /**
+   * A puzzle set aside while the player went back to their game (the game and the puzzle are separate:
+   * Play shows the game as it was left, the Puzzles tab offers to continue the puzzle). Kept with the coach's
+   * words so far; the board is rebuilt from the puzzle when it comes back.
+   */
+  private parked?: { session: PuzzleSession; remarks: { ply: number; remark: Remark }[] };
   /** Takes down a Try again / Explore card that is waiting (the puzzle was skipped or left). */
   private retryCleanup?: () => void;
   /** The game ply a sideline started from (a sideline can start from an earlier viewed position). */
@@ -344,8 +353,8 @@ export class App {
       </dialog>
       <dialog id="puzzles-screen" class="history puzzles-screen" aria-label="Puzzles">
         <div class="history-head"><h2>Puzzles</h2><button id="puzzles-close" class="ghost">Back to play</button></div>
-        <p id="puzzles-note" class="history-note" aria-live="polite">Pick a coach. Start plays a mix of their puzzles; tap a theme to practise only that one.</p>
-        <ol id="puzzles-list" class="history-list puzzles-list"></ol>
+        <div id="puzzles-list" class="puzzles-list"></div>
+        <p id="puzzles-note" class="history-note" aria-live="polite"></p>
       </dialog>
       <main class="layout">
         <div id="board-area" class="board-area">
@@ -467,7 +476,7 @@ export class App {
     });
     // The rail (desktop) and the Menu (phones) switch screens; Game review and Settings sit over the game.
     for (const [id, screen] of [['rail-play', 'play'], ['rail-puzzles', 'puzzles'], ['history-open', 'review'], ['rail-settings', 'settings'], ['menu-play', 'play'], ['menu-puzzles', 'puzzles'], ['menu-review', 'review'], ['menu-settings', 'settings']] as const) {
-      this.el[id].addEventListener('click', () => this.showScreen(screen));
+      this.el[id].addEventListener('click', () => (screen === 'play' && this.puzzling ? void this.backToGame() : this.showScreen(screen)));
     }
     this.el['settings-close'].addEventListener('click', () => this.showScreen('play'));
     this.el.history.addEventListener('close', () => this.railCurrent());
@@ -475,6 +484,13 @@ export class App {
     this.el['puzzles-screen'].addEventListener('close', () => this.railCurrent());
     this.el['puzzles-close'].addEventListener('click', () => this.showScreen('play'));
     this.el['puzzles-list'].addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('button[data-continue]')) return void this.continuePuzzle();
+      const pick = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-pick]');
+      if (pick) {
+        this.puzzlePick = Number(pick.dataset.pick);
+        this.renderPuzzlesScreen();
+        return;
+      }
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-level]');
       if (b) void this.openPuzzles(levelInfo(Number(b.dataset.level)), b.dataset.theme || undefined);
     });
@@ -609,6 +625,7 @@ export class App {
 
   /** Starts a new game, or (with `resume`) carries on a saved one exactly where it stopped. */
   private async newGame(resume?: SavedGame): Promise<void> {
+    this.parkPuzzle();
     const id = ++this.gameId;
     this.reviewing?.abort?.abort();
     this.reviewing = undefined;
@@ -1426,6 +1443,7 @@ export class App {
       return;
     }
     this.save(); // the game in progress stays as it is, to come back to
+    this.parkPuzzle();
     ++this.gameId; // drops whatever the live game was waiting for
     this.puzzling = undefined;
     this.thinking = false;
@@ -1779,7 +1797,7 @@ export class App {
 
   private backup(): void {
     this.save();
-    const data = { ...this.store.exportAll(), puzzles: this.puzzleResults.all() };
+    const data = { ...this.store.exportAll(), puzzles: this.puzzleResults.all(), puzzleLevels: this.puzzleResults.allLevels() };
     this.download(JSON.stringify(data), `sideline-backup-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
     this.el['history-note'].textContent = `Backed up ${data.games.length} game${data.games.length === 1 ? '' : 's'} and ${data.puzzles.length} puzzle result${data.puzzles.length === 1 ? '' : 's'} to a file.`;
   }
@@ -1794,6 +1812,7 @@ export class App {
       const data = JSON.parse(await file.text());
       const result = this.store.importAll(data);
       const puzzles = result ? this.puzzleResults.importAll(data.puzzles) : 0;
+      if (result) this.puzzleResults.importLevels(data.puzzleLevels);
       note.textContent = result ? `Restored ${result.added} game${result.added === 1 ? '' : 's'}${puzzles ? ` and ${puzzles} puzzle result${puzzles === 1 ? '' : 's'}` : ''}; ${result.skipped} skipped (already here or unreadable).` : 'That file is not a Sideline backup.';
     } catch {
       note.textContent = 'That file could not be read.';
@@ -1807,101 +1826,175 @@ export class App {
   // against the solution (another mate counts; a move the engine calls just as good means "try again"). A wrong
   // move plays its refutation as a ghost line, then Try again / Explore. The game in progress waits in storage.
 
-  /** The Puzzles tab: one card per coach (yours first), its themes with what you solved and missed. */
+  /**
+   * The Puzzles tab (task 3.2b): the six coaches' faces in a row (yours marked), and the chosen coach large, with
+   * a line, their themes as tiles with a mastery bar (clean solves toward 10) and your level, and Start for a mix.
+   */
   private renderPuzzlesScreen(): void {
-    const list = this.el['puzzles-list'];
+    const box = this.el['puzzles-list'];
     const mine = this.settings.level;
-    const levels = [levelInfo(mine), ...LEVELS.filter((l) => l.level !== mine)];
-    list.replaceChildren(
-      ...levels.map((l) => {
-        const li = document.createElement('li');
-        li.className = 'p-coach';
-        const head = document.createElement('div');
-        head.className = 'h-main';
-        const title = document.createElement('span');
-        title.className = 'h-title';
-        title.textContent = `${l.coach.name} · about ${l.shownRating}`;
-        head.append(title);
-        if (l.level === mine) {
-          const chip = document.createElement('span');
-          chip.className = 'chip win';
-          chip.textContent = 'Your coach';
-          head.append(chip);
-        }
-        const meta = document.createElement('p');
-        meta.className = 'h-meta';
-        meta.textContent = `Lichess puzzle rating ${l.puzzleBand[0] || 400}–${l.puzzleBand[1]}`;
-        const progress = this.puzzleResults.progress(l.specialty.puzzleThemes, l.puzzleBand);
-        const themes = document.createElement('div');
-        themes.className = 'p-themes';
-        for (const t of l.specialty.puzzleThemes) {
-          const c = progress.get(t)!;
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'p-theme';
-          b.dataset.level = String(l.level);
-          b.dataset.theme = t;
-          const name = document.createElement('span');
-          name.textContent = themeName(t);
-          const count = document.createElement('span');
-          count.className = 'p-count';
-          count.textContent = c.solved || c.missed ? `${c.solved} solved · ${c.missed} missed` : 'New';
-          b.append(name, count);
-          b.setAttribute('aria-label', `Only ${themeName(t)}: ${count.textContent}`);
-          themes.append(b);
-        }
-        const start = document.createElement('button');
-        start.type = 'button';
-        start.className = l.level === mine ? 'primary' : '';
-        start.dataset.level = String(l.level);
-        start.textContent = 'Start';
-        start.setAttribute('aria-label', `Start ${l.coach.name}'s puzzles`);
-        li.append(head, meta, themes, start);
-        return li;
-      }),
-    );
+    const chosen = levelInfo(this.puzzlePick || mine);
+    const face = (l: Level, size: 'sm' | 'lg') => {
+      const d = document.createElement('div');
+      d.className = `p-face ${size}`;
+      d.innerHTML = faceSvg('neutral');
+      // The coach's own portrait and accent, without switching the page's theme.
+      void fetchTheme(l.theme).then((t) => {
+        d.style.setProperty('--p-accent', t.theme.coach.accent);
+        d.style.setProperty('--p-soft', t.theme.coach.accentSoft ?? t.theme.coach.accent);
+        const url = portraitUrl(t, size === 'lg' ? 'pleased' : 'neutral');
+        if (url) d.innerHTML = `<img src="${url}" alt="">`;
+      }).catch(() => undefined);
+      return d;
+    };
+
+    const picker = document.createElement('div');
+    picker.className = 'p-picker';
+    picker.setAttribute('role', 'group');
+    picker.setAttribute('aria-label', 'Coaches');
+    for (const l of LEVELS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'p-pick';
+      b.dataset.pick = String(l.level);
+      b.setAttribute('aria-pressed', String(l.level === chosen.level));
+      b.setAttribute('aria-label', `${l.coach.name}, about ${l.shownRating}${l.level === mine ? ', your coach' : ''}`);
+      const name = document.createElement('span');
+      name.className = 'p-pick-name';
+      name.textContent = l.level === mine ? `${l.coach.name} ★` : l.coach.name;
+      b.append(face(l, 'sm'), name);
+      picker.append(b);
+    }
+
+    const focus = document.createElement('section');
+    focus.className = 'p-focus';
+    void fetchTheme(chosen.theme).then((t) => {
+      focus.style.setProperty('--p-accent', t.theme.coach.accent);
+      focus.style.setProperty('--p-soft', t.theme.coach.accentSoft ?? t.theme.coach.accent);
+    }).catch(() => undefined);
+    const hero = document.createElement('div');
+    hero.className = 'p-hero';
+    const who = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = `${chosen.coach.name} · about ${chosen.shownRating}`;
+    const say = document.createElement('p');
+    say.className = 'p-say';
+    const names = chosen.specialty.puzzleThemes.map((t) => themeName(t).toLowerCase());
+    say.textContent = `My puzzles: ${listAnd(names)}. Tap one to practise it, or start a mix.`;
+    who.append(title, say);
+    hero.append(face(chosen, 'lg'), who);
+
+    const mastery = this.puzzleResults.mastery(chosen.specialty.puzzleThemes);
+    const levels = this.puzzleResults.allLevels();
+    const start = startLevel(chosen.puzzleBand);
+    const tiles = document.createElement('div');
+    tiles.className = 'p-themes';
+    for (const t of chosen.specialty.puzzleThemes) {
+      const clean = mastery.get(t) ?? 0;
+      const done = clean >= MASTERY_GOAL;
+      const level = this.puzzleResults.levelOf(t, start);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `p-tile${done ? ' mastered' : ''}`;
+      b.dataset.level = String(chosen.level);
+      b.dataset.theme = t;
+      const name = document.createElement('span');
+      name.className = 'p-name';
+      name.textContent = themeName(t);
+      const bar = document.createElement('span');
+      bar.className = 'p-bar';
+      bar.setAttribute('role', 'progressbar');
+      bar.setAttribute('aria-valuemin', '0');
+      bar.setAttribute('aria-valuemax', String(MASTERY_GOAL));
+      bar.setAttribute('aria-valuenow', String(Math.min(clean, MASTERY_GOAL)));
+      const fill = document.createElement('i');
+      fill.style.width = `${(Math.min(clean, MASTERY_GOAL) / MASTERY_GOAL) * 100}%`;
+      bar.append(fill);
+      const meta = document.createElement('span');
+      meta.className = 'p-meta';
+      const tried = clean > 0 || t in levels;
+      meta.textContent = done ? `Mastered ✓ · level ${level}` : tried ? `${clean} / ${MASTERY_GOAL} · level ${level}` : 'New';
+      b.append(name, bar, meta);
+      b.setAttribute('aria-label', `Practise ${themeName(t)}: ${meta.textContent}`);
+      tiles.append(b);
+    }
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'primary p-start';
+    go.dataset.level = String(chosen.level);
+    go.textContent = 'Start a mix';
+    go.setAttribute('aria-label', `Start a mix of ${chosen.coach.name}'s puzzles`);
+    focus.append(hero, tiles, go);
+    const waiting = this.puzzling ?? this.parked?.session;
+    const p = waiting?.run?.puzzle;
+    if (waiting && p) {
+      const cont = document.createElement('button');
+      cont.type = 'button';
+      cont.className = 'p-continue';
+      cont.dataset.continue = '1';
+      const what = waiting.current ? themeName(waiting.current) : 'Puzzle';
+      cont.innerHTML = '<strong>Continue your puzzle</strong><span></span>';
+      cont.lastElementChild!.textContent = `${what} · ${waiting.level.coach.name} · rated ${p.rating}`;
+      box.replaceChildren(cont, picker, focus);
+    } else box.replaceChildren(picker, focus);
   }
 
   /** Starts a puzzle session with a coach's set (or one theme of it). */
   private async openPuzzles(level: Level, theme?: string): Promise<void> {
-    const note = this.el['puzzles-note'];
-    note.textContent = 'Getting the puzzles…';
-    let pool: Puzzle[];
-    try {
-      pool = await loadPool(level.puzzleBand);
-    } catch (e) {
-      console.error(e);
-      note.textContent = 'The puzzles could not be loaded. Check your connection and try again.';
-      return;
-    }
-    note.textContent = 'Pick a coach. Start plays a mix of their puzzles; tap a theme to practise only that one.';
+    this.el['puzzles-note'].textContent = '';
     this.save(); // the game in progress stays as it is, to come back to
     this.reviewing?.abort?.abort();
     this.reviewing = undefined;
     if (this.sideline) this.exitSideline();
-    this.showScreen('play');
     this.mode = PUZZLE;
     void this.showCoach(level);
-    this.puzzling = { level, pool, theme, recent: [], seen: new Set(), solvedCount: 0, played: [], attempt: { solved: false, misses: 0, hints: 0 }, hintStep: 0, phase: 'intro', recorded: false };
-    this.railCurrent();
-    await this.nextPuzzle();
-  }
-
-  /** The next puzzle of the session; `theme` overrides the session's for one puzzle ("Another fork?"). */
-  private async nextPuzzle(theme?: string): Promise<void> {
-    const pz = this.puzzling;
-    if (!pz) return;
-    const t = theme ?? pz.theme;
-    const level = pz.level;
-    const set = t
-      ? pz.pool.filter((p) => p.rating >= level.puzzleBand[0] && p.rating < level.puzzleBand[1] && p.themes.includes(t))
-      : coachSet(pz.pool, level);
-    const p = choosePuzzle(set, (id) => this.puzzleResults.get(id), { band: level.puzzleBand, recent: pz.recent, exclude: pz.seen });
-    if (!p) {
-      this.say({ kind: 'phase', text: 'That is every puzzle of this set for now. Pick another theme or coach.', mood: 'neutral' });
+    const session: PuzzleSession = { level, theme, played: new Map(), seen: new Set(), solvedCount: 0, line: [], attempt: { solved: false, misses: 0, hints: 0 }, hintStep: 0, phase: 'intro', recorded: false };
+    const prev = this.puzzling;
+    const old = prev ?? this.parked?.session;
+    if (old) this.endTry(old);
+    this.puzzling = session;
+    if (!(await this.nextPuzzle())) {
+      this.puzzling = prev;
       return;
     }
+    this.parked = undefined;
+    this.showScreen('play');
+    this.railCurrent();
+  }
+
+  /**
+   * The next puzzle: the session's theme (or, in a mix, the coach's theme played least; `theme` overrides it
+   * once, for "Another fork?") near your level in that theme. Loads the band files around the level.
+   */
+  private async nextPuzzle(theme?: string): Promise<boolean> {
+    const pz = this.puzzling;
+    if (!pz) return false;
+    const t = theme ?? pz.theme ?? pickTheme(pz.level.specialty.puzzleThemes, pz.played);
+    const target = this.puzzleResults.levelOf(t, startLevel(pz.level.puzzleBand));
+    let p: Puzzle | undefined;
+    try {
+      // Near the level first; wider when a rare theme has nothing there.
+      for (const reach of [150, 400, 2000]) {
+        const bands = bandsFor([target - reach, target + reach + 1]);
+        const pool = (await Promise.all(bands.map((b) => loadBand(b)))).flat();
+        p = choosePuzzle(pool.filter((x) => x.themes.includes(t)), (id) => this.puzzleResults.get(id), { target, exclude: pz.seen });
+        if (p || bands.length === POOL_BANDS.length) break;
+      }
+    } catch (e) {
+      console.error(e);
+      this.el['puzzles-note'].textContent = 'The puzzles could not be loaded. Check your connection and try again.';
+      if (pz === this.puzzling && pz.run) this.status('The next puzzle could not be loaded.');
+      return false;
+    }
+    if (pz !== this.puzzling) return false;
+    if (!p) {
+      this.say({ kind: 'phase', text: 'That is every puzzle of this theme for now. Pick another one.', mood: 'neutral' });
+      return false;
+    }
+    pz.current = t;
+    pz.played.set(t, (pz.played.get(t) ?? 0) + 1);
     await this.startPuzzle(p);
+    return true;
   }
 
   private async startPuzzle(p: Puzzle): Promise<void> {
@@ -1910,7 +2003,7 @@ export class App {
     const id = ++this.gameId;
     this.retryCleanup?.();
     const run = new PuzzleRun(p);
-    Object.assign(pz, { run, played: [], attempt: { solved: false, misses: 0, hints: 0 }, hintStep: 0, phase: 'intro', recorded: false });
+    Object.assign(pz, { run, line: [], attempt: { solved: false, misses: 0, hints: 0 }, hintStep: 0, phase: 'intro', recorded: false });
     pz.seen.add(p.id);
     this.thinking = true;
     this.game = new Game(run.solverColor, p.fen);
@@ -1959,7 +2052,7 @@ export class App {
     this.sync();
 
     if (kind !== 'other') {
-      pz.played.push(uci);
+      pz.line.push(uci);
       const reply = run.advance(kind);
       if (run.solved) return this.puzzleSolved();
       this.thinking = true;
@@ -1969,7 +2062,7 @@ export class App {
       await sleep(MIN_THINK_MS);
       if (this.stale(id, ply) || !reply) return;
       const r = this.game.play(reply);
-      pz.played.push(reply);
+      pz.line.push(reply);
       pz.hintStep = 0;
       this.thinking = false;
       this.sync();
@@ -2088,7 +2181,8 @@ export class App {
     if (!pz?.run || pz.recorded) return;
     pz.attempt.solved = solved;
     this.puzzleResults.record(pz.run.puzzle, pz.attempt);
-    pz.recent.push(isClean(pz.attempt));
+    // The theme's level follows the result (task 3.2b).
+    if (pz.current) this.puzzleResults.setLevel(pz.current, nextLevel(this.puzzleResults.levelOf(pz.current, startLevel(pz.level.puzzleBand)), pz.attempt));
     pz.recorded = true;
   }
 
@@ -2100,8 +2194,8 @@ export class App {
     pz.solvedCount++;
     this.recordPuzzle(true);
     this.thinking = false;
-    const words = solvedWords(run, pz.played);
-    const last = pz.played.at(-1)!;
+    const words = solvedWords(run, pz.line);
+    const last = pz.line.at(-1)!;
     const hinted = pz.attempt.hints >= 3 ? ' Next time, try it with fewer hints.' : '';
     this.say({ kind: 'praise', text: words.text + hinted, mood: 'pleased', marks: [{ square: last.slice(2, 4) as Square, kind: 'good' }] });
     this.setMood('pleased');
@@ -2132,19 +2226,83 @@ export class App {
     await this.nextPuzzle();
   }
 
-  /** Back to the Puzzles tab; the game in progress is back on the board underneath. */
+  /** Back to the Puzzles tab: the puzzle is set aside (Continue brings it back) and the game is back underneath. */
   private async exitPuzzles(): Promise<void> {
+    if (!this.puzzling) return;
+    await this.backToGame();
+    this.showScreen('puzzles');
+  }
+
+  /** Play while a puzzle is on the board: the puzzle is set aside and the game comes back as it was left. */
+  private async backToGame(): Promise<void> {
+    this.showScreen('play');
+    const current = this.store.current();
+    await this.newGame(current && current.moves.length ? current : undefined); // parks the puzzle first
+  }
+
+  /** A try left half-way counts as tried if the player did something in it (once). */
+  private endTry(pz: PuzzleSession): void {
+    if (pz.phase === 'solved' || pz.recorded || !(pz.line.length || pz.attempt.misses || pz.attempt.hints)) return;
+    const keep = this.puzzling;
+    this.puzzling = pz;
+    this.recordPuzzle(false);
+    this.puzzling = keep;
+  }
+
+  /** Sets the puzzle on the board aside (see `parked`); nothing when no puzzle is on the board. */
+  private parkPuzzle(): void {
     const pz = this.puzzling;
     if (!pz) return;
     if (this.sideline) this.exitSideline();
-    // A puzzle left half-way counts as tried if the player did something in it.
-    if (pz.phase !== 'solved' && (pz.played.length || pz.attempt.misses || pz.attempt.hints)) this.recordPuzzle(false);
     this.retryCleanup?.();
     this.stopDemo();
     this.el.choices.hidden = true;
-    const current = this.store.current();
-    await this.newGame(current && current.moves.length ? current : undefined);
-    this.showScreen('puzzles');
+    this.thinking = false;
+    this.parked = { session: pz, remarks: this.log.all.map((e) => ({ ply: e.ply, remark: e.remark })) };
+    this.puzzling = undefined;
+  }
+
+  /** Brings the parked puzzle back where it was: the position after the moves found so far, and the coach's words. */
+  private async continuePuzzle(): Promise<void> {
+    if (this.puzzling) return this.showScreen('play');
+    const parked = this.parked;
+    const pz = parked?.session;
+    const run = pz?.run;
+    if (!parked || !pz || !run) return;
+    this.parked = undefined;
+    this.save(); // the game in progress stays as it is
+    ++this.gameId;
+    this.reviewing?.abort?.abort();
+    this.reviewing = undefined;
+    this.puzzling = pz;
+    this.mode = PUZZLE;
+    void this.showCoach(pz.level);
+    this.showScreen('play');
+    this.railCurrent();
+    if (pz.phase === 'solved' || run.solved) {
+      await this.nextPuzzle();
+      return;
+    }
+    // Rebuilt from the puzzle itself: a reply or an engine answer that was still on its way is not lost or doubled.
+    const game = new Game(run.solverColor, run.puzzle.fen);
+    game.play(run.firstMove);
+    const found = run.solution.slice(0, run.index);
+    for (const u of found) game.play(u);
+    this.game = game;
+    this.record = undefined;
+    pz.line = [...found];
+    pz.phase = 'solving';
+    pz.hintStep = 0;
+    this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => new Coach(a, pz.level, run.solverColor === 'white' ? 'w' : 'b', PUZZLE, book));
+    this.nav.reset(game.moves.length);
+    this.log.clear();
+    for (const e of parked.remarks) if (e.ply <= game.moves.length) this.log.add(e.ply, e.remark);
+    this.viewShapes = false;
+    this.thinking = false;
+    this.board.set({ orientation: run.solverColor, lastMove: undefined });
+    this.board.setAutoShapes([]);
+    this.sync();
+    this.status('Welcome back. Your move.');
   }
 
   /** The bar under the board in a puzzle: what it is, and Skip / Back to puzzles. */
@@ -2154,7 +2312,7 @@ export class App {
     bar.hidden = !pz || !!this.sideline;
     if (!pz) return;
     const p = pz.run?.puzzle;
-    const what = pz.theme ? themeName(pz.theme) : `${pz.level.coach.name}'s puzzles`;
+    const what = pz.current ? themeName(pz.current) : `${pz.level.coach.name}'s puzzles`;
     this.el['puzzle-text'].textContent = [what, p ? `rated ${p.rating}` : '', pz.solvedCount ? `${pz.solvedCount} solved` : ''].filter(Boolean).join(' · ');
     (this.el['puzzle-skip'] as HTMLButtonElement).disabled = pz.phase === 'intro';
     this.el['puzzle-skip'].hidden = pz.phase === 'solved'; // the card under the coach offers Next puzzle then
