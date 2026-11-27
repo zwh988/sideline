@@ -298,9 +298,43 @@ Feasibility: Qwen3.5 2B is close but slow on integrated GPUs; templates stay the
 - ⬜ 2.4 Ask the coach: fixed question types first ("Why did you play that?", "Is my knight safe?"), answered from facts.
 
 ## Phase 3: Puzzle drills
-- ⬜ 3.1 Build script: filter the Lichess puzzle database (CC0) by rating and theme into small bundles per level.
-- ⬜ 3.2 Puzzle screen reusing the board, hint ladder and coach. Woodpecker-style sets with speed and accuracy.
-- ⬜ 3.3 Missed tactics from games become puzzles (using the line rules), with spaced repetition after 1, 3 and 7 days.
+Designed with the user (Nov 27). Needs 1.14 (coaches, puzzle specialties); shares the practice scheduler with Openings (6.3), whichever is built first owns `src/app/practice.ts`. Note the decisions in STATE.
+
+**Agreed design**
+- **A Puzzles tab** (rail entry). The player picks a **coach** (default: your tier's coach); the coach sets the **difficulty band** and the theme. Any coach can be picked.
+- **One pool, coaches are a filter.** A build script reads the full Lichess puzzle database (CC0, downloaded by hand, never fetched at runtime) once and keeps a broad sample: every theme we may use × every rating band. A coach's set = its `specialty.puzzleThemes` (1.14) at its band, chosen from the pool at runtime. Moving a theme between coaches is a data change, no rebuild.
+- **A wrong move is not a fail:** a sideline shows why it doesn't work (the refutation, Lines chart), then the player retries. It still counts as a miss (the puzzle comes back sooner).
+- **No timer.**
+- **Rule 1:** Lichess theme tags only choose puzzles. The coach names a concept only when our detectors (`concepts.ts`) confirm it; otherwise it words the line's facts without a name.
+- **First version sources:** the coach's set, your own missed tactics, Today. Woodpecker sets after (3.4).
+- **Skipped (decided):** "defend" puzzles from tactics the player allowed (many moves are safe, hard to grade).
+
+### ⬜ 3.1 Puzzle pool
+- New output beside `public/puzzles/sample.json` (keep that file: `npm run concepts` and its tests use it): `public/puzzles/pool/<band>.json`, one file per rating band so the app loads only the band it needs.
+- Themes: the existing `THEMES` in `scripts/build-puzzles.mjs` plus those 1.14 added to the coach mapping (`oneMove`, `opening`, `kingsideAttack`, `pawnEndgame`, `endgame`, `rookEndgame`, `advancedPawn`, `long`, `veryLong`) and any other Lichess theme that matters below ~2000; check every name against the CSV's theme column.
+- Bands: Lichess puzzle ratings in steps of about 200 from the lowest up to ~2200. Lichess puzzle ratings run higher than Chess.com's at the low end: write down each coach's band (Pip's must still be easy) in the coach data, and check with a few hand-solved samples.
+- Per theme × band: ~300 puzzles, **quality-filtered** (popularity and number of plays above a threshold), a puzzle stored once even when it has several themes (index by theme). Fields: id, FEN, moves, rating, themes, opening tags (for later: Rusk's gambits).
+- Check the total size (target a few MB, compressed by the server); commit the files (the app serves only our own static files).
+- **Done when:** the pool builds reproducibly (fixed seed); tests on a small committed fixture cover the filters (theme, band, quality, dedupe) and that every theme in every coach's mapping has puzzles in that coach's band.
+
+### ⬜ 3.2 Puzzle screen and the coach's set
+- **Puzzles tab:** pick the coach ("Rusk's tricks"), see progress per theme (solved, missed, hints used).
+- **One puzzle:** the opponent's first move (Lichess puzzles start with it) is animated; the coach can ask "What does their last move want?" first (principle 3). The player moves; the opponent's replies come from the puzzle's solution. A different move that also wins (e.g. another mate in 1 as the final move) is accepted, judged by Stockfish (as Lichess does).
+- **Hints:** the existing hint ladder (4 steps), each step recorded with the result (spec: solved after hint 3 is not mastered).
+- **Wrong move:** the sideline opens from that position with the refutation played out and explained (`lineexplain.ts`, the Lines chart), then "Try again" returns to the puzzle position. Counted as a miss.
+- **Solved:** the coach names the concept if a detector confirms it, otherwise words what the line achieved; "Another skewer?" offers the next puzzle on the same concept.
+- **Choosing the next puzzle:** from the coach's themes at its band, unseen first, a little harder after a run of clean solves and easier after misses (within the band).
+- Results per puzzle stored on the device (`store.ts`, in the backup file): first-try solve, misses, hints used.
+- **Done when:** a puzzle of each kind (one move, a multi-move combination, a mate with an alternative mating move) is played in the browser at 375×650 and desktop, including a wrong move with its sideline and a retry; tests for solution checking (alternative mates, wrong-move detection) and puzzle choice.
+
+### ⬜ 3.3 Your mistakes and Today
+- **Your missed tactics become puzzles:** the saved moments (live games and imports; the missed-tactic kinds) already hold the position and the engine's line; cut by the line rules (`lines.ts`, the player's level at the time) and keep only forcing solutions (the opponent's replies forced or clearly best, checked with the analyst). Shown in the coach's voice of the game they came from ("From your game vs Rusk, move 14").
+- **The practice scheduler** (`src/app/practice.ts`, shared with 6.3 Drill): cards, due dates and results; a miss brings a card back after 1 day, a clean solve pushes it out (1, 3, 7, 14, 30 days).
+- **Today:** a short session of what is due (missed puzzles, your-mistake puzzles, then a few new puzzles from your coach's set; opening drill cards too once 6.3 exists), ending with "Done for today" (the spec's engagement metric).
+- **Done when:** a missed tactic from a real saved game shows up as a puzzle and is solvable; tests for turning a moment into a puzzle (a non-forcing line rejected) and for the scheduler (intervals, due order, a miss resets); a Today session played in the browser.
+
+### ⬜ 3.4 Woodpecker sets (later; discuss with the user first)
+A fixed set (e.g. 50 puzzles from the pool, by coach and theme) solved repeatedly in cycles, tracking accuracy per cycle until the patterns are instant (spec principle 6). The user chose no timer: whether cycle time is recorded silently (for a progress view) or not at all is to decide.
 
 ## Phase 4: Levels and placement
 - ⬜ 4.1 Concept mastery tracking (from puzzles, hints used, tactics found in games).
