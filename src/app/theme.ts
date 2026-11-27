@@ -10,7 +10,30 @@ export interface Theme {
   coach: { accent: string; accentStrong?: string; accentSoft?: string };
   /** The coach's faces, one file per mood (`<folder>/neutral.svg`, …). Without it the drawn face is used. */
   portraits?: { folder: string; format: 'svg' | 'png' };
+  /** Exact app surfaces per mode; without them the surfaces are the neutral base tinted with the accent (style.css). */
+  surfaces?: { light?: Surfaces; dark?: Surfaces };
   credits?: string;
+}
+
+/** The app's surfaces under a coach: page, panels, borders, the speech box, the header bar (and its text). */
+export interface Surfaces {
+  bg?: string;
+  panel?: string;
+  border?: string;
+  speech?: string;
+  header?: string;
+  onHeader?: string;
+}
+
+const SURFACE_VARS: Record<keyof Surfaces, string> = { bg: '--bg', panel: '--panel', border: '--border', speech: '--speech', header: '--header', onHeader: '--on-header' };
+
+/** CSS declarations for exact surfaces (empty when the pack has none). */
+function surfaceCss(s?: Surfaces): string {
+  if (!s) return '';
+  return Object.entries(s)
+    .filter(([k, v]) => k in SURFACE_VARS && typeof v === 'string')
+    .map(([k, v]) => `${SURFACE_VARS[k as keyof Surfaces]}: ${v};`)
+    .join(' ');
 }
 
 /** A loaded pack: the theme and the folder its paths are relative to. */
@@ -70,7 +93,11 @@ function applyTheme(t: Theme, base: string): void {
     .join('\n');
 
   const h = t.highlights;
-  const css = `
+  // Exact surfaces win over the tinted ones in style.css (`:root:root` outranks `:root` wherever this lands).
+  const light = surfaceCss(t.surfaces?.light);
+  const dark = surfaceCss(t.surfaces?.dark);
+  const surfaces = `${light ? `:root:root { ${light} }` : ''}${dark ? `@media (prefers-color-scheme: dark) { :root:root { ${dark} } }` : ''}`;
+  const css = `${surfaces}
 :root {
   --coach-accent: ${t.coach.accent};
   --coach-accent-strong: ${t.coach.accentStrong ?? t.coach.accent};
@@ -97,4 +124,6 @@ ${pieces}`;
     document.head.append(style);
   }
   style.textContent = css;
+  // The phone's status bar and the installed app's title bar take the coach's colour too.
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t.surfaces?.light?.header ?? t.coach.accentStrong ?? t.coach.accent);
 }
