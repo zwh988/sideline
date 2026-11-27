@@ -313,7 +313,63 @@ Feasibility: Qwen3.5 2B is close but slow on integrated GPUs; templates stay the
 - ⬜ 5.2 Your own theme packs and portraits with expressions (the asset list is in the spec).
 
 ## Phase 6: Openings
-- ⬜ 6.1 Small idea-based repertoire, drills with spaced repetition, starting games from repertoire positions (builds on `?fen=` / `Game.startFen`), and on the openings met in games (task 1.7b).
+Designed with the user (Nov 27). Can start once 1.14 (coaches per tier) is done; it doesn't need Phases 3–5. Replaces the spec's "Openings" section (note it in STATE "Decisions" and the spec sync, 1.13): no "play it from the position" part, and the player picks freely.
+
+**Agreed design**
+- **An Openings tab** (a rail entry, room was left in 1.12j). The player picks an **opening**, a **side** (play it, or meet it) and a **coach** to learn from. Nothing is assigned; the theme follows the chosen coach.
+- **Every opening is learnable from both sides.** E.g. the Vienna as White (how to play it) and as Black (how to meet it); the Caro-Kann as Black and as White (how to meet 1…c6). Each opening × side is its own course with its own tree.
+- **Every opening is available with every coach.** The coach sets (a) which opponent replies are covered: what players at that coach's rating actually play, and (b) the depth. Prepare for what your level meets, not master theory.
+- **One tree per course that grows.** Each node is tagged with the lowest coach tier whose filter includes it; learning with coach N covers every node with tier ≤ N. Moving to a stronger coach *adds* replies; lines from lower tiers are kept (they still come up against weaker players), their cards just come back less often. To go deeper, pick a stronger coach.
+- **A coach's opening specialty** only means it plays that opening against you in games (1.15's book) and labels it "Rusk's favourites"; it never limits what you can learn.
+- **Two parts: Learn and Drill.**
+- **Text in three layers**, so the content does not depend on the developer's chess knowledge: (1) what each move does: board-checked idea tags worded by templates in the coach's voice, automatic; (2) what happens after each reply: Stockfish lines and `lineexplain.ts`, traps found automatically, automatic; (3) plans and structure: LLM-drafted at writing time, claims checked by script, edited for clarity by the developer, reviewed by the community. **Ship with layers 1–2 only**; layer 3 is 6.4.
+
+**First catalogue (7 openings × 2 sides = 14 courses).** Required by the user: Vienna Game / Vienna Gambit, Caro-Kann. Chosen for under-1600 players (common at these levels, ideas that carry over, both sides useful):
+
+| Opening | Start | Play it as | Meet it as |
+|---|---|---|---|
+| **Vienna Game / Gambit** | 1.e4 e5 2.Nc3 | White: the gambit 3.f4 where it works (e.g. vs 2…Nf6, 2…Nc6), the quiet Vienna (3.Bc4 / 3.g3) where it doesn't (e.g. vs 2…Bc5) | Black: e.g. 2…Nf6 and the …d5 counter-strike vs 3.f4 |
+| **Caro-Kann** | 1.e4 c6 | Black | White: one simple system vs 1…c6 (e.g. the Advance) |
+| Italian Game | 1.e4 e5 2.Nf3 Nc6 3.Bc4 | White | Black |
+| Scotch Game | 1.e4 e5 2.Nf3 Nc6 3.d4 | White | Black |
+| London System | 1.d4 + Bf4 | White | Black: one setup vs the London |
+| Queen's Gambit | 1.d4 d5 2.c4 | White | Black: the Declined (…e6) |
+| Scandinavian | 1.e4 d5 | Black | White |
+
+The player's own moves in each course are chosen when building (Stockfish's top moves; at low tiers the simplest move within ~0.3 pawns of the best, preferring one system the player can reuse), and listed in the course file so they can be reviewed. The move choices above are a starting point for that build, not fixed.
+
+### ⬜ 6.1 Opening data pipeline
+- **Catalogue:** the course list above as data (id, name, side, the moves that define it), names from the existing Lichess `chess-openings` data (`openings-data.json`, 1.7b).
+- **Replies by rating, at build time only** (rule 4: nothing fetched at runtime): `scripts/build-opening-trees.mjs` queries the **Lichess opening explorer** (Lichess games, CC0) for each position, per rating band, with a local cache and polite rate limiting. **Check first:** the API's terms, rate limit and whether it needs a token; the rating bands it offers and how the six coaches' ratings map onto them (the lowest band vs Pip). Where the explorer has too few games, fall back to **Maia** at the coach's rating (run in Node or via the tests page) and mark the node as Maia-sourced.
+- **Tree rules per coach tier** (first pass, tune by size): include an opponent reply if it is common at that tier's band (e.g. ≥10% at Pip, ≥5% at Ardea) **or** it is a trap: played ≥3% and Stockfish says it loses ≥2 pawns (teach the punishment). The player's move at each node: see above. Depth: about 4 player moves at Pip up to about 10 at Ardea (align with `levels.ts` `maxPlies` spirit). Every player move is Stockfish-checked (never a mistake by the level's `mistakeCp`).
+- **Idea tags (layer 1):** per player move and per common reply, from board code: develops a piece, fights for the centre (attacks/occupies d4 d5 e4 e5), castles or prepares castling, opens a line for a piece, attacks a piece or pawn, pins, threatens mate, gambits a pawn (material given), takes back. Add the missing detectors in `facts.ts` (or a new `coach/opening-ideas.ts`) with tests on real positions.
+- **Consequences (layer 2):** for each reply, Stockfish's best answer and the cut, taught line (`lines.ts`), stored so the screen needs no deep search; traps flagged.
+- **Output:** one committed JSON per course (`public/openings/<course>.json`): nodes (FEN, move, who, tier, frequency per band, source explorer/Maia, tags, consequence line, eval). Check the total size.
+- **Done when:** all 14 courses build; tests cover the tree rules (a trap included, a rare non-trap dropped, tiers nest: Pip's tree ⊆ Ardea's), the new idea detectors on real FENs, and every player move in every course passes the Stockfish check (a test over the files); the per-course player moves are listed in STATE for review.
+
+### ⬜ 6.2 Openings tab and Learn
+- **Openings tab:** list of courses (opening, side, a small board of the start), pick a coach (default: your tier's coach; theme switches); progress per course and coach (nodes learned / total).
+- **Learn:** the coach walks the tree, most common line first, then the branches:
+  - **Your move:** the coach asks first (principle 3: "What would you play here?"). Right → it names the idea (layer 1). Wrong → a sideline shows what goes wrong (the Lines chart) and you retry; a reasonable alternative is accepted with "that works too, but this course plays …".
+  - **Their move:** "At this level, most players reply …Nf6 (60%), some play …Bc5 (25%)", each with its idea; then the course continues with each reply in turn. Traps get their own beat: "Some players grab …exf4? Here's how to punish it" (layer 2).
+  - Deeper coaches say more per move: more tags shown, longer consequence lines, more replies covered; the coach's phrase bank (1.14) gives the voice.
+- Starts from the initial position, playing the defining moves quickly (shown, not quizzed), so the player sees how the opening arises.
+- Rule 1: every sentence comes from tags, the stored lines and templates; nothing hand-written yet.
+- **Done when:** the Vienna (White) and Caro-Kann (Black) courses can be learned end to end with Pip and with Ardea in the browser at 375×650 and desktop; tests for the walk order and answer checking.
+
+### ⬜ 6.3 Drill (spaced repetition of the lines)
+- **Cards are positions, not whole lines:** each player node learned in 6.2 becomes a card (per course and coach tier).
+- A drill plays a course from the start: you play your side; the opponent picks replies weighted by frequency at the coach's band, steering toward **due** cards. A miss shows the right move with its idea, and the card comes back sooner; a hit pushes it out (1, 3, 7, then 14, 30 days).
+- **The scheduler is shared with puzzles** (Phase 3, 3.3): build it here as `src/app/practice.ts` (cards, due dates, results, stored on the device with `store.ts`; included in the backup file) if Phase 3 hasn't yet.
+- Lower-tier cards stay in the deck after moving to a stronger coach (agreed), on their normal intervals.
+- Occasionally, "Why this move?" with choices from the node's idea tags (the wrong choices must be tags that are false for that move, checked by code).
+- **Done when:** tests for the scheduler (intervals, due order, a miss resets) and for the reply weighting toward due cards; a drill session played in the browser on a phone viewport.
+
+### ⬜ 6.4 Layer 3: plans and structure (later, per opening)
+LLM-drafted at writing time per course and coach (deeper for Moss and Ardea), e.g. "Black aims for …c5 to hit the centre". A script checks each concrete claim against the course's stored lines and explorer games (does …c5 happen? does the bishop go to b2?); unverifiable sentences are flagged and not shipped as fact. The developer edits for clarity (being a beginner helps); outlines go to the community for review (spec). Added one course at a time.
+
+### ⬜ 6.5 Openings in games (to discuss with the user first)
+Proposed, not agreed: in a live game, when the opponent leaves a course you've learned, the coach asks "They've left the book: which principle applies?"; in Review a moment "left your repertoire" ("you played 4.Bc4, your course plays 4.Ng5"); suggestions from the openings met in your games (1.7b data: "you faced the Caro-Kann in 9 of your last 20 games").
 
 ## Phase 7: Higher levels
 - ⬜ 7.1 Levels 4–6 content and patterns, with input from stronger players.
