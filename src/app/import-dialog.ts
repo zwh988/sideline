@@ -13,7 +13,7 @@ import type { Analyst } from '../coach/analyst';
 import { loadOpeningBook } from '../coach/openings';
 import { reviewGame } from '../coach/review';
 import { guessColor, importedId, parseGame, parsePgn, toSavedGame, describeGame, type ParsedGame } from './pgnimport';
-import { LEVELS, levelInfo } from './levels';
+import { LEVELS, levelInfo, levelLabel } from './levels';
 import { cleanUsername, fetchChessCom, fetchLichess, SourceError, type Fetch, type FetchedGame } from './sources';
 import type { Color } from './game';
 import type { GameStore, ImportedInfo } from './store';
@@ -101,7 +101,7 @@ export class ImportDialog {
         <ol data-id="list" class="history-list import-list"></ol>
         <div class="import-row">
           <label>Your level (sets how big a swing is listed)
-            <select data-id="level">${LEVELS.map((l) => `<option value="${l.level}">${l.level} · Chess.com ${l.chessCom}</option>`).join('')}</select>
+            <select data-id="level">${LEVELS.map((l) => `<option value="${l.level}">${levelLabel(l)}</option>`).join('')}</select>
           </label>
         </div>
         <div class="import-row">

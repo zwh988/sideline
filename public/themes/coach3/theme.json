@@ -1,0 +1,27 @@
+{
+  "name": "Coach 3",
+  "board": {
+    "light": "#F6E7CF",
+    "dark": "#C7774A"
+  },
+  "pieces": {
+    "folder": "../default/pieces",
+    "format": "svg"
+  },
+  "highlights": {
+    "lastMove": "rgba(230, 200, 60, 0.45)",
+    "selected": "rgba(40, 110, 160, 0.5)",
+    "moveDot": "rgba(30, 60, 80, 0.35)",
+    "check": "rgba(220, 30, 30, 0.85)"
+  },
+  "coach": {
+    "accent": "#E8641E",
+    "accentStrong": "#C2410C",
+    "accentSoft": "#FDE8D9"
+  },
+  "portraits": {
+    "folder": "portraits",
+    "format": "svg"
+  },
+  "credits": "Pieces: rhosgfx by RhosGFX (CC0 1.0), via the Lichess piece collection."
+}

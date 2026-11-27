@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Coach 1 looks pleased">
+  <rect width="200" height="200" fill="#2D5BD7"/>
+  <circle cx="100" cy="100" r="78" fill="#E3EBFF"/>
+  <text x="100" y="94" text-anchor="middle" font-family="system-ui, sans-serif" font-size="30" font-weight="800" fill="#2D5BD7">Coach 1</text>
+  <text x="100" y="128" text-anchor="middle" font-family="system-ui, sans-serif" font-size="24" font-weight="600" fill="#1f2421">pleased</text>
+</svg>

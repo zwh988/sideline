@@ -220,6 +220,74 @@ Ideas for 1.12e (nothing here is decided beyond the flow above):
 ### ⬜ 1.13 Spec sync (can run in parallel with any task)
 - Fold the "Decisions" from `docs/STATE.md` into the product spec: templates as the main voice, the Maia rating floor, the adapted line-cutting rules, loose piece, licensing.
 
+### ⬜ 1.14 Six tiers, six animal coaches, a theme per tier
+- ✅ **1.14a Infrastructure with placeholders** (Nov 27): `Level.coach`/`shownRating`/`theme`, six packs `public/themes/coach1…6` (board and accent from the table below, pieces reused), placeholder portraits per mood ("Coach N" + mood, `scripts/make-portraits.mjs`), switching at the next game (decided), Review uses the game's coach; bigger face; unfolded-foldable layout (coach column beside the board). STATE decision 35.
+- ⬜ **1.14b Personas** (when the user has chosen them): names, animals, real portraits (drop into `portraits/`), per-coach piece colours, the shared highlight colours, contrast of highlights and arrows on all six boards, phrase banks (voice), `specialty.puzzleThemes` and the `build-puzzles.mjs` themes, a board/pieces override setting.
+Agreed with the user (Nov 27): the 6 levels stay as in the spec and `levels.ts`, but each one is a **tier with its own animal coach** (no generic "Coach"), shown with **one exact rating** instead of a range, and **picking a tier switches the theme** (board colours, piece set, accent, portraits). Replaces the spec's four personas by band. Pulls part of Phase 5 (5.1 personas, 5.2 theme packs) forward; the art itself comes later from the developer, the placeholders stay until then. Align the two new animals with the user before building.
+
+**The tiers** (shown number = the strength the coach plays at, as an approximate Chess.com rating; Maia's Lichess number stays in code; check the conversion against the bands in `levels.ts` and say "about" in the UI):
+
+| Tier | Coach | Shown | Maia (Lichess) | Tone | Playing style | Teaches (spec concepts) |
+|---|---|---|---|---|---|---|
+| 1 | **Penguin** (Pip) | 300 | 600 | eager, clumsy, a fellow noob, humble | simple, natural moves, leaves things loose | piece safety, safe trades, basic mates |
+| 2 | **Otter** (new) | 550 | 800 | playful, curious, easily distracted | grabby: takes whatever is offered, chases pieces | forks, mate in 1–2, opening principles (punish greed, keep your pieces defended) |
+| 3 | **Fox** (Rusk) | 850 | 1100 | cheeky, confident, show-off | early attacks and gambits | pins, skewers, discovered attacks; staying safe vs aggression |
+| 4 | **Badger** (new) | 1150 | 1350 | gruff, stubborn, blunt | tenacious defence, trades into endgames | removing the defender, deflection, combining motifs, K+P endgames; converting a win |
+| 5 | **Tortoise** (Moss) | 1450 | 1600 | calm, patient, methodical | slow and solid | weak squares, open files, good vs bad pieces, pawn structure; plans in quiet positions |
+| 6 | **Heron** (Ardea) | 1750 | 1850 | dry, Socratic, precise | precise, punishes loose play | calculation, anticipating plans, harder endgames |
+
+Names are placeholders. Playing style is a later setting per coach (Maia temperature, opening choice); this task only adds the field.
+
+**Themes** (first pass, test highlights and arrows on every board; the shared highlight colours do not change between themes; accent is for UI only, never on the board):
+
+| Coach | Light sq | Dark sq | Accent / strong / soft | White pieces fill / outline | Black pieces fill / inner line |
+|---|---|---|---|---|---|
+| Penguin | `#EEF4F8` | `#9DB8CF` | `#2D5BD7` / `#2D5BD7` / `#E3EBFF` | `#FFFFFF` / `#1E2A38` | `#1E2A38` / `#4A5C70` |
+| Otter | `#EAF1EE` | `#7FA9A0` | `#E0607E` / `#C2445F` / `#FCE4EA` | `#FFFFFF` / `#22312E` | `#22312E` / `#4E6662` |
+| Fox | `#F6E7CF` | `#C7774A` | `#E8641E` / `#C2410C` / `#FDE8D9` | `#FFF6EA` / `#3A2418` | `#3A2418` / `#7A4A2E` |
+| Badger | `#E8E2D8` | `#8F8273` | `#8A5A3B` / `#7A4C2F` / `#F2E6DA` | `#FBF8F3` / `#2B2622` | `#2B2622` / `#5C534A` |
+| Tortoise | `#EDE6CF` | `#8C9A6A` | `#5F8A5B` / `#4E7A4A` / `#E4EEDF` | `#FBF7EC` / `#2F3524` | `#2F3524` / `#5A6444` |
+| Heron | `#E3E7EA` | `#6F8597` | `#2F7F86` / `#2F7F86` / `#DDEFF0` | `#F7F9FA` / `#1A2128` | `#1A2128` / `#465664` |
+
+**Specialties** (agreed Nov 27): each coach also specialises in a kind of puzzle (and later an opening; **openings to decide with the user next time**). Add a `specialty.puzzleThemes` field per coach with exact Lichess theme names. Phase 3 uses it for a named set per coach ("Fox's tricks"), on top of the drills for the player's own tier; any coach's set can be picked.
+
+| Coach | Lichess puzzle themes |
+|---|---|
+| Penguin | `hangingPiece`, `mateIn1`, `oneMove` |
+| Otter | `fork`, `mateIn2`, `backRankMate`, `trappedPiece` |
+| Fox | `pin`, `skewer`, `discoveredAttack`, `sacrifice`, `opening`, `kingsideAttack` |
+| Badger | `capturingDefender`, `deflection`, `defensiveMove`, `pawnEndgame`, `endgame` |
+| Tortoise | `quietMove`, `rookEndgame`, `advancedPawn`, `promotion`, `intermezzo` |
+| Heron | `long`, `veryLong`, `zugzwang`, `clearance`, `interference`, `xRayAttack` |
+
+`scripts/build-puzzles.mjs` `THEMES` does not yet keep `oneMove`, `opening`, `kingsideAttack`, `pawnEndgame`, `endgame`, `rookEndgame`, `advancedPawn`, `long`, `veryLong`: add them (check each name against the CSV's theme column, and the bundle size), and keep `concepts.ts` in sync. Fox's set can later also filter by the puzzle's opening tags (gambits) once its openings are chosen. Positional coaches (tortoise, badger) have thinner puzzle sets; that's expected, their specialty will lean on openings and games. A test checks that every theme name in the mapping exists in the built puzzle sample.
+
+Shared highlights: your moves `#6D4AFF`, opponent/coach replies `#F59E0B`, good `#22A559`, danger/check `#E5383B`, last move `#F7D046` at 40%, legal dot black at 22%; arrows get a thin `#1B1B1F` 50% stroke.
+
+**Build:**
+- `levels.ts`: each level gets `coach` (id, name, animal, tone), `shownRating`, and `theme` (a theme pack id). The UI says "Tier 3 · Fox · about 850" instead of the rating band. Keep `chessCom` only if something still needs the band.
+- Theme packs: one folder per coach in `public/themes/<id>/`, each `theme.json` with board, accent (+ strong, soft) and pieces; until the developer's sets exist, all six point to the rhosgfx pieces (reuse, don't copy). Add a **portraits** slot (`portraits/neutral|thinking|pleased|concerned|surprised.(svg|png)`); when absent, `faceSvg` in `ui.ts` draws the placeholder in the accent.
+- `theme.ts`: switching the tier loads that coach's pack (applies at once, unlike the level, which applies from the next game; or both from the next game: decide with the user). A setting can override board/pieces independently (spec: mix freely).
+- **The theme follows the coach across formats:** Play, Game review, and later Puzzles and Openings use the current tier's coach and theme; formats have no colours of their own. **Game review:** a game played against a coach is reviewed by that coach in their theme (they were the opponent: "I left my bishop loose there"); imported games are reviewed by the current tier's coach.
+- **Voice:** personality lives in the templates, not an LLM (STATE decision 1; the model was 5–10 s per comment and invented facts). Each coach gets a small phrase bank in `templates.ts` (or one file per coach): openers, praise, concern, thinking, small talk; the fact sentence stays shared and untouched (rules 1–2), the coach's phrase wraps it. Rotate to avoid repeats; personality phrases go through the comment budget (spec: no joke on every move). The "plain coach" setting drops the phrase bank. Phrase banks can be drafted with an LLM at writing time and edited by hand. Phase 2's rephrasing stays optional.
+- **Done when (1.14):** each tier picks its coach, rating, theme and phrase bank; switching tiers in the browser changes board, accent and coach name at 375×650 and desktop; highlight and arrow contrast checked on all six boards; tests for the level→coach→theme mapping and that phrase banks never change the fact text; STATE decision added and the spec's "Coach personas" table marked for the spec sync (1.13).
+
+### ⬜ 1.15 Coach playing styles
+Agreed with the user (Nov 27). After 1.14 (needs the coach per tier). Each coach plays differently, not only at a different rating. The hook: `MaiaOpponent.chooseMove` in `opponent.ts` gets Maia's probability per legal move, drops those under `MIN_PROBABILITY` (2%) and samples. **A style reweights that policy before sampling**, so moves stay ones a human at that rating would consider.
+
+1. **Opening book (most visible, cheapest).** For the first 4–8 moves the coach plays from its own small repertoire instead of Maia (the fox's gambits, the badger's London every game); once the game leaves the book, Maia takes over. Use the openings data from 1.7b to recognise positions (transpositions included). **The openings per coach are not chosen yet: decide with the user at the start of this task** (1.14 has the puzzle specialties; openings were left open). Play only book moves Stockfish doesn't call a blunder.
+2. **Style weights.** Per candidate move, features from existing board code (`facts.ts`, `motifs.ts`, `narration.ts`): capture, check, attack near the enemy king, trade, leaves own piece loose, pawn push, defends a piece, quiet move. Weight: `p' = p · exp(style · features)`, renormalise, keep the 2% floor (computed on Maia's original p, so style tilts but never adds a move no human would play). Plus a **temperature** per coach (higher for Pip, lower for Heron). First pass:
+   - Pip: none (plain Maia), slightly higher temperature.
+   - Otter: + captures, even poisoned ones; − defending own pieces.
+   - Rusk (fox): + checks, attacks near the king, pawn storms, sacrifices; − quiet moves and trades.
+   - Badger: + trades (when level or ahead), defending, solid pawns; − opening its own king.
+   - Moss (tortoise): + quiet moves, keeping the structure, defended pieces; − early attacks, loose pieces.
+   - Heron: blend toward Stockfish's top moves (needs the analyst's search of the position), lower temperature.
+   Styles are data on the coach (1.14's `playingStyle` field), not code per coach.
+3. **Strength stays honest.** A style changes real strength (a greedy otter at 800 may play like 650). A script (`npm run styles`, like `npm run concepts`) plays N games of each styled coach against plain Maia at the same rating and records average centipawn loss per move (Stockfish) and the score; tune each coach's Maia rating until its real strength matches the shown rating. Record the numbers in STATE. Narration is already honest about weak moves (rule 2: compared with Stockfish's best); the phrase bank may own a greedy grab ("Free pawn! …wait"), never praise it.
+- Sparring uses the same style (it is how the coach plays); the player can pick any coach to practise against a style (spec).
+- **Done when:** unit tests for the reweighting (features from real FENs; the floor holds; a zero style equals plain Maia); the book is followed and left correctly (tests with a transposition); the strength script runs and its numbers are in STATE; a game per coach in the browser shows the style (e.g. the fox gambits and checks, the badger trades down).
+
 ---
 
 ## Phase 2: In-browser coach voice
@@ -241,7 +309,7 @@ Feasibility: Qwen3.5 2B is close but slow on integrated GPUs; templates stay the
 - ⬜ 4.4 Levels 1–3 curriculum: lesson text drafted from verifiable claims, positions verified by Stockfish.
 
 ## Phase 5: Personas and art
-- ⬜ 5.1 Four coach personas: tone in short phrases, a playing style for each (Maia settings or opening choice), a "plain coach" setting.
+- ⬜ 5.1 Coach personas (six since task 1.14, which adds the coaches, themes and phrase banks; left here: playing style per coach and tuning the voice): tone in short phrases, a playing style for each (Maia settings or opening choice), a "plain coach" setting.
 - ⬜ 5.2 Your own theme packs and portraits with expressions (the asset list is in the spec).
 
 ## Phase 6: Openings

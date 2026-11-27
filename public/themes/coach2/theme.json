@@ -1,0 +1,27 @@
+{
+  "name": "Coach 2",
+  "board": {
+    "light": "#EAF1EE",
+    "dark": "#7FA9A0"
+  },
+  "pieces": {
+    "folder": "../default/pieces",
+    "format": "svg"
+  },
+  "highlights": {
+    "lastMove": "rgba(230, 200, 60, 0.45)",
+    "selected": "rgba(40, 110, 160, 0.5)",
+    "moveDot": "rgba(30, 60, 80, 0.35)",
+    "check": "rgba(220, 30, 30, 0.85)"
+  },
+  "coach": {
+    "accent": "#E0607E",
+    "accentStrong": "#C2445F",
+    "accentSoft": "#FCE4EA"
+  },
+  "portraits": {
+    "folder": "portraits",
+    "format": "svg"
+  },
+  "credits": "Pieces: rhosgfx by RhosGFX (CC0 1.0), via the Lichess piece collection."
+}

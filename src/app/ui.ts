@@ -17,13 +17,13 @@ import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store'
 import { kindLabel, momentDot, momentUniverses, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
 import { REVIEW_VERSION, reviewGame } from '../coach/review';
 import { Game, resultOf, type Color } from './game';
-import { LEVELS, levelInfo } from './levels';
+import { LEVELS, levelInfo, levelLabel, type Level } from './levels';
 import { MODES, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
 import { materialOf } from './material';
 import { gameSummary } from './summary';
 import { Navigation, RemarkLog, plyLabel } from './navigation';
 import { createOpponent, type Opponent } from './opponent';
-import type { Theme } from './theme';
+import { applyLoaded, fetchTheme, portraitUrl, type LoadedTheme } from './theme';
 
 type ColorChoice = Color | 'random';
 
@@ -34,7 +34,6 @@ interface Settings {
 }
 
 const SETTINGS_KEY = 'sideline.settings';
-const COACH_NAME = 'Coach';
 const MIN_THINK_MS = 600; // the coach shouldn't reply instantly
 const DEMO_STEP_MS = 900; // one move of the ghost line (task 1.12a)
 
@@ -47,6 +46,13 @@ function loadSettings(): Settings {
   }
   return { level: 2, color: 'white', mode: 'lesson' };
 }
+
+/** The theme to load before the app starts: the tier of the game in progress, else the saved tier. */
+export function initialTheme(): string {
+  return levelInfo(new GameStore().current()?.level ?? loadSettings().level).theme;
+}
+
+const MOODS: Mood[] = ['neutral', 'thinking', 'pleased', 'concerned', 'surprised'];
 
 function saveSettings(s: Settings): void {
   try {
@@ -215,8 +221,8 @@ export class App {
 
   constructor(
     private root: HTMLElement,
-    private theme: Theme,
-    private themeBase: string,
+    /** The theme pack in use: the coach of the game on the board (task 1.14). */
+    private loaded: LoadedTheme,
   ) {
     this.render();
     this.analyst = Analyst.create();
@@ -270,7 +276,7 @@ export class App {
       </header>
       <dialog id="newgame" class="sheet" aria-label="New game">
         <h2>New game</h2>
-        <label>Level <select id="ng-level">${LEVELS.map((l) => `<option value="${l.level}">${l.level} · Chess.com ${l.chessCom}</option>`).join('')}</select></label>
+        <label>Coach <select id="ng-level">${LEVELS.map((l) => `<option value="${l.level}">${levelLabel(l)}</option>`).join('')}</select></label>
         <label>Mode <select id="ng-mode">${MODES.map((m) => `<option value="${m.id}">${m.name}</option>`).join('')}</select></label>
         <label>Play as
           <select id="ng-color">
@@ -288,7 +294,7 @@ export class App {
         <div class="history-head"><h2>Settings</h2><button id="settings-close" class="ghost">Back to play</button></div>
         <p class="history-note">These are the choices New game starts with. A change applies from your next game.</p>
         <div class="settings-list">
-          <label>Level <select id="level">${LEVELS.map((l) => `<option value="${l.level}">${l.level} · Chess.com ${l.chessCom}</option>`).join('')}</select></label>
+          <label>Coach <select id="level">${LEVELS.map((l) => `<option value="${l.level}">${levelLabel(l)}</option>`).join('')}</select></label>
           <label>Mode <select id="mode">${MODES.map((m) => `<option value="${m.id}">${m.name}</option>`).join('')}</select></label>
           <label>Play as
             <select id="color">
@@ -336,10 +342,13 @@ export class App {
         <aside class="side">
           <div class="coach">
             <div class="coach-face">
-              <div id="portrait" class="portrait" aria-hidden="true">
-                ${faceSvg('neutral')}
+              <div class="portrait-wrap">
+                <div id="portrait" class="portrait" aria-hidden="true">
+                  ${faceSvg('neutral')}
+                </div>
+                <button id="ask" class="ask" aria-haspopup="menu" aria-expanded="false" aria-controls="ask-menu">Ask</button>
               </div>
-              <button id="ask" class="ask" aria-haspopup="menu" aria-expanded="false" aria-controls="ask-menu">Ask</button>
+              <div class="face-name js-coach-name"></div>
             </div>
             <div id="ask-menu" class="menu ask-menu" role="menu" hidden>
               <button id="hint" role="menuitem"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.5.4.6 1 .6 1.7v.5h6v-.5c0-.7.1-1.3.6-1.7A6 6 0 0 0 12 3z"/></svg><span>Hint</span></button>
@@ -347,7 +356,7 @@ export class App {
               <button id="flip" role="menuitem"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v16M4 8l4-4 4 4M16 20V4M12 16l4 4 4-4"/></svg><span>Flip board</span></button>
             </div>
             <div id="bubble-box" class="bubble">
-              <div class="coach-name">${COACH_NAME} <span id="mood" class="mood"></span></div>
+              <div class="coach-name"><span class="js-coach-name"></span> <span id="mood" class="mood"></span></div>
               <div id="bubble" class="log" aria-live="polite"></div>
             </div>
           </div>
@@ -496,7 +505,7 @@ export class App {
     this.settings = { ...this.settings, ...change };
     saveSettings(this.settings);
     if (quiet) return;
-    if (change.level !== undefined) this.status('New level set. It applies from your next game.');
+    if (change.level !== undefined) this.status(`${levelInfo(change.level).coach.name} will coach your next game.`);
     if (change.mode !== undefined) this.status(`${modeInfo(change.mode).name} mode set. It applies from your next game.`);
   }
 
@@ -560,6 +569,7 @@ export class App {
             : 'black'
           : this.settings.color;
     const level = levelInfo(resume?.level ?? this.settings.level);
+    void this.showCoach(level);
     const mode = (this.mode = modeInfo(resume?.mode ?? this.settings.mode));
     let game: Game;
     try {
@@ -720,7 +730,7 @@ export class App {
         group.className = 'cap-group';
         for (let i = 0; i < n; i++) {
           const img = document.createElement('img');
-          img.src = `${this.themeBase}${this.theme.pieces.folder}/${taken}${type.toUpperCase()}.${this.theme.pieces.format}`;
+          img.src = `${this.loaded.base}${this.loaded.theme.pieces.folder}/${taken}${type.toUpperCase()}.${this.loaded.theme.pieces.format}`;
           img.alt = '';
           group.append(img);
         }
@@ -988,13 +998,49 @@ export class App {
   }
 
   private face?: Mood;
+  private coachToken = 0;
+
+  /** Shows the coach of a tier: its name, and its theme pack (board, pieces, accent, portraits). */
+  private async showCoach(level: Level): Promise<void> {
+    const token = ++this.coachToken;
+    for (const el of this.root.querySelectorAll('.js-coach-name')) el.textContent = level.coach.name;
+    this.el.portrait.title = level.coach.name;
+    if (this.loaded.id === level.theme) {
+      if (this.face === undefined) this.setMood((this.el.portrait.dataset.mood as Mood | undefined) ?? 'neutral');
+      return;
+    }
+    let t: LoadedTheme;
+    try {
+      t = await fetchTheme(level.theme);
+    } catch (err) {
+      console.warn('Theme not loaded', err);
+      return; // the previous coach's look stays
+    }
+    if (token !== this.coachToken) return; // another coach was asked for meanwhile
+    applyLoaded(t);
+    this.loaded = t;
+    // Fetch the other faces now, so a change of mood does not flash an empty circle.
+    for (const m of MOODS) {
+      const url = portraitUrl(t, m);
+      if (url) new Image().src = url;
+    }
+    this.face = undefined;
+    this.setMood((this.el.portrait.dataset.mood as Mood | undefined) ?? 'neutral');
+    if (this.game) this.sync(); // the captured pieces' images come from the pack
+  }
 
   /** The coach's face follows the mood; a mistake or blunder makes it start (the signal to look at the board). */
   private setMood(mood: Mood, alert?: 'mistake' | 'blunder' | 'opportunity'): void {
     const p = this.el.portrait;
     p.dataset.mood = mood;
     if (this.face !== mood) {
-      p.innerHTML = faceSvg(mood);
+      const url = portraitUrl(this.loaded, mood);
+      if (url) {
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = '';
+        p.replaceChildren(img);
+      } else p.innerHTML = faceSvg(mood);
       this.face = mood;
     }
     p.classList.remove('alert', 'alert-big', 'alert-good');
@@ -1328,6 +1374,8 @@ export class App {
     const turning = turningPoints(saved.curve).map((t) => labels[t.ply - 1]);
     this.reviewing = { moments, index: -1, opponent, curve: saved.curve, say: { ply: 0, text: reviewIntro(moments.length, opponent, turning, gameSummary(saved)), offerAnswer: false } };
     const level = levelInfo(saved.level);
+    // A game played against a coach is reviewed by that coach; an imported game by the current tier's coach.
+    void this.showCoach(saved.imported ? levelInfo(this.settings.level) : level);
     this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => new Coach(a, level, saved.playerColor === 'white' ? 'w' : 'b', REVIEW, book));
     this.nav.reset(game.moves.length);
     this.nav.start();
@@ -1582,7 +1630,7 @@ export class App {
         chip.textContent = result;
         chip.classList.toggle('win', result === 'you won');
         chip.classList.toggle('loss', result === 'coach won');
-        meta.textContent = `Level ${g.level} · ${modeInfo(g.mode).name} · ${moveCount}${moments}${takebacks}`;
+        meta.textContent = `Tier ${g.level} · ${levelInfo(g.level).coach.name} · ${modeInfo(g.mode).name} · ${moveCount}${moments}${takebacks}`;
       }
       const buttons = document.createElement('div');
       buttons.className = 'history-buttons';
@@ -2040,7 +2088,7 @@ export class App {
     box.innerHTML = (['q', 'r', 'b', 'n'] as const)
       .map(
         (p) =>
-          `<button data-piece="${p}" aria-label="Promote to ${p}"><img src="${this.themeBase}${this.theme.pieces.folder}/${c}${p.toUpperCase()}.${this.theme.pieces.format}" alt=""></button>`,
+          `<button data-piece="${p}" aria-label="Promote to ${p}"><img src="${this.loaded.base}${this.loaded.theme.pieces.folder}/${c}${p.toUpperCase()}.${this.loaded.theme.pieces.format}" alt=""></button>`,
       )
       .join('');
     box.hidden = false;

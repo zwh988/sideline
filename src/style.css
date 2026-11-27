@@ -411,9 +411,15 @@ body {
     gap: 8px;
   }
 
+  /* The face fills the coach row (task 1.14: the coach is a character, not an icon). */
   .coach .portrait {
-    width: 56px;
-    height: 56px;
+    width: 104px;
+    height: 104px;
+  }
+
+  .coach .face-name {
+    margin-top: 10px;
+    max-width: 104px;
   }
 
   /* The speech box is tall enough to read a whole remark without opening it; a longer one scrolls. */
@@ -436,7 +442,7 @@ body {
   /* A tap opens the whole remark over the top of the board. */
   .coach.expanded .bubble {
     position: absolute;
-    left: 64px;
+    left: 112px;
     right: 0;
     top: 0;
     z-index: 30;
@@ -512,7 +518,7 @@ body {
     padding: 6px;
   }
 
-  .moves {
+  .side .moves {
     order: 9;
     margin: 0 12px;
     display: flex;
@@ -550,8 +556,8 @@ body {
 }
 
 .portrait {
-  width: 88px;
-  height: 88px;
+  width: 128px;
+  height: 128px;
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--coach-accent);
@@ -1721,5 +1727,167 @@ button.primary {
     flex: 1 1 0;
     min-height: 0;
     max-height: none;
+  }
+}
+
+/* The coach's face: the portrait (a drawn face, or the theme pack's image for the mood) with the Ask chip on
+   its lower edge, and the coach's name under it. The name is on the face, so the speech box only shows the mood. */
+.portrait-wrap {
+  position: relative;
+}
+
+.portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.face-name {
+  margin-top: 14px;
+  max-width: 128px;
+  text-align: center;
+  font-weight: 800;
+  font-size: var(--fs-sm);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--coach-accent) 60%, var(--text));
+}
+
+.coach-name .js-coach-name {
+  display: none;
+}
+
+/*
+ * An unfolded foldable (about 750-1000 px wide, near square): the board on the left as big as the height
+ * allows, the coach in a column beside it (a big face on top, the speech box under it, then the status line
+ * and the move buttons), and the sideline chart, banners and move strip under both at full width. Height is
+ * what limits the board here, so the move buttons live in the coach's column, not under the board. Comes
+ * after the phone rules, which also match these sizes, and overrides them.
+ */
+@media (min-width: 700px) and (max-width: 1000px) and (min-aspect-ratio: 4/5) and (max-aspect-ratio: 1/1) {
+  .layout {
+    --side-u: clamp(220px, 30vw, 300px);
+    /* The board and its two strips of captured pieces (8.75% of the board each) above the header and the
+       sideline chart, buttons and gaps (272 px); never wider than the room beside the coach column. */
+    --board: min(calc(100vw - 48px - var(--side-u)), calc((100dvh - 272px) / 1.175));
+    display: grid;
+    grid-template-columns: var(--board) var(--side-u);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'board coach'
+      'board turn'
+      'board nav';
+    justify-content: center;
+    column-gap: var(--sp-4);
+    row-gap: var(--sp-2);
+    padding: 0 16px 12px;
+  }
+
+  .board-stack {
+    grid-area: board;
+    width: var(--board);
+    margin: 0;
+  }
+
+  .coach {
+    grid-area: coach;
+    height: auto;
+    min-height: 0;
+    margin: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    /* level with the board itself, not the strip of captured pieces above it */
+    margin-top: calc(clamp(18px, var(--board) * 0.0875, 56px) + 6px);
+  }
+
+  .coach .coach-face {
+    align-self: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .coach .portrait {
+    width: clamp(120px, 20vw, 168px);
+    height: clamp(120px, 20vw, 168px);
+  }
+
+  .coach .face-name {
+    max-width: var(--side-u);
+    font-size: var(--fs-md);
+  }
+
+  .coach .bubble,
+  .coach.expanded .bubble {
+    position: relative;
+    left: auto;
+    top: auto;
+    flex: 1;
+    height: auto;
+    max-height: none;
+    min-height: 72px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 8px 12px;
+    box-shadow: none;
+  }
+
+  /* The tail points up at the face. */
+  .coach .bubble::before {
+    left: calc(50% - 6px);
+    top: -7px;
+    transform: rotate(135deg);
+  }
+
+  .coach .log,
+  .coach.expanded .log {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  .turn {
+    grid-area: turn;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+  }
+
+  .turn .status,
+  .turn .choices {
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav,
+  .board-area.sidelining .nav {
+    grid-area: nav;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .nav .undo {
+    grid-column: 1 / -1;
+  }
+
+  /* Banners, the sideline chart and the move strip: full width under the board and the coach. */
+  .viewbar,
+  .reviewbar,
+  .sidelinebar,
+  .side .moves {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  .chart-wrap {
+    max-height: 130px;
   }
 }

@@ -1,14 +1,14 @@
 import '@lichess-org/chessground/assets/chessground.base.css';
 import './style.css';
 import { App } from './app/ui';
-import { loadTheme } from './app/theme';
-
-const THEME_ID = 'default';
+import { useTheme } from './app/theme';
+import { initialTheme } from './app/ui';
 
 async function start() {
   const root = document.querySelector<HTMLDivElement>('#app')!;
-  const theme = await loadTheme(THEME_ID);
-  new App(root, theme, `${import.meta.env.BASE_URL}themes/${THEME_ID}/`);
+  // The theme of the saved tier first, so the page does not flash another coach's colours.
+  const theme = await useTheme(initialTheme()).catch(() => useTheme('default'));
+  new App(root, theme);
 }
 
 // Works offline after the first visit, and can be installed (see scripts/sw-template.js). Not in dev: a cache

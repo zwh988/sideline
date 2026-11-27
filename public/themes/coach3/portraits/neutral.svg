@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Coach 3 looks neutral">
+  <rect width="200" height="200" fill="#E8641E"/>
+  <circle cx="100" cy="100" r="78" fill="#FDE8D9"/>
+  <text x="100" y="94" text-anchor="middle" font-family="system-ui, sans-serif" font-size="30" font-weight="800" fill="#E8641E">Coach 3</text>
+  <text x="100" y="128" text-anchor="middle" font-family="system-ui, sans-serif" font-size="24" font-weight="600" fill="#1f2421">neutral</text>
+</svg>
