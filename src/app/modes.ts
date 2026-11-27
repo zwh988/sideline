@@ -5,7 +5,7 @@
 //   Sparring: serious moments only, hints only on request, no takebacks,
 //             no plans revealed.
 
-export type ModeId = 'lesson' | 'sparring' | 'review' | 'puzzle';
+export type ModeId = 'lesson' | 'sparring' | 'review' | 'puzzle' | 'opening';
 
 export interface Mode {
   id: ModeId;
@@ -51,3 +51,9 @@ export const REVIEW: Mode = { id: 'review', name: 'Review', prompts: false, smal
 export const PUZZLE: Mode = { id: 'puzzle', name: 'Puzzles', prompts: false, smallTalk: false, minorMistakes: false, takebacks: false, revealsPlans: true, sidelines: true };
 
 export const modeInfo = (id: string | undefined): Mode => (id === 'review' ? REVIEW : (MODES.find((m) => m.id === id) ?? MODES[0]));
+
+/**
+ * Opening lessons (task 6.2): one line of a course on the game screen; the player's moves are checked against the
+ * course and the engine. No prompts, small talk or takebacks (a wrong move has its own Try again). Not a Mode select choice.
+ */
+export const OPENING: Mode = { id: 'opening', name: 'Openings', prompts: false, smallTalk: false, minorMistakes: false, takebacks: false, revealsPlans: true, sidelines: true };

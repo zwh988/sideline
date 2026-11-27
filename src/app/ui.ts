@@ -19,7 +19,12 @@ import { kindLabel, momentDot, momentUniverses, type Universe, reviewBarText, re
 import { REVIEW_VERSION, reviewGame } from '../coach/review';
 import { Game, resultOf, type Color } from './game';
 import { LEVELS, levelInfo, levelLabel, type Level } from './levels';
-import { MODES, PUZZLE, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
+import { MODES, OPENING, PUZZLE, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
+import { CATALOG, courseTitle, loadCourse, loadIndex } from './openingcatalog';
+import { OpeningProgress } from './openingstore';
+import { courseLines, isCourseMove, judgeAlternative, lessonSteps, lineStatuses, nextLine, pathKey, quizNodes, type CourseLine, type LessonStep } from '../coach/opening-lesson';
+import type { CourseTree } from '../coach/opening-tree';
+import { branchWords, ideaHint, ideaSentence, introWords, lineAfterReply, lineText, nodeLabel, punishWords, trapWords } from '../coach/opening-words';
 import { PuzzleRun, judgeOther, puzzleHint, solvedWords } from './puzzle';
 import { choosePuzzle, nextLevel, pickTheme, startLevel } from './puzzlechoice';
 import { POOL_BANDS, POOL_THEMES, bandsFor, loadBand, themeName, type Puzzle } from './puzzlepool';
@@ -168,9 +173,48 @@ const RAIL_ICONS = {
   review: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>',
   settings: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 8h10M18 8h2M4 16h2M10 16h10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/><circle cx="16" cy="8" r="2.6" fill="currentColor"/><circle cx="8" cy="16" r="2.6" fill="currentColor"/></svg>',
   puzzles: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 5h5v2.5a2 2 0 1 0 4 0V5h5v5h-2.5a2 2 0 1 0 0 4H19v5h-5v-2.5a2 2 0 1 0-4 0V19H5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></svg>',
+  openings: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M12 7c-2-1.6-4.6-2-8-2v13c3.4 0 6 .4 8 2 2-1.6 4.6-2 8-2V5c-3.4 0-6 .4-8 2zM12 7v13" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></svg>',
 };
 
-type Screen = 'play' | 'review' | 'settings' | 'puzzles';
+/** A coach's face in their own accent and portrait, without switching the page's theme (Puzzles and Openings tabs). */
+function coachFace(l: Level, size: 'sm' | 'lg'): HTMLElement {
+  const d = document.createElement('div');
+  d.className = `p-face ${size}`;
+  d.innerHTML = faceSvg('neutral');
+  void fetchTheme(l.theme).then((t) => {
+    d.style.setProperty('--p-accent', t.theme.coach.accent);
+    d.style.setProperty('--p-soft', t.theme.coach.accentSoft ?? t.theme.coach.accent);
+    const url = portraitUrl(t, size === 'lg' ? 'pleased' : 'neutral');
+    if (url) d.innerHTML = `<img src="${url}" alt="">`;
+  }).catch(() => undefined);
+  return d;
+}
+
+/** A small static board for a course card (no chessground: fourteen of them on one screen). */
+function miniBoard(fen: string, side: 'w' | 'b', pieceUrl: (code: string) => string): HTMLElement {
+  const d = document.createElement('span');
+  d.className = 'o-board';
+  d.setAttribute('aria-hidden', 'true');
+  const cells: (string | null)[] = [];
+  for (const ch of fen.split(' ')[0].replaceAll('/', '')) {
+    if (/\d/.test(ch)) for (let i = 0; i < Number(ch); i++) cells.push(null);
+    else cells.push(ch);
+  }
+  (side === 'w' ? cells : [...cells].reverse()).forEach((c, i) => {
+    const sq = document.createElement('i');
+    sq.className = (Math.floor(i / 8) + (i % 8)) % 2 ? 'd' : 'l';
+    if (c) {
+      const img = document.createElement('img');
+      img.src = pieceUrl((c === c.toUpperCase() ? 'w' : 'b') + c.toUpperCase());
+      img.alt = '';
+      sq.append(img);
+    }
+    d.append(sq);
+  });
+  return d;
+}
+
+type Screen = 'play' | 'review' | 'settings' | 'puzzles' | 'openings';
 
 /** A puzzle session (task 3.2): the coach's set, the puzzle on the board and how this try is going. */
 interface PuzzleSession {
@@ -192,6 +236,24 @@ interface PuzzleSession {
   phase: 'intro' | 'solving' | 'wrong' | 'solved';
   /** The current try is written to the results already. */
   recorded: boolean;
+}
+
+/** An opening lesson on the board (task 6.2): one line of a course, walked step by step. */
+interface LessonSession {
+  tree: CourseTree;
+  level: Level;
+  lines: CourseLine[];
+  line: CourseLine;
+  steps: LessonStep[];
+  /** The step being played or asked. */
+  index: number;
+  practice: boolean;
+  phase: 'auto' | 'quiz' | 'wrong' | 'done';
+  hintStep: number;
+  /** Moves learned in this lesson (found without a hint), and moves asked. */
+  learnedNow: number;
+  found: number;
+  asked: number;
 }
 
 export class App {
@@ -260,6 +322,14 @@ export class App {
   private parked?: { session: PuzzleSession; remarks: { ply: number; remark: Remark }[] };
   /** Takes down a Try again / Explore card that is waiting (the puzzle was skipped or left). */
   private retryCleanup?: () => void;
+  /** The opening lesson on the board (task 6.2); the game in progress waits in storage, as with puzzles. */
+  private lesson?: LessonSession;
+  private openingProgress = new OpeningProgress();
+  /** The coach shown in the Openings tab, and the course page open there (none: the tab itself). */
+  private openingPick = 0;
+  private openingView?: string;
+  /** Bumped when a lesson starts or ends, so its walk stops. */
+  private lessonToken = 0;
   /** The game ply a sideline started from (a sideline can start from an earlier viewed position). */
   private sidelinePly = 0;
 
@@ -302,6 +372,7 @@ export class App {
       <nav class="rail" aria-label="Main">
         <button id="rail-play" class="rail-item" aria-current="page">${RAIL_ICONS.play}<span>Play</span></button>
         <button id="rail-puzzles" class="rail-item">${RAIL_ICONS.puzzles}<span>Puzzles</span></button>
+        <button id="rail-openings" class="rail-item">${RAIL_ICONS.openings}<span>Openings</span></button>
         <button id="history-open" class="rail-item">${RAIL_ICONS.review}<span>Game review</span></button>
         <button id="rail-settings" class="rail-item">${RAIL_ICONS.settings}<span>Settings</span></button>
       </nav>
@@ -314,6 +385,7 @@ export class App {
             <div id="more-menu" class="menu more-menu" role="menu" hidden>
               <button id="menu-play" role="menuitem">Play</button>
               <button id="menu-puzzles" role="menuitem">Puzzles</button>
+              <button id="menu-openings" role="menuitem">Openings</button>
               <button id="menu-review" role="menuitem">Game review</button>
               <button id="menu-settings" role="menuitem">Settings</button>
             </div>
@@ -355,6 +427,11 @@ export class App {
         <div class="history-head"><h2>Puzzles</h2><button id="puzzles-close" class="ghost">Back to play</button></div>
         <div id="puzzles-list" class="puzzles-list"></div>
         <p id="puzzles-note" class="history-note" aria-live="polite"></p>
+      </dialog>
+      <dialog id="openings-screen" class="history puzzles-screen openings-screen" aria-label="Openings">
+        <div class="history-head"><h2 id="openings-title">Openings</h2><button id="openings-close" class="ghost">Back to play</button></div>
+        <div id="openings-list" class="puzzles-list"></div>
+        <p id="openings-note" class="history-note" aria-live="polite"></p>
       </dialog>
       <main class="layout">
         <div id="board-area" class="board-area">
@@ -443,11 +520,17 @@ export class App {
               <button id="puzzle-exit">Back to puzzles</button>
             </div>
           </div>
+          <div id="lesson-bar" class="viewbar reviewbar puzzlebar lessonbar" hidden>
+            <span id="lesson-text"></span>
+            <div class="review-buttons">
+              <button id="lesson-exit">Back to course</button>
+            </div>
+          </div>
           <ol id="moves" class="moves"></ol>
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-timeline', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file', 'rail-puzzles', 'menu-puzzles', 'puzzles-screen', 'puzzles-close', 'puzzles-note', 'puzzles-list', 'puzzle-bar', 'puzzle-text', 'puzzle-skip', 'puzzle-exit']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-timeline', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file', 'rail-puzzles', 'menu-puzzles', 'puzzles-screen', 'puzzles-close', 'puzzles-note', 'puzzles-list', 'puzzle-bar', 'puzzle-text', 'puzzle-skip', 'puzzle-exit', 'rail-openings', 'menu-openings', 'openings-screen', 'openings-close', 'openings-note', 'openings-list', 'openings-title', 'lesson-bar', 'lesson-text', 'lesson-exit']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -475,9 +558,17 @@ export class App {
       void this.newGame();
     });
     // The rail (desktop) and the Menu (phones) switch screens; Game review and Settings sit over the game.
-    for (const [id, screen] of [['rail-play', 'play'], ['rail-puzzles', 'puzzles'], ['history-open', 'review'], ['rail-settings', 'settings'], ['menu-play', 'play'], ['menu-puzzles', 'puzzles'], ['menu-review', 'review'], ['menu-settings', 'settings']] as const) {
-      this.el[id].addEventListener('click', () => (screen === 'play' && this.puzzling ? void this.backToGame() : this.showScreen(screen)));
+    for (const [id, screen] of [['rail-play', 'play'], ['rail-puzzles', 'puzzles'], ['rail-openings', 'openings'], ['history-open', 'review'], ['rail-settings', 'settings'], ['menu-play', 'play'], ['menu-puzzles', 'puzzles'], ['menu-openings', 'openings'], ['menu-review', 'review'], ['menu-settings', 'settings']] as const) {
+      this.el[id].addEventListener('click', () => {
+        if (screen === 'play' && (this.puzzling || this.lesson)) return void this.backToGame();
+        if (screen === 'openings' && id === 'rail-openings' && (this.el['openings-screen'] as HTMLDialogElement).open) this.openingView = undefined; // a second tap: back to the tab
+        this.showScreen(screen);
+      });
     }
+    this.el['openings-screen'].addEventListener('close', () => this.railCurrent());
+    this.el['openings-close'].addEventListener('click', () => (this.openingView ? (this.openingView = undefined, this.renderOpeningsScreen()) : this.showScreen('play')));
+    this.el['openings-list'].addEventListener('click', (e) => this.onOpeningsClick(e));
+    this.el['lesson-exit'].addEventListener('click', () => void this.exitLesson());
     this.el['settings-close'].addEventListener('click', () => this.showScreen('play'));
     this.el.history.addEventListener('close', () => this.railCurrent());
     this.el['settings-screen'].addEventListener('close', () => this.railCurrent());
@@ -596,6 +687,12 @@ export class App {
     const history = this.el.history as HTMLDialogElement;
     const settings = this.el['settings-screen'] as HTMLDialogElement;
     const puzzles = this.el['puzzles-screen'] as HTMLDialogElement;
+    const openings = this.el['openings-screen'] as HTMLDialogElement;
+    if (screen !== 'openings' && openings.open) openings.close();
+    if (screen === 'openings') {
+      this.renderOpeningsScreen();
+      if (!openings.open) openings.show();
+    }
     if (screen !== 'review' && history.open) history.close();
     if (screen !== 'settings' && settings.open) settings.close();
     if (screen !== 'puzzles' && puzzles.open) puzzles.close();
@@ -616,8 +713,8 @@ export class App {
   /** Marks the rail item of the screen that is open. */
   private railCurrent(): void {
     const open = (id: string) => (this.el[id] as HTMLDialogElement).open;
-    const screen = open('history') ? 'history-open' : open('settings-screen') ? 'rail-settings' : open('puzzles-screen') || this.puzzling ? 'rail-puzzles' : 'rail-play';
-    for (const id of ['rail-play', 'rail-puzzles', 'history-open', 'rail-settings']) {
+    const screen = open('history') ? 'history-open' : open('settings-screen') ? 'rail-settings' : open('openings-screen') ? 'rail-openings' : open('puzzles-screen') || this.puzzling ? 'rail-puzzles' : this.lesson ? 'rail-openings' : 'rail-play';
+    for (const id of ['rail-play', 'rail-puzzles', 'rail-openings', 'history-open', 'rail-settings']) {
       if (id === screen) this.el[id].setAttribute('aria-current', 'page');
       else this.el[id].removeAttribute('aria-current');
     }
@@ -626,6 +723,7 @@ export class App {
   /** Starts a new game, or (with `resume`) carries on a saved one exactly where it stopped. */
   private async newGame(resume?: SavedGame): Promise<void> {
     this.parkPuzzle();
+    this.endLesson();
     const id = ++this.gameId;
     this.reviewing?.abort?.abort();
     this.reviewing = undefined;
@@ -727,7 +825,7 @@ export class App {
   /** Writes the game in progress to this device (nothing is saved before the first move). */
   private save(): void {
     const r = this.record;
-    if (!r || !this.game || this.reviewing || this.puzzling) return; // a reviewed game is saved only when a sideline is kept
+    if (!r || !this.game || this.reviewing || this.puzzling || this.lesson) return; // a reviewed game is saved only when a sideline is kept
     r.moves = this.game.moves.map((m) => m.uci);
     if (!r.moves.length) {
       // Nothing worth keeping yet; and if moves were saved before (a takeback to the start), forget that game
@@ -754,13 +852,14 @@ export class App {
     this.el['sideline-bar'].hidden = !this.sideline;
     this.renderReviewBar();
     this.renderPuzzleBar();
+    this.renderLessonBar();
     if (this.sideline) return this.renderSideline();
     this.board.set({ viewOnly: false });
     const view = nav.viewing ? g.positionAt(nav.ply) : undefined;
     const shown = view ?? { fen: g.fen, turn: g.turn, inCheck: g.inCheck, lastMove: g.lastMove };
     const last = shown.lastMove;
     // Viewing the past: the board is read-only.
-    const canMove = !this.reviewing && !nav.viewing && g.isPlayerTurn && !g.result.over && !this.thinking && (!this.puzzling || this.puzzling.phase === 'solving');
+    const canMove = !this.reviewing && !nav.viewing && g.isPlayerTurn && !g.result.over && !this.thinking && (!this.puzzling || this.puzzling.phase === 'solving') && (!this.lesson || this.lesson.phase === 'quiz');
     this.board.set({
       fen: shown.fen,
       turnColor: shown.turn,
@@ -782,7 +881,7 @@ export class App {
       this.board.set({ movable: { color: shown.turn, dests: dests as Map<Key, Key[]> } });
     }
     this.renderMaterial(shown.fen);
-    this.renderEndSignals(shown.fen, !nav.viewing && !this.reviewing && !this.puzzling && g.result.over);
+    this.renderEndSignals(shown.fen, !nav.viewing && !this.reviewing && !this.puzzling && !this.lesson && g.result.over);
     this.renderMoves();
     this.renderBubble();
     this.renderNav(shown.lastMove?.san);
@@ -1270,6 +1369,7 @@ export class App {
     if (this.sideline) return this.onSidelineMove(from, to);
     if (this.reviewing) return this.sidelineFromReview(from, to);
     if (this.puzzling) return this.onPuzzleMove(from, to);
+    if (this.lesson) return this.onLessonMove(from, to);
     this.clearOpportunity();
     const id = this.gameId;
     let promotion = '';
@@ -1417,6 +1517,7 @@ export class App {
   private async hint(): Promise<void> {
     if (this.nav.viewing || this.sideline) return;
     if (this.puzzling) return this.puzzleHint();
+    if (this.lesson) return this.lessonHint();
     const id = this.gameId;
     const ply = this.game.moves.length;
     const coach = await this.coach;
@@ -1444,6 +1545,7 @@ export class App {
     }
     this.save(); // the game in progress stays as it is, to come back to
     this.parkPuzzle();
+    this.endLesson();
     ++this.gameId; // drops whatever the live game was waiting for
     this.puzzling = undefined;
     this.thinking = false;
@@ -1797,7 +1899,7 @@ export class App {
 
   private backup(): void {
     this.save();
-    const data = { ...this.store.exportAll(), puzzles: this.puzzleResults.all(), puzzleLevels: this.puzzleResults.allLevels() };
+    const data = { ...this.store.exportAll(), puzzles: this.puzzleResults.all(), puzzleLevels: this.puzzleResults.allLevels(), openings: this.openingProgress.all() };
     this.download(JSON.stringify(data), `sideline-backup-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
     this.el['history-note'].textContent = `Backed up ${data.games.length} game${data.games.length === 1 ? '' : 's'} and ${data.puzzles.length} puzzle result${data.puzzles.length === 1 ? '' : 's'} to a file.`;
   }
@@ -1813,6 +1915,7 @@ export class App {
       const result = this.store.importAll(data);
       const puzzles = result ? this.puzzleResults.importAll(data.puzzles) : 0;
       if (result) this.puzzleResults.importLevels(data.puzzleLevels);
+      if (result) this.openingProgress.importAll(data.openings);
       note.textContent = result ? `Restored ${result.added} game${result.added === 1 ? '' : 's'}${puzzles ? ` and ${puzzles} puzzle result${puzzles === 1 ? '' : 's'}` : ''}; ${result.skipped} skipped (already here or unreadable).` : 'That file is not a Sideline backup.';
     } catch {
       note.textContent = 'That file could not be read.';
@@ -1834,19 +1937,7 @@ export class App {
     const box = this.el['puzzles-list'];
     const mine = this.settings.level;
     const chosen = levelInfo(this.puzzlePick || mine);
-    const face = (l: Level, size: 'sm' | 'lg') => {
-      const d = document.createElement('div');
-      d.className = `p-face ${size}`;
-      d.innerHTML = faceSvg('neutral');
-      // The coach's own portrait and accent, without switching the page's theme.
-      void fetchTheme(l.theme).then((t) => {
-        d.style.setProperty('--p-accent', t.theme.coach.accent);
-        d.style.setProperty('--p-soft', t.theme.coach.accentSoft ?? t.theme.coach.accent);
-        const url = portraitUrl(t, size === 'lg' ? 'pleased' : 'neutral');
-        if (url) d.innerHTML = `<img src="${url}" alt="">`;
-      }).catch(() => undefined);
-      return d;
-    };
+    const face = coachFace;
 
     const picker = document.createElement('div');
     picker.className = 'p-picker';
@@ -1943,6 +2034,7 @@ export class App {
   private async openPuzzles(level: Level, theme?: string): Promise<void> {
     this.el['puzzles-note'].textContent = '';
     this.save(); // the game in progress stays as it is, to come back to
+    this.endLesson();
     this.reviewing?.abort?.abort();
     this.reviewing = undefined;
     if (this.sideline) this.exitSideline();
@@ -2271,6 +2363,7 @@ export class App {
     if (!parked || !pz || !run) return;
     this.parked = undefined;
     this.save(); // the game in progress stays as it is
+    this.endLesson();
     ++this.gameId;
     this.reviewing?.abort?.abort();
     this.reviewing = undefined;
@@ -2316,6 +2409,584 @@ export class App {
     this.el['puzzle-text'].textContent = [what, p ? `rated ${p.rating}` : '', pz.solvedCount ? `${pz.solvedCount} solved` : ''].filter(Boolean).join(' · ');
     (this.el['puzzle-skip'] as HTMLButtonElement).disabled = pz.phase === 'intro';
     this.el['puzzle-skip'].hidden = pz.phase === 'solved'; // the card under the coach offers Next puzzle then
+  }
+
+  // --- Openings (task 6.2) ------------------------------------------------
+  // The Openings tab (laid out like Puzzles): the coaches' faces, Continue, then the courses by side and by
+  // what you face, with progress for the chosen coach. A course page: the intro from the data and every line
+  // for that coach, most common first. A lesson is one line on the game screen: the defining and learned moves
+  // play by themselves, the player's other moves are asked and checked against the course and the engine.
+
+  /** The six coaches' faces in a row (yours marked); `attr` names the data attribute a tap sets. */
+  private coachPicker(chosen: Level, mine: number, attr: string): HTMLElement {
+    const picker = document.createElement('div');
+    picker.className = 'p-picker';
+    picker.setAttribute('role', 'group');
+    picker.setAttribute('aria-label', 'Coaches');
+    for (const l of LEVELS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'p-pick';
+      b.dataset[attr] = String(l.level);
+      b.setAttribute('aria-pressed', String(l.level === chosen.level));
+      b.setAttribute('aria-label', `${l.coach.name}, about ${l.shownRating}${l.level === mine ? ', your coach' : ''}`);
+      const name = document.createElement('span');
+      name.className = 'p-pick-name';
+      name.textContent = l.level === mine ? `${l.coach.name} ★` : l.coach.name;
+      b.append(coachFace(l, 'sm'), name);
+      picker.append(b);
+    }
+    return picker;
+  }
+
+  /** A panel in a coach's accent, without switching the page's theme. */
+  private tinted(el: HTMLElement, l: Level): HTMLElement {
+    void fetchTheme(l.theme).then((t) => {
+      el.style.setProperty('--p-accent', t.theme.coach.accent);
+      el.style.setProperty('--p-soft', t.theme.coach.accentSoft ?? t.theme.coach.accent);
+    }).catch(() => undefined);
+    return el;
+  }
+
+  private pieceUrl = (code: string) => `${this.loaded.base}${this.loaded.theme.pieces.folder}/${code}.${this.loaded.theme.pieces.format}`;
+
+  private progressBar(done: number, total: number): HTMLElement {
+    const bar = document.createElement('span');
+    bar.className = 'p-bar';
+    bar.setAttribute('role', 'progressbar');
+    bar.setAttribute('aria-valuemin', '0');
+    bar.setAttribute('aria-valuemax', String(total));
+    bar.setAttribute('aria-valuenow', String(done));
+    const fill = document.createElement('i');
+    fill.style.width = `${total ? (Math.min(done, total) / total) * 100 : 0}%`;
+    bar.append(fill);
+    return bar;
+  }
+
+  private renderOpeningsScreen(): void {
+    this.el['openings-note'].textContent = '';
+    if (this.openingView) return void this.renderCoursePage(this.openingView);
+    this.el['openings-title'].textContent = 'Openings';
+    this.el['openings-close'].textContent = 'Back to play';
+    const box = this.el['openings-list'];
+    const mine = this.settings.level;
+    const chosen = levelInfo(this.openingPick || mine);
+    const picker = this.coachPicker(chosen, mine, 'opick');
+
+    const focus = this.tinted(document.createElement('section'), chosen);
+    focus.className = 'p-focus';
+    const hero = document.createElement('div');
+    hero.className = 'p-hero';
+    const who = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = `${chosen.coach.name} · about ${chosen.shownRating}`;
+    const say = document.createElement('p');
+    say.className = 'p-say';
+    say.textContent = 'Pick an opening. I teach the replies players at my level play most, from Lichess games.';
+    who.append(title, say);
+    hero.append(coachFace(chosen, 'lg'), who);
+    focus.append(hero);
+
+    const metas = new Map<string, HTMLElement>();
+    const boards = new Map<string, HTMLElement>();
+    for (const side of CATALOG) {
+      const h = document.createElement('h3');
+      h.className = 'o-side';
+      h.textContent = side.title;
+      focus.append(h);
+      for (const g of side.groups) {
+        const gh = document.createElement('h4');
+        gh.className = 'o-group';
+        gh.textContent = g.title;
+        focus.append(gh);
+        for (const row of g.rows) {
+          if (row.label) {
+            const p = document.createElement('p');
+            p.className = 'o-row-label';
+            p.textContent = row.label;
+            if (row.note) {
+              const n = document.createElement('span');
+              n.textContent = ` ${row.note}`;
+              p.append(n);
+            }
+            focus.append(p);
+          }
+          const grid = document.createElement('div');
+          grid.className = 'o-cards';
+          for (const c of row.courses) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'o-card';
+            b.dataset.course = c.id;
+            const board = document.createElement('span');
+            board.className = 'o-mini';
+            const name = document.createElement('span');
+            name.className = 'p-name';
+            name.textContent = c.title;
+            const meta = document.createElement('span');
+            meta.className = 'p-meta';
+            meta.textContent = ' ';
+            const text = document.createElement('span');
+            text.className = 'o-card-text';
+            text.append(name, this.progressBar(0, 1), meta);
+            b.append(board, text);
+            metas.set(c.id, meta);
+            boards.set(c.id, board);
+            grid.append(b);
+          }
+          focus.append(grid);
+        }
+      }
+    }
+
+    const cur = this.openingProgress.current;
+    const parts: HTMLElement[] = [];
+    if (cur) {
+      const cont = document.createElement('button');
+      cont.type = 'button';
+      cont.className = 'p-continue';
+      cont.dataset.ocontinue = '1';
+      cont.innerHTML = '<strong>Continue your lesson</strong><span></span>';
+      cont.lastElementChild!.textContent = `${courseTitle(cur.course)} · ${levelInfo(cur.tier).coach.name}`;
+      parts.push(cont);
+    }
+    box.replaceChildren(...parts, picker, focus);
+
+    void loadIndex().then((index) => {
+      for (const [id, meta] of metas) {
+        const c = index.get(id);
+        if (!c) continue;
+        const total = c.playerNodes[chosen.level - 1] ?? 0;
+        const done = Math.min(total, this.openingProgress.countFor(id, chosen.level));
+        meta.textContent = done >= total && total ? `All ${total} moves learned ✓` : `${done} / ${total} moves learned`;
+        const card = meta.closest('button')!;
+        card.querySelector('.p-bar')!.replaceWith(this.progressBar(done, total));
+        card.setAttribute('aria-label', `${courseTitle(id)}: ${meta.textContent} with ${chosen.coach.name}`);
+        boards.get(id)!.replaceChildren(miniBoard(c.startFen, c.side, this.pieceUrl));
+      }
+    }).catch(() => {
+      this.el['openings-note'].textContent = 'The courses could not be loaded. Check your connection and try again.';
+    });
+  }
+
+  /** A course page: the intro, then every line for the chosen coach (most common first), each to (re)play. */
+  private async renderCoursePage(id: string): Promise<void> {
+    this.el['openings-title'].textContent = courseTitle(id);
+    this.el['openings-close'].textContent = 'All openings';
+    const box = this.el['openings-list'];
+    let tree: CourseTree;
+    try {
+      tree = await loadCourse(id);
+    } catch {
+      this.el['openings-note'].textContent = 'This course could not be loaded. Check your connection and try again.';
+      return;
+    }
+    if (this.openingView !== id) return;
+    const mine = this.settings.level;
+    const chosen = levelInfo(this.openingPick || mine);
+    const tier = chosen.level;
+    const learned = (k: string) => this.openingProgress.isLearned(id, k);
+    const lines = courseLines(tree, tier);
+    const status = lineStatuses(tree, lines, learned);
+    const total = new Set(lines.flatMap((l) => quizNodes(l).map((n) => n.id))).size;
+    const done = Math.min(total, this.openingProgress.countFor(id, tier));
+
+    const focus = this.tinted(document.createElement('section'), chosen);
+    focus.className = 'p-focus';
+    const hero = document.createElement('div');
+    hero.className = 'p-hero';
+    const who = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = `With ${chosen.coach.name} · about ${chosen.shownRating}`;
+    const say = document.createElement('p');
+    say.className = 'p-say';
+    say.textContent = introWords(tree, tier);
+    who.append(title, say);
+    hero.append(coachFace(chosen, 'lg'), who);
+    const prog = document.createElement('div');
+    prog.className = 'o-progress';
+    const meta = document.createElement('span');
+    meta.className = 'p-meta';
+    meta.textContent = `${done} / ${total} moves learned · ${lines.length} lines`;
+    prog.append(this.progressBar(done, total), meta);
+    const next = nextLine(tree, lines, learned);
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'primary p-start';
+    if (next) go.dataset.oline = next.key;
+    go.textContent = status.includes('next') ? (done ? 'Next line' : 'Start the first line') : 'Practise the first line';
+    focus.append(hero, prog, go);
+
+    // Moves after the defining ones, numbered from where the course starts.
+    let start = tree.nodes[0];
+    for (let i = 0; i < tree.defining.length; i++) start = tree.nodes[start.children.find((c) => tree.nodes[c].defining)!];
+    const list = document.createElement('ol');
+    list.className = 'o-lines';
+    lines.forEach((l, i) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `o-line ${status[i]}`;
+      b.dataset.oline = l.key;
+      const moves = document.createElement('span');
+      moves.className = 'o-moves';
+      moves.textContent = lineText(start.fen, l.nodes.slice(tree.defining.length).map((n) => n.san));
+      const tags = document.createElement('span');
+      tags.className = 'o-tags';
+      const share = document.createElement('span');
+      share.textContent = `${l.reach >= 0.01 ? Math.round(l.reach * 100) : '<1'}% of games`;
+      tags.append(share);
+      const chip = (text: string, cls: string) => {
+        const c = document.createElement('span');
+        c.className = `o-chip ${cls}`;
+        c.textContent = text;
+        tags.append(c);
+      };
+      if (status[i] === 'learned') chip('Learned ✓', 'learned');
+      if (status[i] === 'next') chip('Next', 'next');
+      if (l.trap) chip('Trap', 'trap');
+      b.append(moves, tags);
+      b.setAttribute('aria-label', `Line ${i + 1}: ${moves.textContent}. ${[...tags.children].map((c) => c.textContent).join(', ')}`);
+      li.append(b);
+      list.append(li);
+    });
+    const head = document.createElement('h4');
+    head.className = 'o-group';
+    head.textContent = 'Every line, most common first';
+    box.replaceChildren(this.coachPicker(chosen, mine, 'opick'), focus, head, list);
+  }
+
+  private onOpeningsClick(e: MouseEvent): void {
+    const t = e.target as HTMLElement;
+    const pick = t.closest<HTMLElement>('[data-opick]');
+    if (pick) {
+      this.openingPick = Number(pick.dataset.opick);
+      return this.renderOpeningsScreen();
+    }
+    if (t.closest('[data-ocontinue]')) return void this.continueLesson();
+    const course = t.closest<HTMLElement>('[data-course]');
+    if (course) {
+      this.openingView = course.dataset.course;
+      this.renderOpeningsScreen();
+      this.el['openings-screen'].scrollTop = 0;
+      return;
+    }
+    const line = t.closest<HTMLElement>('[data-oline]');
+    if (line && this.openingView) void this.startLesson(this.openingView, levelInfo(this.openingPick || this.settings.level).level, line.dataset.oline);
+  }
+
+  private async continueLesson(): Promise<void> {
+    const cur = this.openingProgress.current;
+    if (!cur) return;
+    const ls = this.lesson;
+    if (ls && ls.tree.id === cur.course && ls.line.key === cur.line && ls.level.level === cur.tier) return this.showScreen('play');
+    await this.startLesson(cur.course, cur.tier, cur.line);
+  }
+
+  /** Starts a lesson: one line of a course with a coach (the line given, else the most common one not learned yet). */
+  private async startLesson(courseId: string, tier: number, lineKey?: string): Promise<void> {
+    let tree: CourseTree;
+    try {
+      tree = await loadCourse(courseId);
+    } catch {
+      this.el['openings-note'].textContent = 'This course could not be loaded. Check your connection and try again.';
+      return;
+    }
+    const level = levelInfo(tier);
+    const lines = courseLines(tree, tier);
+    const learned = (k: string) => this.openingProgress.isLearned(courseId, k);
+    const line = (lineKey ? lines.find((l) => l.key === lineKey) : undefined) ?? nextLine(tree, lines, learned);
+    if (!line) return;
+    this.save(); // the game in progress stays as it is, to come back to
+    this.parkPuzzle();
+    this.reviewing?.abort?.abort();
+    this.reviewing = undefined;
+    if (this.sideline) this.exitSideline();
+    this.endLesson();
+    ++this.gameId;
+    const token = ++this.lessonToken;
+    this.mode = OPENING;
+    void this.showCoach(level);
+    const { steps, practice } = lessonSteps(tree, line, tier, learned);
+    const ls: LessonSession = { tree, level, lines, line, steps, index: 0, practice, phase: 'auto', hintStep: 0, learnedNow: 0, found: 0, asked: steps.filter((s) => s.kind === 'quiz').length };
+    this.lesson = ls;
+    this.openingView = courseId;
+    this.openingPick = tier;
+    this.openingProgress.setCurrent({ course: courseId, tier, line: line.key, at: Date.now() });
+    const color: Color = tree.side === 'w' ? 'white' : 'black';
+    this.game = new Game(color);
+    this.record = undefined;
+    this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => new Coach(a, level, tree.side, OPENING, book));
+    this.nav.reset(0);
+    this.log.clear();
+    this.viewShapes = false;
+    this.stopDemo();
+    this.el.choices.hidden = true;
+    this.thinking = true;
+    this.board.set({ orientation: color, lastMove: undefined });
+    this.board.setAutoShapes([]);
+    this.showScreen('play');
+    this.sync();
+    const n = lines.indexOf(line);
+    const intro = n === 0 ? `${introWords(tree, tier)} ` : '';
+    const what = practice ? "You know this line, so let's practise it: I'll ask every move again." : `Line ${n + 1} of ${lines.length}. I'll play the moves you know; you find the new ones.`;
+    this.say({ kind: 'phase', text: `${intro}${what}`, mood: 'neutral' });
+    this.status('Watch the moves…');
+    await sleep(intro ? 1600 : 900);
+    await this.walkLesson(ls, token);
+  }
+
+  /** Plays the lesson's steps from `index` until the next move to ask, or the end of the line. */
+  private async walkLesson(ls: LessonSession, token: number): Promise<void> {
+    const live = () => token === this.lessonToken && this.lesson === ls;
+    const tier = ls.level.level;
+    while (live() && ls.index < ls.steps.length) {
+      const step = ls.steps[ls.index];
+      if (step.kind === 'quiz') return this.askLessonMove(ls);
+      const n = step.node;
+      const words = n.who !== 'opponent' || n.defining ? '' : step.trap ? trapWords(ls.tree, n, tier) : step.branch ? branchWords(ls.tree, step, tier) : '';
+      if (words) {
+        this.say({ kind: 'phase', text: words, mood: step.trap ? 'surprised' : 'thinking' });
+        await sleep(Math.min(2600, 900 + words.length * 12));
+      } else await sleep(n.defining ? 450 : 700);
+      if (!live()) return;
+      ls.phase = 'auto';
+      this.thinking = true;
+      this.game.play(n.uci);
+      this.board.setAutoShapes([]);
+      this.status(n.who === 'player' ? `You know this one: ${nodeLabel(ls.tree, n)}.` : `${nodeLabel(ls.tree, n)}.`);
+      this.sync();
+      ls.index++;
+    }
+    if (live()) this.lessonDone(ls);
+  }
+
+  /** The player's turn in the lesson: the coach asks first (and a deeper coach says what their move does). */
+  private askLessonMove(ls: LessonSession): void {
+    ls.phase = 'quiz';
+    ls.hintStep = 0;
+    this.thinking = false;
+    this.sync();
+    const tier = ls.level.level;
+    const prev = ls.steps[ls.index - 1]?.node;
+    let text = '';
+    if (prev?.who === 'opponent' && !prev.defining && !prev.trap && tier >= 3) {
+      const idea = ideaSentence(prev.tags, tier, nodeLabel(ls.tree, prev));
+      if (idea) text = `${idea} `;
+    }
+    text += prev?.trap ? 'Your move: punish it.' : 'What would you play here?';
+    this.say({ kind: 'phase', text, mood: 'thinking' });
+    this.status(`Your move${ls.practice ? ' (practice)' : ''}.`);
+  }
+
+  private async onLessonMove(from: Square, to: Square): Promise<void> {
+    const ls = this.lesson;
+    if (!ls || ls.phase !== 'quiz') return;
+    const token = this.lessonToken;
+    const live = () => token === this.lessonToken && this.lesson === ls;
+    let promotion = '';
+    if (this.game.isPromotion(from, to)) {
+      promotion = await this.askPromotion(this.game.playerColor);
+      if (!live()) return;
+    }
+    const uci = from + to + promotion;
+    const fenBefore = this.game.fen;
+    const node = ls.steps[ls.index].node;
+    this.el.choices.hidden = true;
+    this.stopDemo();
+    this.board.setAutoShapes([]);
+    this.el['bubble-box'].classList.add('stale');
+    if (isCourseMove(fenBefore, uci, node)) {
+      this.game.play(node.uci);
+      this.sync();
+      return this.lessonFound(ls, token);
+    }
+    const move = this.game.play(uci);
+    const ply = this.game.moves.length;
+    ls.phase = 'auto';
+    this.thinking = true;
+    this.status('Thinking…');
+    this.sync();
+    const coach = await this.coach;
+    let alt: Awaited<ReturnType<Coach['rateMove']>> | undefined;
+    let course: typeof alt;
+    try {
+      alt = await coach.rateMove(fenBefore, uci);
+      course = await coach.rateMove(fenBefore, node.uci);
+    } catch {
+      /* no engine: treated as "try again" below */
+    }
+    if (!live()) return;
+    const verdict = alt && course ? judgeAlternative(alt.lossCp, course.lossCp) : undefined;
+    if (verdict === 'fine') {
+      this.game.takeback();
+      this.game.play(node.uci);
+      this.thinking = false;
+      this.sync();
+      return this.lessonFound(ls, token, move.san);
+    }
+    if (verdict !== 'mistake') {
+      this.game.takeback();
+      this.log.truncate(this.game.moves.length);
+      ls.phase = 'quiz';
+      this.thinking = false;
+      this.sync();
+      const text = alt ? `${move.san} is playable, but the engine rates it ${(alt.lossCp / 100).toFixed(1)} pawns worse than its best move here. Try again.` : `${move.san} is not this course's move. Try again.`;
+      this.say({ kind: 'line', text, mood: 'thinking' });
+      this.status('Your move. Try again.');
+      return;
+    }
+    // A mistake: what goes wrong (the engine's answer as a ghost line), then Try again or Explore (a sideline).
+    ls.phase = 'wrong';
+    const played = { from, to, promotion: (promotion || undefined) as LineMoveLike['promotion'], uci, san: move.san, mine: true };
+    const [judged, ev] = await Promise.all([
+      coach.judgeSidelineMove(fenBefore, played).catch(() => undefined),
+      this.analyst.then((a) => a.evaluate(this.game.fen, 1)).catch(() => undefined),
+    ]);
+    if (!live()) return;
+    this.thinking = false;
+    const answer = (ev?.lines[0]?.pv ?? []).slice(0, 4);
+    const remark: Remark = { kind: 'line', text: `Not this one. ${judged?.text ?? ''}`.trim(), mood: 'concerned', severity: 'mistake', marks: [{ square: to, kind: 'bad' }] };
+    this.say(remark);
+    this.setMood('concerned', 'mistake');
+    if (answer.length) {
+      this.demo = { fenAfter: this.game.fen, ucis: answer, remark, running: false };
+      void this.playDemo();
+    }
+    this.sync();
+    this.status('Try again, or explore why it fails.');
+    let choice = await this.askPuzzleRetry();
+    while (choice === 'explore') {
+      await this.openSideline(fenBefore, 'This is the lesson position. The gray line is your move and the reply; play any move to try another idea. Tap Back to game to return to the lesson.', ply - 1, [{ label: 'What happened', ucis: [uci, ...answer] }], true);
+      if (!live()) return;
+      this.status('Try again, or explore why it fails.');
+      choice = await this.askPuzzleRetry();
+    }
+    if (!live()) return;
+    this.stopDemo();
+    this.game.takeback();
+    this.log.truncate(this.game.moves.length);
+    ls.phase = 'quiz';
+    this.board.setAutoShapes([]);
+    this.sync();
+    this.say({ kind: 'phase', text: 'Try again: what would you play here?', mood: 'thinking' });
+    this.status('Your move. Try again.');
+  }
+
+  /**
+   * The course move is on the board (found, or played after another fine move `altSan`): the coach names its
+   * idea (and after a trap, what the punishment wins). Found without a hint, it is learned.
+   */
+  private async lessonFound(ls: LessonSession, token: number, altSan?: string): Promise<void> {
+    const tree = ls.tree;
+    const tier = ls.level.level;
+    const node = ls.steps[ls.index].node;
+    const prev = tree.nodes[node.parent];
+    const label = nodeLabel(tree, node);
+    const idea = ideaSentence(node.tags, tier);
+    const hinted = ls.hintStep > 0;
+    let text = altSan ? `${altSan} works too, but this course plays ${label}.` : `Right: ${label}.`;
+    if (idea) text += ` ${idea}`;
+    const punish = prev.trap ? punishWords(tree, prev, node) : '';
+    if (punish) text += ` ${punish}`;
+    else if (!prev.trap && tier >= 4) {
+      const more = lineAfterReply(prev, node, tier >= 6 ? 4 : 2);
+      if (more) text += ` The engine's line goes on ${more}.`;
+    }
+    if (!altSan && !hinted) {
+      ls.found++;
+      if (!this.openingProgress.isLearned(tree.id, pathKey(tree, node))) {
+        this.openingProgress.learn(tree.id, pathKey(tree, node), tier, node.tier);
+        ls.learnedNow++;
+      }
+    } else if (!ls.practice) text += altSan ? ' Play the course move next time to learn it.' : ' You had a hint, so this move comes back next time.';
+    this.say({ kind: 'praise', text, mood: altSan ? 'neutral' : 'pleased', marks: [{ square: node.uci.slice(2, 4) as Square, kind: 'good' }] });
+    if (!altSan) this.setMood('pleased');
+    ls.phase = 'auto';
+    this.thinking = true;
+    ls.index++;
+    this.sync();
+    this.status(ls.index < ls.steps.length ? 'Their move…' : '');
+    await sleep(Math.min(3200, 1200 + text.length * 10));
+    if (token !== this.lessonToken || this.lesson !== ls) return;
+    await this.walkLesson(ls, token);
+  }
+
+  private lessonHint(): void {
+    const ls = this.lesson;
+    if (!ls || ls.phase !== 'quiz') return;
+    const node = ls.steps[ls.index].node;
+    ls.hintStep = Math.min(ls.hintStep + 1, 2);
+    if (ls.hintStep === 1) this.say({ kind: 'hint', text: ideaHint(node.tags), mood: 'thinking' });
+    else this.say({ kind: 'hint', text: `This course plays ${nodeLabel(ls.tree, node)}.`, mood: 'thinking', shapes: [{ orig: node.uci.slice(0, 2) as Square, dest: node.uci.slice(2, 4) as Square, brush: 'green' }] });
+  }
+
+  /** The end of the line: what was learned, then Next line / Back to the course. */
+  private lessonDone(ls: LessonSession): void {
+    ls.phase = 'done';
+    this.thinking = false;
+    this.openingProgress.setCurrent(undefined);
+    const tree = ls.tree;
+    const tier = ls.level.level;
+    const learned = (k: string) => this.openingProgress.isLearned(tree.id, k);
+    const status = lineStatuses(tree, ls.lines, learned);
+    const total = new Set(ls.lines.flatMap((l) => quizNodes(l).map((n) => n.id))).size;
+    const count = Math.min(total, this.openingProgress.countFor(tree.id, tier));
+    let text: string;
+    if (ls.practice) text = `That's the line. You found ${ls.found} of ${ls.asked} move${ls.asked === 1 ? '' : 's'} without a hint.`;
+    else text = `That's the end of this line. ${ls.learnedNow ? `You learned ${ls.learnedNow} new move${ls.learnedNow === 1 ? '' : 's'}` : 'No new moves learned this time'}: ${count} / ${total} for this course with me.`;
+    if (!status.includes('next')) text += ' You know every line of this course at my level now. Replay any of them, or pick a stronger coach for more.';
+    this.say({ kind: 'praise', text, mood: 'pleased' });
+    this.status('Line done.');
+    this.sync();
+    const nextIdx = status.indexOf('next');
+    const next = nextIdx >= 0 ? ls.lines[nextIdx] : ls.lines[(ls.lines.indexOf(ls.line) + 1) % ls.lines.length];
+    const box = this.el.choices;
+    box.innerHTML = `<button data-choice="course">Back to course</button><button data-choice="next" class="primary">${nextIdx >= 0 ? 'Next line' : 'Practise the next line'}</button>`;
+    box.hidden = false;
+    box.onclick = (e) => {
+      const c = (e.target as HTMLElement).closest('button')?.dataset.choice;
+      if (!c) return;
+      box.hidden = true;
+      box.onclick = null;
+      if (c === 'next') void this.startLesson(tree.id, tier, next.key);
+      else void this.exitLesson();
+    };
+  }
+
+  /** Back to the course page: the game comes back underneath (Continue on the tab brings the lesson back). */
+  private async exitLesson(): Promise<void> {
+    const ls = this.lesson;
+    if (!ls) return;
+    this.openingView = ls.tree.id;
+    this.openingPick = ls.level.level;
+    await this.backToGame();
+    this.showScreen('openings');
+  }
+
+  /** Stops the lesson on the board (its walk, a waiting Try again card); nothing when there is none. */
+  private endLesson(): void {
+    if (!this.lesson) return;
+    this.lessonToken++;
+    this.retryCleanup?.();
+    this.stopDemo();
+    this.el.choices.hidden = true;
+    this.el.choices.onclick = null;
+    this.thinking = false;
+    const sl = this.sideline;
+    this.lesson = undefined;
+    if (sl) this.exitSideline();
+  }
+
+  /** The bar under the board in a lesson: the course, the coach and which line. */
+  private renderLessonBar(): void {
+    const ls = this.lesson;
+    const bar = this.el['lesson-bar'];
+    bar.hidden = !ls || !!this.sideline;
+    if (!ls) return;
+    this.el['lesson-exit'].hidden = ls.phase === 'done'; // the card under the coach offers it then
+    const n = ls.lines.indexOf(ls.line);
+    this.el['lesson-text'].textContent = [courseTitle(ls.tree.id), ls.level.coach.name, `line ${n + 1} of ${ls.lines.length}`, ls.practice ? 'practice' : ''].filter(Boolean).join(' · ');
   }
 
   // --- Lines (task 1.9) ---------------------------------------------------

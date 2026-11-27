@@ -76,6 +76,8 @@ export interface BackupFile {
   puzzles?: unknown[];
   /** The player's level per puzzle theme (task 3.2b; `ThemeLevel` in puzzlestore.ts). */
   puzzleLevels?: Record<string, unknown>;
+  /** Learned opening moves per course (task 6.2; `OpeningProgress` in openingstore.ts). */
+  openings?: Record<string, unknown>;
 }
 
 /** The part of localStorage used here (tests pass a Map-backed one). */

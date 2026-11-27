@@ -387,7 +387,7 @@ The player's own moves in each course are chosen when building (Stockfish's top 
 - **Output:** one committed JSON per course (`public/openings/<course>.json`): nodes (FEN, move, who, tier, frequency per band, source explorer/Maia, tags, consequence line, eval). Check the total size.
 - **Done when:** all 14 courses build; tests cover the tree rules (a trap included, a rare non-trap dropped, tiers nest: Pip's tree ⊆ Ardea's), the new idea detectors on real FENs, and every player move in every course passes the Stockfish check (a test over the files); the per-course player moves are listed in STATE for review.
 
-### ⬜ 6.2 Openings tab and Learn
+### ✅ 6.2 Openings tab and Learn (Nov 27; STATE decision 40)
 Design agreed with the user (Nov 27).
 - **Openings tab** (laid out like the Puzzles tab): the coach faces at the top (default: your tier's coach; the theme follows), a Continue card if a lesson is in progress, then the courses **by side, then by what you face**, each card with a small board and progress for the chosen coach ("12 / 25 moves learned"):
   - *Play as White.* 1.e4: Vienna Gambit, Italian, Scotch; when they reply: vs Caro-Kann, vs Scandinavian. 1.d4: London, Queen's Gambit.
