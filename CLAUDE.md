@@ -35,6 +35,7 @@ npx tsc              # type-check only
 | `src/app/puzzlepool.ts`, `src/app/puzzlepool-build.ts` | Puzzle pool: band files in `public/puzzles/pool/`, a coach's set (`coachSet`); `npm run puzzle-pool` rebuilds it from the Lichess database in `data/` |
 | `src/app/puzzle.ts`, `src/app/puzzlechoice.ts`, `src/app/puzzlestore.ts` | A puzzle being solved (checking moves, hints, solved words), the next puzzle's choice, results on the device; the Puzzles tab and puzzle mode are in `ui.ts` |
 | `src/app/openingcatalog.ts`, `src/app/openingstore.ts` | Openings tab layout (courses by side, then what you face) and course file loading; learned opening moves on the device (in the backup). The tab, course page and lesson mode (`OPENING`) are in `ui.ts` |
+| `src/app/practice.ts` | The practice scheduler: cards, due dates, results (1, 3, 7, 14, 30 days; a miss resets), on the device and in the backup. Opening drill uses it; puzzles (3.3) will |
 | `src/app/opponent.ts` | Coach's move choice: Maia (human-like), weakened Stockfish fallback |
 | `src/app/theme.ts`, `public/themes/<id>/` | Theme packs: `theme.json` + piece images, no code changes to reskin |
 | `src/engine/stockfish.ts` | UCI wrapper for Stockfish WASM (single-threaded lite build) |
@@ -51,6 +52,7 @@ npx tsc              # type-check only
 | `src/coach/openings.ts`, `openings-data.json` | Known openings and gambits by position (Lichess names; `node scripts/build-openings.mjs <folder>` rebuilds the data) |
 | `src/coach/opening-tree.ts`, `opening-ideas.ts`, `opening-courses.ts` | Opening courses (6.1): tree rules per coach tier, idea tags from board code, the 14 course definitions; files in `public/openings/` (`npm run openings`) |
 | `src/coach/opening-lesson.ts`, `opening-words.ts` | Learning a course (6.2): lines per coach, the lesson walk, answer checking; the coach's words from tags, shares and stored lines |
+| `src/coach/opening-drill.ts` | Drill (6.3): a card per learned move, a run's replies weighted by share and steered toward due cards, "Why this move?" choices checked against the idea tags |
 | `src/coach/review.ts` | The coach's moment-finding over a whole game already played (imported games), with progress and cancel |
 | `src/coach/coach.ts` | Trigger rules (when the coach speaks, by level and mode), hint ladder, comment budget |
 | `src/coach/templates.ts` | Sentences built from facts. This is the coach's voice |

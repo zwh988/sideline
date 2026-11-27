@@ -78,6 +78,8 @@ export interface BackupFile {
   puzzleLevels?: Record<string, unknown>;
   /** Learned opening moves per course (task 6.2; `OpeningProgress` in openingstore.ts). */
   openings?: Record<string, unknown>;
+  /** Practice cards and their due dates (task 6.3; `Card` in practice.ts). */
+  practice?: unknown[];
 }
 
 /** The part of localStorage used here (tests pass a Map-backed one). */

@@ -777,6 +777,19 @@ body {
   display: none;
 }
 
+/* "Why this move?" in a drill: one choice per row, the sentence wraps */
+.choices.stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.choices.stacked button {
+  text-align: left;
+  white-space: normal;
+  height: auto;
+  padding-block: 6px;
+}
+
 button.primary {
   background: var(--coach-accent);
   border-color: var(--coach-accent);
@@ -2145,6 +2158,19 @@ button.primary {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Drill (task 6.3): the button and what is due, on the tab */
+.o-drill {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.o-drill button {
+  min-height: var(--h-md);
+  min-width: 96px;
 }
 
 .o-lines {

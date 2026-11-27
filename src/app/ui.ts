@@ -22,7 +22,9 @@ import { LEVELS, levelInfo, levelLabel, type Level } from './levels';
 import { MODES, OPENING, PUZZLE, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
 import { CATALOG, courseTitle, loadCourse, loadIndex } from './openingcatalog';
 import { OpeningProgress } from './openingstore';
-import { courseLines, isCourseMove, judgeAlternative, lessonSteps, lineStatuses, nextLine, pathKey, quizNodes, type CourseLine, type LessonStep } from '../coach/opening-lesson';
+import { PracticeDeck, isDue as cardDue, newCard } from './practice';
+import { deckKeys, drillPath, drillSteps, openingCardId, whyChoices } from '../coach/opening-drill';
+import { courseLines, isCourseMove, judgeAlternative, lessonSteps, lineStatuses, nextLine, pathKey, quizNodes, sanOf, type CourseLine, type LessonStep } from '../coach/opening-lesson';
 import type { CourseTree } from '../coach/opening-tree';
 import { branchWords, ideaHint, ideaSentence, introWords, lineAfterReply, lineText, nodeLabel, punishWords, trapWords } from '../coach/opening-words';
 import { PuzzleRun, judgeOther, puzzleHint, solvedWords } from './puzzle';
@@ -254,7 +256,23 @@ interface LessonSession {
   learnedNow: number;
   found: number;
   asked: number;
+  /** A drill run (task 6.3) instead of a lesson: their replies chosen toward due moves, every move of yours asked. */
+  drill?: DrillRun;
 }
+
+interface DrillRun {
+  /** Started from the tab (the course with the most moves due) or from a course page. */
+  from: 'tab' | 'course';
+  hits: number;
+  misses: number;
+  /** The move being asked was missed (a wrong move or a hint); its card is recorded once. */
+  missed: boolean;
+  /** Moves due in the course when the run started. */
+  due: number;
+}
+
+/** How often a move found cleanly in a drill is followed by "Why this move?". */
+const WHY_CHANCE = 0.35;
 
 export class App {
   private settings = loadSettings();
@@ -325,6 +343,8 @@ export class App {
   /** The opening lesson on the board (task 6.2); the game in progress waits in storage, as with puzzles. */
   private lesson?: LessonSession;
   private openingProgress = new OpeningProgress();
+  /** Spaced repetition cards (task 6.3): learned opening moves (puzzles later, 3.3). */
+  private deck = new PracticeDeck();
   /** The coach shown in the Openings tab, and the course page open there (none: the tab itself). */
   private openingPick = 0;
   private openingView?: string;
@@ -1899,7 +1919,7 @@ export class App {
 
   private backup(): void {
     this.save();
-    const data = { ...this.store.exportAll(), puzzles: this.puzzleResults.all(), puzzleLevels: this.puzzleResults.allLevels(), openings: this.openingProgress.all() };
+    const data = { ...this.store.exportAll(), puzzles: this.puzzleResults.all(), puzzleLevels: this.puzzleResults.allLevels(), openings: this.openingProgress.all(), practice: this.deck.all() };
     this.download(JSON.stringify(data), `sideline-backup-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
     this.el['history-note'].textContent = `Backed up ${data.games.length} game${data.games.length === 1 ? '' : 's'} and ${data.puzzles.length} puzzle result${data.puzzles.length === 1 ? '' : 's'} to a file.`;
   }
@@ -1916,6 +1936,7 @@ export class App {
       const puzzles = result ? this.puzzleResults.importAll(data.puzzles) : 0;
       if (result) this.puzzleResults.importLevels(data.puzzleLevels);
       if (result) this.openingProgress.importAll(data.openings);
+      if (result) this.deck.importAll(data.practice);
       note.textContent = result ? `Restored ${result.added} game${result.added === 1 ? '' : 's'}${puzzles ? ` and ${puzzles} puzzle result${puzzles === 1 ? '' : 's'}` : ''}; ${result.skipped} skipped (already here or unreadable).` : 'That file is not a Sideline backup.';
     } catch {
       note.textContent = 'That file could not be read.';
@@ -2486,6 +2507,25 @@ export class App {
     who.append(title, say);
     hero.append(coachFace(chosen, 'lg'), who);
     focus.append(hero);
+    // Drill (task 6.3): the moves due over every course this coach teaches.
+    const over = this.drillOverview(chosen.level);
+    const drill = document.createElement('div');
+    drill.className = 'o-drill';
+    const dtext = document.createElement('span');
+    dtext.className = 'p-meta';
+    if (over.known) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = over.due ? 'primary' : '';
+      b.dataset.odrill = 'tab';
+      b.textContent = 'Drill';
+      dtext.textContent = over.due ? `${over.due} move${over.due === 1 ? '' : 's'} due for review` : `Nothing due right now · ${over.known} move${over.known === 1 ? '' : 's'} learned`;
+      drill.append(b, dtext);
+    } else {
+      dtext.textContent = 'Learn a line, then drill it here: the moves come back for review after 1, 3, 7, 14 and 30 days.';
+      drill.append(dtext);
+    }
+    focus.append(drill);
 
     const metas = new Map<string, HTMLElement>();
     const boards = new Map<string, HTMLElement>();
@@ -2558,7 +2598,8 @@ export class App {
         if (!c) continue;
         const total = c.playerNodes[chosen.level - 1] ?? 0;
         const done = Math.min(total, this.openingProgress.countFor(id, chosen.level));
-        meta.textContent = done >= total && total ? `All ${total} moves learned ✓` : `${done} / ${total} moves learned`;
+        const due = this.drillDeck(id, chosen.level).due.size;
+        meta.textContent = (done >= total && total ? `All ${total} moves learned ✓` : `${done} / ${total} moves learned`) + (due ? ` · ${due} due` : '');
         const card = meta.closest('button')!;
         card.querySelector('.p-bar')!.replaceWith(this.progressBar(done, total));
         card.setAttribute('aria-label', `${courseTitle(id)}: ${meta.textContent} with ${chosen.coach.name}`);
@@ -2616,6 +2657,15 @@ export class App {
     if (next) go.dataset.oline = next.key;
     go.textContent = status.includes('next') ? (done ? 'Next line' : 'Start the first line') : 'Practise the first line';
     focus.append(hero, prog, go);
+    const deck = this.drillDeck(id, tier);
+    if (deck.keys.length) {
+      const dr = document.createElement('button');
+      dr.type = 'button';
+      dr.className = 'p-start';
+      dr.dataset.odrill = 'course';
+      dr.textContent = deck.due.size ? `Drill · ${deck.due.size} due` : 'Drill (nothing due)';
+      focus.append(dr);
+    }
 
     // Moves after the defining ones, numbered from where the course starts.
     let start = tree.nodes[0];
@@ -2664,6 +2714,11 @@ export class App {
       return this.renderOpeningsScreen();
     }
     if (t.closest('[data-ocontinue]')) return void this.continueLesson();
+    const drill = t.closest<HTMLElement>('[data-odrill]');
+    if (drill) {
+      const tier = levelInfo(this.openingPick || this.settings.level).level;
+      return void this.startDrill(drill.dataset.odrill === 'course' ? this.openingView : undefined, tier, drill.dataset.odrill === 'course' ? 'course' : 'tab');
+    }
     const course = t.closest<HTMLElement>('[data-course]');
     if (course) {
       this.openingView = course.dataset.course;
@@ -2697,6 +2752,23 @@ export class App {
     const learned = (k: string) => this.openingProgress.isLearned(courseId, k);
     const line = (lineKey ? lines.find((l) => l.key === lineKey) : undefined) ?? nextLine(tree, lines, learned);
     if (!line) return;
+    const { steps, practice } = lessonSteps(tree, line, tier, learned);
+    const ls: LessonSession = { tree, level, lines, line, steps, index: 0, practice, phase: 'auto', hintStep: 0, learnedNow: 0, found: 0, asked: steps.filter((s) => s.kind === 'quiz').length };
+    const token = this.lessonOnBoard(ls);
+    this.openingView = courseId;
+    this.openingProgress.setCurrent({ course: courseId, tier, line: line.key, at: Date.now() });
+    const n = lines.indexOf(line);
+    const intro = n === 0 ? `${introWords(tree, tier)} ` : '';
+    const what = practice ? "You know this line, so let's practise it: I'll ask every move again." : `Line ${n + 1} of ${lines.length}. I'll play the moves you know; you find the new ones.`;
+    this.say({ kind: 'phase', text: `${intro}${what}`, mood: 'neutral' });
+    this.status('Watch the moves…');
+    await sleep(intro ? 1600 : 900);
+    await this.walkLesson(ls, token);
+  }
+
+  /** Puts a lesson or drill on the board from the start position (the game in progress waits in storage). Returns its token. */
+  private lessonOnBoard(ls: LessonSession): number {
+    const { tree, level } = ls;
     this.save(); // the game in progress stays as it is, to come back to
     this.parkPuzzle();
     this.reviewing?.abort?.abort();
@@ -2707,12 +2779,8 @@ export class App {
     const token = ++this.lessonToken;
     this.mode = OPENING;
     void this.showCoach(level);
-    const { steps, practice } = lessonSteps(tree, line, tier, learned);
-    const ls: LessonSession = { tree, level, lines, line, steps, index: 0, practice, phase: 'auto', hintStep: 0, learnedNow: 0, found: 0, asked: steps.filter((s) => s.kind === 'quiz').length };
     this.lesson = ls;
-    this.openingView = courseId;
-    this.openingPick = tier;
-    this.openingProgress.setCurrent({ course: courseId, tier, line: line.key, at: Date.now() });
+    this.openingPick = level.level;
     const color: Color = tree.side === 'w' ? 'white' : 'black';
     this.game = new Game(color);
     this.record = undefined;
@@ -2727,13 +2795,7 @@ export class App {
     this.board.setAutoShapes([]);
     this.showScreen('play');
     this.sync();
-    const n = lines.indexOf(line);
-    const intro = n === 0 ? `${introWords(tree, tier)} ` : '';
-    const what = practice ? "You know this line, so let's practise it: I'll ask every move again." : `Line ${n + 1} of ${lines.length}. I'll play the moves you know; you find the new ones.`;
-    this.say({ kind: 'phase', text: `${intro}${what}`, mood: 'neutral' });
-    this.status('Watch the moves…');
-    await sleep(intro ? 1600 : 900);
-    await this.walkLesson(ls, token);
+    return token;
   }
 
   /** Plays the lesson's steps from `index` until the next move to ask, or the end of the line. */
@@ -2765,6 +2827,7 @@ export class App {
   private askLessonMove(ls: LessonSession): void {
     ls.phase = 'quiz';
     ls.hintStep = 0;
+    if (ls.drill) ls.drill.missed = false;
     this.thinking = false;
     this.sync();
     const tier = ls.level.level;
@@ -2776,7 +2839,7 @@ export class App {
     }
     text += prev?.trap ? 'Your move: punish it.' : 'What would you play here?';
     this.say({ kind: 'phase', text, mood: 'thinking' });
-    this.status(`Your move${ls.practice ? ' (practice)' : ''}.`);
+    this.status(`Your move${ls.drill ? ' (drill)' : ls.practice ? ' (practice)' : ''}.`);
   }
 
   private async onLessonMove(from: Square, to: Square): Promise<void> {
@@ -2801,6 +2864,7 @@ export class App {
       this.sync();
       return this.lessonFound(ls, token);
     }
+    if (ls.drill) return this.drillMiss(ls, fenBefore, uci);
     const move = this.game.play(uci);
     const ply = this.game.moves.length;
     ls.phase = 'auto';
@@ -2878,6 +2942,7 @@ export class App {
    * idea (and after a trap, what the punishment wins). Found without a hint, it is learned.
    */
   private async lessonFound(ls: LessonSession, token: number, altSan?: string): Promise<void> {
+    if (ls.drill) return this.drillFound(ls, token);
     const tree = ls.tree;
     const tier = ls.level.level;
     const node = ls.steps[ls.index].node;
@@ -2897,6 +2962,7 @@ export class App {
       ls.found++;
       if (!this.openingProgress.isLearned(tree.id, pathKey(tree, node))) {
         this.openingProgress.learn(tree.id, pathKey(tree, node), tier, node.tier);
+        this.deck.add(openingCardId(tree.id, pathKey(tree, node)));
         ls.learnedNow++;
       }
     } else if (!ls.practice) text += altSan ? ' Play the course move next time to learn it.' : ' You had a hint, so this move comes back next time.';
@@ -2923,6 +2989,7 @@ export class App {
 
   /** The end of the line: what was learned, then Next line / Back to the course. */
   private lessonDone(ls: LessonSession): void {
+    if (ls.drill) return this.drillDone(ls);
     ls.phase = 'done';
     this.thinking = false;
     this.openingProgress.setCurrent(undefined);
@@ -2958,7 +3025,7 @@ export class App {
   private async exitLesson(): Promise<void> {
     const ls = this.lesson;
     if (!ls) return;
-    this.openingView = ls.tree.id;
+    this.openingView = ls.drill?.from === 'tab' ? undefined : ls.tree.id;
     this.openingPick = ls.level.level;
     await this.backToGame();
     this.showScreen('openings');
@@ -2978,6 +3045,209 @@ export class App {
     if (sl) this.exitSideline();
   }
 
+  // --- Drill (task 6.3) ------------------------------------------------------
+  // Spaced repetition of the learned moves: a card per learned player move (app/practice.ts). A drill plays a
+  // course from the start with the lesson's walk; their replies are picked by share at the coach's tier, steered
+  // toward due cards (coach/opening-drill.ts); every move of yours is asked. A miss shows the course move with its
+  // idea (the card comes back in a day), a clean find pushes the card out, and sometimes asks "Why this move?".
+
+  /** A course's deck for a coach: the learned moves that coach teaches (lower tiers included), and the due ones. */
+  private drillDeck(course: string, tier: number, now = Date.now()): { keys: string[]; due: Set<string> } {
+    const learned = this.openingProgress.learned(course);
+    const keys = deckKeys(learned, tier);
+    const due = new Set(
+      keys.filter((k) => {
+        const id = openingCardId(course, k);
+        return cardDue(this.deck.get(id) ?? newCard(id, learned[k].at), now);
+      }),
+    );
+    return { keys, due };
+  }
+
+  /** Moves due over every course for a coach, and the course a drill from the tab takes (most due, else most learned). */
+  private drillOverview(tier: number): { due: number; known: number; course?: string } {
+    let due = 0;
+    let known = 0;
+    let best: { id: string; due: number; known: number } | undefined;
+    for (const id of Object.keys(this.openingProgress.all())) {
+      const d = this.drillDeck(id, tier);
+      if (!d.keys.length) continue;
+      due += d.due.size;
+      known += d.keys.length;
+      if (!best || d.due.size > best.due || (d.due.size === best.due && d.keys.length > best.known)) best = { id, due: d.due.size, known: d.keys.length };
+    }
+    return { due, known, course: best?.id };
+  }
+
+  /** Starts a drill run of a course (from the tab: the course with the most moves due) with a coach. */
+  private async startDrill(courseId: string | undefined, tier: number, from: 'tab' | 'course'): Promise<void> {
+    const note = this.el['openings-note'];
+    const id = courseId ?? this.drillOverview(tier).course;
+    if (!id) {
+      note.textContent = 'Learn a line first: a drill asks the moves you have learned.';
+      return;
+    }
+    let tree: CourseTree;
+    try {
+      tree = await loadCourse(id);
+    } catch {
+      note.textContent = 'This course could not be loaded. Check your connection and try again.';
+      return;
+    }
+    const { keys, due } = this.drillDeck(id, tier);
+    const known = new Set(keys);
+    const path = drillPath(tree, tier, (k) => known.has(k), (k) => due.has(k));
+    const steps = drillSteps(path);
+    const asked = steps.filter((s) => s.kind === 'quiz').length;
+    if (!asked) {
+      note.textContent = 'Learn a line of this course first: a drill asks the moves you have learned.';
+      return;
+    }
+    const learned = this.openingProgress.learned(id);
+    for (const k of keys) this.deck.add(openingCardId(id, k), learned[k].at);
+    const level = levelInfo(tier);
+    const line: CourseLine = { nodes: path, reach: 0, trap: path.some((n) => n.trap), key: pathKey(tree, path.at(-1)!) };
+    const ls: LessonSession = { tree, level, lines: courseLines(tree, tier), line, steps, index: 0, practice: true, phase: 'auto', hintStep: 0, learnedNow: 0, found: 0, asked, drill: { from, hits: 0, misses: 0, missed: false, due: due.size } };
+    const token = this.lessonOnBoard(ls);
+    this.openingView = from === 'course' ? id : undefined;
+    const text = due.size
+      ? `Drill: ${due.size} move${due.size === 1 ? ' is' : 's are'} due in this course. I'll pick their replies the way players at my level do, leaning toward the moves that are due. You play yours.`
+      : "Drill: nothing is due in this course right now, so this is extra practice. I'll pick their replies the way players at my level do. You play yours.";
+    this.say({ kind: 'phase', text, mood: 'neutral' });
+    this.status('Watch the moves…');
+    await sleep(1200);
+    await this.walkLesson(ls, token);
+  }
+
+  /** Records the asked move's card once: a clean find is a hit, a wrong move or a hint a miss. */
+  private recordDrill(ls: LessonSession, hit: boolean): void {
+    const d = ls.drill;
+    if (!d || d.missed) return;
+    const node = ls.steps[ls.index].node;
+    this.deck.record(openingCardId(ls.tree.id, pathKey(ls.tree, node)), hit);
+    if (hit) d.hits++;
+    else {
+      d.misses++;
+      d.missed = true;
+    }
+  }
+
+  /** A move other than the course's in a drill: the course move with its idea (an arrow), to play next. */
+  private drillMiss(ls: LessonSession, fenBefore: string, uci: string): void {
+    const node = ls.steps[ls.index].node;
+    this.recordDrill(ls, false);
+    const san = sanOf(fenBefore, uci) ?? uci;
+    const idea = ideaSentence(node.tags, ls.level.level);
+    // The tapped move is only on chessground's board: put the position back once its move handling is over.
+    setTimeout(() => this.lesson === ls && this.sync());
+    this.say({
+      kind: 'line',
+      text: `This course plays ${nodeLabel(ls.tree, node)} here, not ${san}.${idea ? ` ${idea}` : ''} Play it to go on; this move comes back sooner.`,
+      mood: 'concerned',
+      shapes: [{ orig: node.uci.slice(0, 2) as Square, dest: node.uci.slice(2, 4) as Square, brush: 'green' }],
+    });
+    this.status('Play the course move.');
+  }
+
+  /** Buttons under the coach; resolves with the index tapped (never, if the drill ends first). */
+  private askChoices(texts: string[]): Promise<number> {
+    const box = this.el.choices;
+    box.replaceChildren(
+      ...texts.map((t, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.choice = String(i);
+        b.textContent = t;
+        return b;
+      }),
+    );
+    box.classList.add('stacked');
+    box.hidden = false;
+    return new Promise((resolve) => {
+      this.retryCleanup = () => {
+        box.hidden = true;
+        box.onclick = null;
+        box.classList.remove('stacked');
+        this.retryCleanup = undefined;
+      };
+      box.onclick = (e) => {
+        const b = (e.target as HTMLElement).closest('button');
+        if (!b) return;
+        this.retryCleanup?.();
+        resolve(Number(b.dataset.choice));
+      };
+    });
+  }
+
+  /** The course move is on the board in a drill: right (sometimes "Why this move?"), or found after a miss. */
+  private async drillFound(ls: LessonSession, token: number): Promise<void> {
+    const live = () => token === this.lessonToken && this.lesson === ls;
+    const tree = ls.tree;
+    const tier = ls.level.level;
+    const node = ls.steps[ls.index].node;
+    const prev = tree.nodes[node.parent];
+    const label = nodeLabel(tree, node);
+    const idea = ideaSentence(node.tags, tier);
+    const wrongBefore = ls.drill!.missed;
+    const clean = !wrongBefore && ls.hintStep === 0;
+    this.recordDrill(ls, clean);
+    ls.phase = 'auto';
+    this.thinking = true;
+    this.sync();
+    const marks = [{ square: node.uci.slice(2, 4) as Square, kind: 'good' as const }];
+    let text: string;
+    const why = clean && !prev.trap && Math.random() < WHY_CHANCE ? whyChoices(node.tags) : undefined;
+    if (why) {
+      this.say({ kind: 'praise', text: `Right: ${label}. Why this move?`, mood: 'pleased', marks });
+      this.setMood('pleased');
+      this.status('Pick the idea behind it.');
+      const i = await this.askChoices(why.choices.map((c) => c.text));
+      if (!live()) return;
+      const right = why.choices.find((c) => c.right)!;
+      const because = idea || right.text;
+      text = why.choices[i].right ? `Yes. ${because}` : `Not that one: ${label} doesn't do that. ${because}`;
+    } else if (clean) text = `Right: ${label}.${idea ? ` ${idea}` : ''}`;
+    else text = !wrongBefore ? `That's it: ${label}. You had a hint, so it comes back sooner.` : `That's it: ${label}.`;
+    const punish = prev.trap ? punishWords(tree, prev, node) : '';
+    if (punish) text += ` ${punish}`;
+    this.say({ kind: 'praise', text, mood: clean ? 'pleased' : 'neutral', marks });
+    if (clean) this.setMood('pleased');
+    ls.index++;
+    this.sync();
+    this.status(ls.index < ls.steps.length ? 'Their move…' : '');
+    await sleep(Math.min(3200, 1200 + text.length * 10));
+    if (!live()) return;
+    await this.walkLesson(ls, token);
+  }
+
+  /** The end of a drill run: how it went and what is still due, then Drill again / back. */
+  private drillDone(ls: LessonSession): void {
+    const d = ls.drill!;
+    ls.phase = 'done';
+    this.thinking = false;
+    const tier = ls.level.level;
+    const total = d.hits + d.misses;
+    const left = d.from === 'tab' ? this.drillOverview(tier).due : this.drillDeck(ls.tree.id, tier).due.size;
+    const where = d.from === 'tab' ? 'over all your courses' : 'in this course';
+    let text = `That's the end of this run: ${d.hits} of ${total} move${total === 1 ? '' : 's'} found without a hint.`;
+    text += left ? ` ${left} move${left === 1 ? ' is' : 's are'} still due ${where}.` : ` Nothing else is due ${where}.`;
+    if (d.misses) text += ` ${d.misses === 1 ? 'The one' : `The ${d.misses}`} you missed come${d.misses === 1 ? 's' : ''} back tomorrow.`;
+    this.say({ kind: 'praise', text, mood: 'pleased' });
+    this.status('Run done.');
+    this.sync();
+    const box = this.el.choices;
+    box.innerHTML = `<button data-choice="course">${d.from === 'tab' ? 'Back to openings' : 'Back to course'}</button><button data-choice="again" class="primary">Drill again</button>`;
+    box.hidden = false;
+    box.onclick = (e) => {
+      const c = (e.target as HTMLElement).closest('button')?.dataset.choice;
+      if (!c) return;
+      box.hidden = true;
+      box.onclick = null;
+      if (c === 'again') void this.startDrill(d.from === 'tab' ? undefined : ls.tree.id, tier, d.from);
+      else void this.exitLesson();
+    };
+  }
+
   /** The bar under the board in a lesson: the course, the coach and which line. */
   private renderLessonBar(): void {
     const ls = this.lesson;
@@ -2985,6 +3255,13 @@ export class App {
     bar.hidden = !ls || !!this.sideline;
     if (!ls) return;
     this.el['lesson-exit'].hidden = ls.phase === 'done'; // the card under the coach offers it then
+    if (ls.drill) {
+      const done = ls.drill.hits + ls.drill.misses;
+      this.el['lesson-text'].textContent = [courseTitle(ls.tree.id), ls.level.coach.name, `drill · ${done} of ${ls.asked} move${ls.asked === 1 ? '' : 's'}`].join(' · ');
+      this.el['lesson-exit'].textContent = ls.drill.from === 'tab' ? 'Back to openings' : 'Back to course';
+      return;
+    }
+    this.el['lesson-exit'].textContent = 'Back to course';
     const n = ls.lines.indexOf(ls.line);
     this.el['lesson-text'].textContent = [courseTitle(ls.tree.id), ls.level.coach.name, `line ${n + 1} of ${ls.lines.length}`, ls.practice ? 'practice' : ''].filter(Boolean).join(' · ');
   }

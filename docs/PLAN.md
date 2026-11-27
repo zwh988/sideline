@@ -335,7 +335,7 @@ Agreed with the user (Nov 27, after playing 3.2): (1) **no "missed" counts on sc
 
 ### ⬜ 3.3 Your mistakes and Today
 - **Your missed tactics become puzzles:** the saved moments (live games and imports; the missed-tactic kinds) already hold the position and the engine's line; cut by the line rules (`lines.ts`, the player's level at the time) and keep only forcing solutions (the opponent's replies forced or clearly best, checked with the analyst). Shown in the coach's voice of the game they came from ("From your game vs Rusk, move 14").
-- **The practice scheduler** (`src/app/practice.ts`, shared with 6.3 Drill): cards, due dates and results; a miss brings a card back after 1 day, a clean solve pushes it out (1, 3, 7, 14, 30 days).
+- **The practice scheduler** (`src/app/practice.ts`, built in 6.3: generic card ids; reuse it): cards, due dates and results; a miss brings a card back after 1 day, a clean solve pushes it out (1, 3, 7, 14, 30 days).
 - **Today:** a short session of what is due (missed puzzles, your-mistake puzzles, then a few new puzzles from your coach's set; opening drill cards too once 6.3 exists), ending with "Done for today" (the spec's engagement metric).
 - **Done when:** a missed tactic from a real saved game shows up as a puzzle and is solvable; tests for turning a moment into a puzzle (a non-forcing line rejected) and for the scheduler (intervals, due order, a miss resets); a Today session played in the browser.
 
@@ -405,7 +405,7 @@ Design agreed with the user (Nov 27).
 - Progress (learned player nodes per course and coach) is saved on the device; Drill (6.3) builds on it.
 - **Done when:** the Vienna (White) and Caro-Kann (Black) courses can be learned end to end with Pip and with Ardea in the browser at 375×650 and desktop; tests for the walk order and answer checking.
 
-### ⬜ 6.3 Drill (spaced repetition of the lines)
+### ✅ 6.3 Drill (spaced repetition of the lines) (Nov 27; STATE decision 41)
 - **Cards are positions, not whole lines:** each player node learned in 6.2 becomes a card (per course and coach tier).
 - A drill plays a course from the start: you play your side; the opponent picks replies weighted by frequency at the coach's band, steering toward **due** cards. A miss shows the right move with its idea, and the card comes back sooner; a hit pushes it out (1, 3, 7, then 14, 30 days).
 - **The scheduler is shared with puzzles** (Phase 3, 3.3): build it here as `src/app/practice.ts` (cards, due dates, results, stored on the device with `store.ts`; included in the backup file) if Phase 3 hasn't yet.
