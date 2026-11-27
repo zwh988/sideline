@@ -5,7 +5,7 @@
 //   Sparring: serious moments only, hints only on request, no takebacks,
 //             no plans revealed.
 
-export type ModeId = 'lesson' | 'sparring' | 'review';
+export type ModeId = 'lesson' | 'sparring' | 'review' | 'puzzle';
 
 export interface Mode {
   id: ModeId;
@@ -43,5 +43,11 @@ export const MODES: Mode[] = [
  * prompts or small talk, no takebacks. It is not a choice in the Mode select.
  */
 export const REVIEW: Mode = { id: 'review', name: 'Review', prompts: false, smallTalk: false, minorMistakes: true, takebacks: false, revealsPlans: true, sidelines: true };
+
+/**
+ * Puzzles (task 3.2): the coach judges the player's moves against the puzzle and the engine, and words
+ * the line; no prompts, small talk or takebacks (a wrong move has its own Try again). Not a Mode select choice.
+ */
+export const PUZZLE: Mode = { id: 'puzzle', name: 'Puzzles', prompts: false, smallTalk: false, minorMistakes: false, takebacks: false, revealsPlans: true, sidelines: true };
 
 export const modeInfo = (id: string | undefined): Mode => (id === 'review' ? REVIEW : (MODES.find((m) => m.id === id) ?? MODES[0]));

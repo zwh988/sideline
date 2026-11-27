@@ -33,6 +33,7 @@ npx tsc              # type-check only
 | `src/app/review.ts` | Review of a saved game: moment order, the question before a moment (the screen is in `ui.ts`) |
 | `src/app/pgnimport.ts`, `src/app/sources.ts`, `src/app/import-dialog.ts` | Game import: PGN text to games and saved records, Chess.com / Lichess fetch (player-started), the import dialog (pick games and side, progress, cancel) |
 | `src/app/puzzlepool.ts`, `src/app/puzzlepool-build.ts` | Puzzle pool: band files in `public/puzzles/pool/`, a coach's set (`coachSet`); `npm run puzzle-pool` rebuilds it from the Lichess database in `data/` |
+| `src/app/puzzle.ts`, `src/app/puzzlechoice.ts`, `src/app/puzzlestore.ts` | A puzzle being solved (checking moves, hints, solved words), the next puzzle's choice, results on the device; the Puzzles tab and puzzle mode are in `ui.ts` |
 | `src/app/opponent.ts` | Coach's move choice: Maia (human-like), weakened Stockfish fallback |
 | `src/app/theme.ts`, `public/themes/<id>/` | Theme packs: `theme.json` + piece images, no code changes to reskin |
 | `src/engine/stockfish.ts` | UCI wrapper for Stockfish WASM (single-threaded lite build) |

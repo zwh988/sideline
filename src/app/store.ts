@@ -72,6 +72,8 @@ export interface BackupFile {
   version: 1;
   exportedAt: number;
   games: SavedGame[];
+  /** Puzzle results (task 3.2; `PuzzleResult` in puzzlestore.ts). Older backups have none. */
+  puzzles?: unknown[];
 }
 
 /** The part of localStorage used here (tests pass a Map-backed one). */

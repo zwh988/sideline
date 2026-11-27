@@ -1892,3 +1892,40 @@ button.primary {
     max-height: 130px;
   }
 }
+
+/* Puzzles tab (task 3.2): a card per coach, its themes as buttons with what was solved and missed */
+.puzzles-list li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+}
+
+.puzzles-list .h-meta {
+  margin: 0;
+}
+
+.p-themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px;
+}
+
+.p-theme {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2);
+  text-align: left;
+}
+
+.p-theme .p-count {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.puzzles-list li > button[data-level]:last-child {
+  align-self: flex-start;
+  min-width: 120px;
+}

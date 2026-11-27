@@ -8,6 +8,7 @@ import type { Key } from '@lichess-org/chessground/types';
 import { Chess, type Square } from 'chess.js';
 import { Analyst } from '../coach/analyst';
 import { loadOpeningBook, openingBookIfLoaded, type OpeningBook } from '../coach/openings';
+import type { LineMove as LineMoveLike } from '../coach/linecheck';
 import { Coach, joinRemarks, type Mark, type Mood, type Remark, type Shape } from '../coach/coach';
 import { LANE_ARROW, LANE_COLOUR, drawChart, laneBadgeSvg } from './linechart';
 import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode, type Option } from './linetree';
@@ -18,7 +19,11 @@ import { kindLabel, momentDot, momentUniverses, type Universe, reviewBarText, re
 import { REVIEW_VERSION, reviewGame } from '../coach/review';
 import { Game, resultOf, type Color } from './game';
 import { LEVELS, levelInfo, levelLabel, type Level } from './levels';
-import { MODES, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
+import { MODES, PUZZLE, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
+import { PuzzleRun, judgeOther, puzzleHint, solvedWords } from './puzzle';
+import { choosePuzzle } from './puzzlechoice';
+import { POOL_THEMES, coachSet, loadPool, themeName, type Puzzle } from './puzzlepool';
+import { PuzzleResults, isClean, type Attempt } from './puzzlestore';
 import { materialOf } from './material';
 import { gameSummary } from './summary';
 import { Navigation, RemarkLog, plyLabel } from './navigation';
@@ -161,7 +166,32 @@ const RAIL_ICONS = {
   play: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M9 4l9 8-9 8z" fill="currentColor"/></svg>',
   review: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>',
   settings: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 8h10M18 8h2M4 16h2M10 16h10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/><circle cx="16" cy="8" r="2.6" fill="currentColor"/><circle cx="8" cy="16" r="2.6" fill="currentColor"/></svg>',
+  puzzles: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 5h5v2.5a2 2 0 1 0 4 0V5h5v5h-2.5a2 2 0 1 0 0 4H19v5h-5v-2.5a2 2 0 1 0-4 0V19H5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></svg>',
 };
+
+type Screen = 'play' | 'review' | 'settings' | 'puzzles';
+
+/** A puzzle session (task 3.2): the coach's set, the puzzle on the board and how this try is going. */
+interface PuzzleSession {
+  level: Level;
+  /** The pool files of the coach's band (all themes), for "Another fork?". */
+  pool: Puzzle[];
+  /** The theme picked in the Puzzles tab, or none for the coach's mix. */
+  theme?: string;
+  /** This session's tries, clean or not (newest last): the next puzzle's difficulty follows them. */
+  recent: boolean[];
+  /** Puzzles played this session (not offered again). */
+  seen: Set<string>;
+  solvedCount: number;
+  run?: PuzzleRun;
+  /** The moves from the solver's first position: the player's and the replies. */
+  played: string[];
+  attempt: Attempt;
+  hintStep: number;
+  phase: 'intro' | 'solving' | 'wrong' | 'solved';
+  /** The current try is written to the results already. */
+  recorded: boolean;
+}
 
 export class App {
   private settings = loadSettings();
@@ -216,6 +246,11 @@ export class App {
     analysing?: { done: number; total: number };
     abort?: AbortController;
   };
+  /** A puzzle session (task 3.2): the board holds a puzzle; the game in progress waits in storage. */
+  private puzzling?: PuzzleSession;
+  private puzzleResults = new PuzzleResults();
+  /** Takes down a Try again / Explore card that is waiting (the puzzle was skipped or left). */
+  private retryCleanup?: () => void;
   /** The game ply a sideline started from (a sideline can start from an earlier viewed position). */
   private sidelinePly = 0;
 
@@ -257,6 +292,7 @@ export class App {
     this.root.innerHTML = `
       <nav class="rail" aria-label="Main">
         <button id="rail-play" class="rail-item" aria-current="page">${RAIL_ICONS.play}<span>Play</span></button>
+        <button id="rail-puzzles" class="rail-item">${RAIL_ICONS.puzzles}<span>Puzzles</span></button>
         <button id="history-open" class="rail-item">${RAIL_ICONS.review}<span>Game review</span></button>
         <button id="rail-settings" class="rail-item">${RAIL_ICONS.settings}<span>Settings</span></button>
       </nav>
@@ -268,6 +304,7 @@ export class App {
             <button id="more" class="more" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="Menu">☰</button>
             <div id="more-menu" class="menu more-menu" role="menu" hidden>
               <button id="menu-play" role="menuitem">Play</button>
+              <button id="menu-puzzles" role="menuitem">Puzzles</button>
               <button id="menu-review" role="menuitem">Game review</button>
               <button id="menu-settings" role="menuitem">Settings</button>
             </div>
@@ -304,6 +341,11 @@ export class App {
             </select>
           </label>
         </div>
+      </dialog>
+      <dialog id="puzzles-screen" class="history puzzles-screen" aria-label="Puzzles">
+        <div class="history-head"><h2>Puzzles</h2><button id="puzzles-close" class="ghost">Back to play</button></div>
+        <p id="puzzles-note" class="history-note" aria-live="polite">Pick a coach. Start plays a mix of their puzzles; tap a theme to practise only that one.</p>
+        <ol id="puzzles-list" class="history-list puzzles-list"></ol>
       </dialog>
       <main class="layout">
         <div id="board-area" class="board-area">
@@ -385,11 +427,18 @@ export class App {
               <button id="review-exit">Back to game</button>
             </div>
           </div>
+          <div id="puzzle-bar" class="viewbar reviewbar puzzlebar" hidden>
+            <span id="puzzle-text"></span>
+            <div class="review-buttons">
+              <button id="puzzle-skip">Skip</button>
+              <button id="puzzle-exit">Back to puzzles</button>
+            </div>
+          </div>
           <ol id="moves" class="moves"></ol>
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-timeline', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-timeline', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file', 'rail-puzzles', 'menu-puzzles', 'puzzles-screen', 'puzzles-close', 'puzzles-note', 'puzzles-list', 'puzzle-bar', 'puzzle-text', 'puzzle-skip', 'puzzle-exit']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -417,12 +466,20 @@ export class App {
       void this.newGame();
     });
     // The rail (desktop) and the Menu (phones) switch screens; Game review and Settings sit over the game.
-    for (const [id, screen] of [['rail-play', 'play'], ['history-open', 'review'], ['rail-settings', 'settings'], ['menu-play', 'play'], ['menu-review', 'review'], ['menu-settings', 'settings']] as const) {
+    for (const [id, screen] of [['rail-play', 'play'], ['rail-puzzles', 'puzzles'], ['history-open', 'review'], ['rail-settings', 'settings'], ['menu-play', 'play'], ['menu-puzzles', 'puzzles'], ['menu-review', 'review'], ['menu-settings', 'settings']] as const) {
       this.el[id].addEventListener('click', () => this.showScreen(screen));
     }
     this.el['settings-close'].addEventListener('click', () => this.showScreen('play'));
     this.el.history.addEventListener('close', () => this.railCurrent());
     this.el['settings-screen'].addEventListener('close', () => this.railCurrent());
+    this.el['puzzles-screen'].addEventListener('close', () => this.railCurrent());
+    this.el['puzzles-close'].addEventListener('click', () => this.showScreen('play'));
+    this.el['puzzles-list'].addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-level]');
+      if (b) void this.openPuzzles(levelInfo(Number(b.dataset.level)), b.dataset.theme || undefined);
+    });
+    this.el['puzzle-skip'].addEventListener('click', () => void this.skipPuzzle());
+    this.el['puzzle-exit'].addEventListener('click', () => void this.exitPuzzles());
     this.root.querySelector('#flip')!.addEventListener('click', () => {
       this.board.toggleOrientation();
       this.renderMaterial(this.nav.viewing ? this.game.positionAt(this.nav.ply).fen : this.game.fen);
@@ -519,11 +576,17 @@ export class App {
   }
 
   /** Switches screen: Play is the game itself; Game review and Settings are full screens over it (not modal, so the rail stays usable). */
-  private showScreen(screen: 'play' | 'review' | 'settings'): void {
+  private showScreen(screen: Screen): void {
     const history = this.el.history as HTMLDialogElement;
     const settings = this.el['settings-screen'] as HTMLDialogElement;
+    const puzzles = this.el['puzzles-screen'] as HTMLDialogElement;
     if (screen !== 'review' && history.open) history.close();
     if (screen !== 'settings' && settings.open) settings.close();
+    if (screen !== 'puzzles' && puzzles.open) puzzles.close();
+    if (screen === 'puzzles' && !puzzles.open) {
+      this.renderPuzzlesScreen();
+      puzzles.show();
+    }
     if (screen === 'review' && !history.open) this.openHistory();
     if (screen === 'settings' && !settings.open) {
       (this.el.level as HTMLSelectElement).value = String(this.settings.level);
@@ -536,8 +599,9 @@ export class App {
 
   /** Marks the rail item of the screen that is open. */
   private railCurrent(): void {
-    const screen = (this.el.history as HTMLDialogElement).open ? 'history-open' : (this.el['settings-screen'] as HTMLDialogElement).open ? 'rail-settings' : 'rail-play';
-    for (const id of ['rail-play', 'history-open', 'rail-settings']) {
+    const open = (id: string) => (this.el[id] as HTMLDialogElement).open;
+    const screen = open('history') ? 'history-open' : open('settings-screen') ? 'rail-settings' : open('puzzles-screen') || this.puzzling ? 'rail-puzzles' : 'rail-play';
+    for (const id of ['rail-play', 'rail-puzzles', 'history-open', 'rail-settings']) {
       if (id === screen) this.el[id].setAttribute('aria-current', 'page');
       else this.el[id].removeAttribute('aria-current');
     }
@@ -548,6 +612,8 @@ export class App {
     const id = ++this.gameId;
     this.reviewing?.abort?.abort();
     this.reviewing = undefined;
+    this.puzzling = undefined;
+    this.railCurrent();
     this.thinking = false;
     this.sideline = undefined;
     this.sidelineToken++;
@@ -644,7 +710,7 @@ export class App {
   /** Writes the game in progress to this device (nothing is saved before the first move). */
   private save(): void {
     const r = this.record;
-    if (!r || !this.game || this.reviewing) return; // a reviewed game is saved only when a sideline is kept
+    if (!r || !this.game || this.reviewing || this.puzzling) return; // a reviewed game is saved only when a sideline is kept
     r.moves = this.game.moves.map((m) => m.uci);
     if (!r.moves.length) {
       // Nothing worth keeping yet; and if moves were saved before (a takeback to the start), forget that game
@@ -670,13 +736,14 @@ export class App {
     this.el['board-area'].classList.toggle('sidelining', !!this.sideline);
     this.el['sideline-bar'].hidden = !this.sideline;
     this.renderReviewBar();
+    this.renderPuzzleBar();
     if (this.sideline) return this.renderSideline();
     this.board.set({ viewOnly: false });
     const view = nav.viewing ? g.positionAt(nav.ply) : undefined;
     const shown = view ?? { fen: g.fen, turn: g.turn, inCheck: g.inCheck, lastMove: g.lastMove };
     const last = shown.lastMove;
     // Viewing the past: the board is read-only.
-    const canMove = !this.reviewing && !nav.viewing && g.isPlayerTurn && !g.result.over && !this.thinking;
+    const canMove = !this.reviewing && !nav.viewing && g.isPlayerTurn && !g.result.over && !this.thinking && (!this.puzzling || this.puzzling.phase === 'solving');
     this.board.set({
       fen: shown.fen,
       turnColor: shown.turn,
@@ -698,7 +765,7 @@ export class App {
       this.board.set({ movable: { color: shown.turn, dests: dests as Map<Key, Key[]> } });
     }
     this.renderMaterial(shown.fen);
-    this.renderEndSignals(shown.fen, !nav.viewing && !this.reviewing && g.result.over);
+    this.renderEndSignals(shown.fen, !nav.viewing && !this.reviewing && !this.puzzling && g.result.over);
     this.renderMoves();
     this.renderBubble();
     this.renderNav(shown.lastMove?.san);
@@ -798,7 +865,7 @@ export class App {
     if (mate) {
       const winner = res.over && res.winner ? res.winner : undefined;
       title.textContent = 'Checkmate';
-      sub.textContent = !winner ? '' : this.reviewing || this.sideline ? `${winner === 'white' ? 'White' : 'Black'} wins` : winner === this.game.playerColor ? 'You win' : 'The coach wins';
+      sub.textContent = !winner ? '' : this.reviewing || (this.sideline && !this.puzzling) ? `${winner === 'white' ? 'White' : 'Black'} wins` : winner === this.game.playerColor ? 'You win' : 'The coach wins';
     } else {
       title.textContent = 'Draw';
       sub.textContent = res.over ? `by ${res.reason}` : '';
@@ -1185,6 +1252,7 @@ export class App {
   private async onPlayerMove(from: Square, to: Square): Promise<void> {
     if (this.sideline) return this.onSidelineMove(from, to);
     if (this.reviewing) return this.sidelineFromReview(from, to);
+    if (this.puzzling) return this.onPuzzleMove(from, to);
     this.clearOpportunity();
     const id = this.gameId;
     let promotion = '';
@@ -1331,6 +1399,7 @@ export class App {
 
   private async hint(): Promise<void> {
     if (this.nav.viewing || this.sideline) return;
+    if (this.puzzling) return this.puzzleHint();
     const id = this.gameId;
     const ply = this.game.moves.length;
     const coach = await this.coach;
@@ -1358,6 +1427,7 @@ export class App {
     }
     this.save(); // the game in progress stays as it is, to come back to
     ++this.gameId; // drops whatever the live game was waiting for
+    this.puzzling = undefined;
     this.thinking = false;
     this.sideline = undefined;
     this.sidelineToken++;
@@ -1709,9 +1779,9 @@ export class App {
 
   private backup(): void {
     this.save();
-    const data = this.store.exportAll();
+    const data = { ...this.store.exportAll(), puzzles: this.puzzleResults.all() };
     this.download(JSON.stringify(data), `sideline-backup-${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
-    this.el['history-note'].textContent = `Backed up ${data.games.length} game${data.games.length === 1 ? '' : 's'} to a file.`;
+    this.el['history-note'].textContent = `Backed up ${data.games.length} game${data.games.length === 1 ? '' : 's'} and ${data.puzzles.length} puzzle result${data.puzzles.length === 1 ? '' : 's'} to a file.`;
   }
 
   private async restore(): Promise<void> {
@@ -1721,12 +1791,373 @@ export class App {
     if (!file) return;
     const note = this.el['history-note'];
     try {
-      const result = this.store.importAll(JSON.parse(await file.text()));
-      note.textContent = result ? `Restored ${result.added} game${result.added === 1 ? '' : 's'}; ${result.skipped} skipped (already here or unreadable).` : 'That file is not a Sideline backup.';
+      const data = JSON.parse(await file.text());
+      const result = this.store.importAll(data);
+      const puzzles = result ? this.puzzleResults.importAll(data.puzzles) : 0;
+      note.textContent = result ? `Restored ${result.added} game${result.added === 1 ? '' : 's'}${puzzles ? ` and ${puzzles} puzzle result${puzzles === 1 ? '' : 's'}` : ''}; ${result.skipped} skipped (already here or unreadable).` : 'That file is not a Sideline backup.';
     } catch {
       note.textContent = 'That file could not be read.';
     }
     this.renderHistory();
+  }
+
+  // --- Puzzles (task 3.2) ----------------------------------------------------
+  // A coach's set is a filter over the pool (its themes at its band). A puzzle is played on the game screen:
+  // the opponent's first move is played, the coach asks what it wants, and the player's moves are checked
+  // against the solution (another mate counts; a move the engine calls just as good means "try again"). A wrong
+  // move plays its refutation as a ghost line, then Try again / Explore. The game in progress waits in storage.
+
+  /** The Puzzles tab: one card per coach (yours first), its themes with what you solved and missed. */
+  private renderPuzzlesScreen(): void {
+    const list = this.el['puzzles-list'];
+    const mine = this.settings.level;
+    const levels = [levelInfo(mine), ...LEVELS.filter((l) => l.level !== mine)];
+    list.replaceChildren(
+      ...levels.map((l) => {
+        const li = document.createElement('li');
+        li.className = 'p-coach';
+        const head = document.createElement('div');
+        head.className = 'h-main';
+        const title = document.createElement('span');
+        title.className = 'h-title';
+        title.textContent = `${l.coach.name} · about ${l.shownRating}`;
+        head.append(title);
+        if (l.level === mine) {
+          const chip = document.createElement('span');
+          chip.className = 'chip win';
+          chip.textContent = 'Your coach';
+          head.append(chip);
+        }
+        const meta = document.createElement('p');
+        meta.className = 'h-meta';
+        meta.textContent = `Lichess puzzle rating ${l.puzzleBand[0] || 400}–${l.puzzleBand[1]}`;
+        const progress = this.puzzleResults.progress(l.specialty.puzzleThemes, l.puzzleBand);
+        const themes = document.createElement('div');
+        themes.className = 'p-themes';
+        for (const t of l.specialty.puzzleThemes) {
+          const c = progress.get(t)!;
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'p-theme';
+          b.dataset.level = String(l.level);
+          b.dataset.theme = t;
+          const name = document.createElement('span');
+          name.textContent = themeName(t);
+          const count = document.createElement('span');
+          count.className = 'p-count';
+          count.textContent = c.solved || c.missed ? `${c.solved} solved · ${c.missed} missed` : 'New';
+          b.append(name, count);
+          b.setAttribute('aria-label', `Only ${themeName(t)}: ${count.textContent}`);
+          themes.append(b);
+        }
+        const start = document.createElement('button');
+        start.type = 'button';
+        start.className = l.level === mine ? 'primary' : '';
+        start.dataset.level = String(l.level);
+        start.textContent = 'Start';
+        start.setAttribute('aria-label', `Start ${l.coach.name}'s puzzles`);
+        li.append(head, meta, themes, start);
+        return li;
+      }),
+    );
+  }
+
+  /** Starts a puzzle session with a coach's set (or one theme of it). */
+  private async openPuzzles(level: Level, theme?: string): Promise<void> {
+    const note = this.el['puzzles-note'];
+    note.textContent = 'Getting the puzzles…';
+    let pool: Puzzle[];
+    try {
+      pool = await loadPool(level.puzzleBand);
+    } catch (e) {
+      console.error(e);
+      note.textContent = 'The puzzles could not be loaded. Check your connection and try again.';
+      return;
+    }
+    note.textContent = 'Pick a coach. Start plays a mix of their puzzles; tap a theme to practise only that one.';
+    this.save(); // the game in progress stays as it is, to come back to
+    this.reviewing?.abort?.abort();
+    this.reviewing = undefined;
+    if (this.sideline) this.exitSideline();
+    this.showScreen('play');
+    this.mode = PUZZLE;
+    void this.showCoach(level);
+    this.puzzling = { level, pool, theme, recent: [], seen: new Set(), solvedCount: 0, played: [], attempt: { solved: false, misses: 0, hints: 0 }, hintStep: 0, phase: 'intro', recorded: false };
+    this.railCurrent();
+    await this.nextPuzzle();
+  }
+
+  /** The next puzzle of the session; `theme` overrides the session's for one puzzle ("Another fork?"). */
+  private async nextPuzzle(theme?: string): Promise<void> {
+    const pz = this.puzzling;
+    if (!pz) return;
+    const t = theme ?? pz.theme;
+    const level = pz.level;
+    const set = t
+      ? pz.pool.filter((p) => p.rating >= level.puzzleBand[0] && p.rating < level.puzzleBand[1] && p.themes.includes(t))
+      : coachSet(pz.pool, level);
+    const p = choosePuzzle(set, (id) => this.puzzleResults.get(id), { band: level.puzzleBand, recent: pz.recent, exclude: pz.seen });
+    if (!p) {
+      this.say({ kind: 'phase', text: 'That is every puzzle of this set for now. Pick another theme or coach.', mood: 'neutral' });
+      return;
+    }
+    await this.startPuzzle(p);
+  }
+
+  private async startPuzzle(p: Puzzle): Promise<void> {
+    const pz = this.puzzling;
+    if (!pz) return;
+    const id = ++this.gameId;
+    this.retryCleanup?.();
+    const run = new PuzzleRun(p);
+    Object.assign(pz, { run, played: [], attempt: { solved: false, misses: 0, hints: 0 }, hintStep: 0, phase: 'intro', recorded: false });
+    pz.seen.add(p.id);
+    this.thinking = true;
+    this.game = new Game(run.solverColor, p.fen);
+    this.record = undefined;
+    this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => new Coach(a, pz.level, run.solverColor === 'white' ? 'w' : 'b', PUZZLE, book));
+    this.nav.reset(0);
+    this.log.clear();
+    this.viewShapes = false;
+    this.stopDemo();
+    this.el.choices.hidden = true;
+    this.board.set({ orientation: run.solverColor, lastMove: undefined });
+    this.board.setAutoShapes([]);
+    this.status('Their move…');
+    this.sync();
+    await sleep(700); // the position first, then their move
+    if (id !== this.gameId) return;
+    const first = this.game.play(run.firstMove);
+    this.thinking = false;
+    pz.phase = 'solving';
+    this.sync();
+    const side = run.solverColor === 'white' ? 'White' : 'Black';
+    this.say({ kind: 'phase', text: `They played ${first.san}. What does that move want? Then find the best move for ${side}.`, mood: 'thinking' });
+    this.status(`${side} to move.`);
+    void (await this.coach).prepare(this.game.fen);
+  }
+
+  private async onPuzzleMove(from: Square, to: Square): Promise<void> {
+    const pz = this.puzzling;
+    const run = pz?.run;
+    if (!pz || !run || pz.phase !== 'solving') return;
+    const id = this.gameId;
+    let promotion = '';
+    if (this.game.isPromotion(from, to)) {
+      promotion = await this.askPromotion(this.game.playerColor);
+      if (id !== this.gameId) return;
+    }
+    const uci = from + to + promotion;
+    const fenBefore = this.game.fen;
+    const kind = run.check(uci);
+    this.stopDemo();
+    this.el.choices.hidden = true;
+    const move = this.game.play(uci);
+    const ply = this.game.moves.length;
+    this.board.setAutoShapes([]);
+    this.el['bubble-box'].classList.add('stale');
+    this.sync();
+
+    if (kind !== 'other') {
+      pz.played.push(uci);
+      const reply = run.advance(kind);
+      if (run.solved) return this.puzzleSolved();
+      this.thinking = true;
+      this.setMood('pleased');
+      this.status('Right! Their reply…');
+      this.sync();
+      await sleep(MIN_THINK_MS);
+      if (this.stale(id, ply) || !reply) return;
+      const r = this.game.play(reply);
+      pz.played.push(reply);
+      pz.hintStep = 0;
+      this.thinking = false;
+      this.sync();
+      this.say({ kind: 'phase', text: `Right. They answered ${r.san}. Keep going.`, mood: 'pleased' });
+      this.status('Your move.');
+      return;
+    }
+
+    // Not the solution: the engine decides whether it also holds up or is a wrong move.
+    this.thinking = true;
+    this.status('Thinking…');
+    this.sync();
+    const coach = await this.coach;
+    const rating = await coach.rateMove(fenBefore, uci).catch(() => undefined);
+    if (this.stale(id, ply)) return;
+    if (rating && judgeOther(rating) === 'also-good') {
+      this.game.takeback();
+      this.log.truncate(this.game.moves.length);
+      this.thinking = false;
+      this.board.setAutoShapes([]);
+      this.sync();
+      this.say({ kind: 'line', text: `${move.san} works too, but there is something stronger here. Try again.`, mood: 'thinking' });
+      this.status('Your move. Look for something stronger.');
+      return;
+    }
+    pz.attempt.misses++;
+    pz.phase = 'wrong';
+    const played = { from, to, promotion: (promotion || undefined) as LineMoveLike['promotion'], uci, san: move.san, mine: true };
+    const [judged, ev] = await Promise.all([
+      coach.judgeSidelineMove(fenBefore, played).catch(() => undefined),
+      this.analyst.then((a) => a.evaluate(this.game.fen, 1)).catch(() => undefined),
+    ]);
+    if (this.stale(id, ply)) return;
+    this.thinking = false;
+    const answer = (ev?.lines[0]?.pv ?? []).slice(0, 4);
+    const remark: Remark = {
+      kind: 'line',
+      text: `Not this one. ${judged?.text ?? ''}`.trim(),
+      mood: 'concerned',
+      severity: 'mistake',
+      marks: [{ square: to, kind: 'bad' }],
+    };
+    this.say(remark);
+    this.setMood('concerned', 'mistake');
+    if (answer.length) {
+      this.demo = { fenAfter: this.game.fen, ucis: answer, remark, running: false };
+      void this.playDemo();
+    }
+    this.sync();
+    this.status('Try again, or explore why it fails.');
+    let choice = await this.askPuzzleRetry();
+    while (choice === 'explore') {
+      // Engine moves start hidden here: they would give the puzzle away.
+      await this.openSideline(fenBefore, 'This is the puzzle position. The gray line is your move and the reply; play any move to try another idea. Tap Back to game to return to the puzzle.', ply - 1, [{ label: 'What happened', ucis: [uci, ...answer] }], true);
+      if (this.stale(id, ply)) return;
+      this.status('Try again, or explore why it fails.');
+      choice = await this.askPuzzleRetry();
+    }
+    this.stopDemo();
+    this.game.takeback();
+    this.log.truncate(this.game.moves.length);
+    pz.phase = 'solving';
+    this.board.setAutoShapes([]);
+    this.sync();
+    this.status('Your move. Try again.');
+  }
+
+  /** After a wrong move: Try again (back to the puzzle position) or Explore (the sideline). */
+  private askPuzzleRetry(): Promise<'retry' | 'explore'> {
+    const box = this.el.choices;
+    box.innerHTML =
+      `<button data-choice="retry" class="primary">Try again</button><button data-choice="explore">Explore</button>` +
+      (this.demo ? `<button data-choice="replay" class="icon ghost" aria-label="Replay the line">↻</button>` : '');
+    box.hidden = false;
+    return new Promise((resolve) => {
+      const board = this.el.board;
+      const tap = () => {
+        if (this.demo?.running) this.endDemo();
+      };
+      board.addEventListener('click', tap, true);
+      this.retryCleanup = () => {
+        box.hidden = true;
+        box.onclick = null;
+        board.removeEventListener('click', tap, true);
+        this.retryCleanup = undefined;
+      };
+      box.onclick = (e) => {
+        const btn = (e.target as HTMLElement).closest('button');
+        if (!btn) return;
+        if (btn.dataset.choice === 'replay') {
+          this.sync();
+          void this.playDemo();
+          return;
+        }
+        this.retryCleanup?.();
+        this.demoToken++;
+        if (this.demo) this.demo.running = false;
+        resolve(btn.dataset.choice as 'retry' | 'explore');
+      };
+    });
+  }
+
+  private async puzzleHint(): Promise<void> {
+    const pz = this.puzzling;
+    const want = pz?.run?.expected;
+    if (!pz || !want || pz.phase !== 'solving') return;
+    pz.hintStep = Math.min(pz.hintStep + 1, 4);
+    pz.attempt.hints = Math.max(pz.attempt.hints, pz.hintStep);
+    const h = puzzleHint(this.game.fen, want, pz.hintStep);
+    this.say({ kind: 'hint', text: h.text, mood: 'thinking', shapes: h.shapes });
+  }
+
+  /** Writes this try to the results (once). */
+  private recordPuzzle(solved: boolean): void {
+    const pz = this.puzzling;
+    if (!pz?.run || pz.recorded) return;
+    pz.attempt.solved = solved;
+    this.puzzleResults.record(pz.run.puzzle, pz.attempt);
+    pz.recent.push(isClean(pz.attempt));
+    pz.recorded = true;
+  }
+
+  private puzzleSolved(): void {
+    const pz = this.puzzling;
+    const run = pz?.run;
+    if (!pz || !run) return;
+    pz.phase = 'solved';
+    pz.solvedCount++;
+    this.recordPuzzle(true);
+    this.thinking = false;
+    const words = solvedWords(run, pz.played);
+    const last = pz.played.at(-1)!;
+    const hinted = pz.attempt.hints >= 3 ? ' Next time, try it with fewer hints.' : '';
+    this.say({ kind: 'praise', text: words.text + hinted, mood: 'pleased', marks: [{ square: last.slice(2, 4) as Square, kind: 'good' }] });
+    this.setMood('pleased');
+    this.sync();
+    this.status('Solved.');
+    const box = this.el.choices;
+    const again = words.theme && (POOL_THEMES as readonly string[]).includes(words.theme) ? words.theme : undefined;
+    box.innerHTML =
+      (again ? `<button data-choice="again">Another ${themeName(again).toLowerCase()}?</button>` : '') +
+      `<button data-choice="next" class="primary">Next puzzle</button>`;
+    box.hidden = false;
+    box.onclick = (e) => {
+      const c = (e.target as HTMLElement).closest('button')?.dataset.choice;
+      if (!c) return;
+      box.hidden = true;
+      box.onclick = null;
+      void this.nextPuzzle(c === 'again' ? again : undefined);
+    };
+  }
+
+  /** Skip: counted as a try that was not solved (the next one is a little easier), never as a miss. */
+  private async skipPuzzle(): Promise<void> {
+    const pz = this.puzzling;
+    if (!pz || pz.phase === 'intro') return;
+    if (this.sideline) this.exitSideline();
+    if (pz.phase !== 'solved') this.recordPuzzle(false);
+    this.el.choices.hidden = true;
+    await this.nextPuzzle();
+  }
+
+  /** Back to the Puzzles tab; the game in progress is back on the board underneath. */
+  private async exitPuzzles(): Promise<void> {
+    const pz = this.puzzling;
+    if (!pz) return;
+    if (this.sideline) this.exitSideline();
+    // A puzzle left half-way counts as tried if the player did something in it.
+    if (pz.phase !== 'solved' && (pz.played.length || pz.attempt.misses || pz.attempt.hints)) this.recordPuzzle(false);
+    this.retryCleanup?.();
+    this.stopDemo();
+    this.el.choices.hidden = true;
+    const current = this.store.current();
+    await this.newGame(current && current.moves.length ? current : undefined);
+    this.showScreen('puzzles');
+  }
+
+  /** The bar under the board in a puzzle: what it is, and Skip / Back to puzzles. */
+  private renderPuzzleBar(): void {
+    const pz = this.puzzling;
+    const bar = this.el['puzzle-bar'];
+    bar.hidden = !pz || !!this.sideline;
+    if (!pz) return;
+    const p = pz.run?.puzzle;
+    const what = pz.theme ? themeName(pz.theme) : `${pz.level.coach.name}'s puzzles`;
+    this.el['puzzle-text'].textContent = [what, p ? `rated ${p.rating}` : '', pz.solvedCount ? `${pz.solvedCount} solved` : ''].filter(Boolean).join(' · ');
+    (this.el['puzzle-skip'] as HTMLButtonElement).disabled = pz.phase === 'intro';
+    this.el['puzzle-skip'].hidden = pz.phase === 'solved'; // the card under the coach offers Next puzzle then
   }
 
   // --- Lines (task 1.9) ---------------------------------------------------

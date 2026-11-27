@@ -125,3 +125,21 @@ export async function loadPool(band: [number, number], base = import.meta.env.BA
   }));
   return files.flat();
 }
+
+const THEME_NAMES: Record<string, string> = {
+  xRayAttack: 'X-ray attack',
+  attackingF2F7: 'Attacking f2 or f7',
+  oneMove: 'One-move puzzles',
+  long: 'Long puzzles',
+  veryLong: 'Very long puzzles',
+  enPassant: 'En passant',
+  pillsburysMate: "Pillsbury's mate",
+  bodenMate: "Boden's mate",
+};
+
+/** A Lichess theme id in words: "mateIn1" → "Mate in 1", "hangingPiece" → "Hanging piece". */
+export function themeName(theme: string): string {
+  if (THEME_NAMES[theme]) return THEME_NAMES[theme];
+  const words = theme.replace(/([A-Z])/g, ' $1').replace(/(\d)/g, ' $1').toLowerCase().trim();
+  return words[0].toUpperCase() + words.slice(1);
+}
