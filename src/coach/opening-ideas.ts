@@ -144,3 +144,26 @@ export function openingIdeas(fenBefore: string, uci: string, previous?: { to: Sq
   if (offer && !after.isCheckmate()) tags.push({ k: 'offers', piece: offer.offered });
   return tags;
 }
+
+/**
+ * The player's pieces and pawns (not the king) that the other side attacks before `uci` and that the moved piece
+ * defends after it (a goal the coach can state: "Your pawn on e4 is attacked: defend it"). Board code only.
+ */
+export function defends(fenBefore: string, uci: string): Placed[] {
+  const before = new Chess(fenBefore);
+  const color = before.turn();
+  const enemy = other(color);
+  const from = uci.slice(0, 2) as Square;
+  const to = uci.slice(2, 4) as Square;
+  const after = new Chess(fenBefore);
+  after.move({ from, to, promotion: uci[4] as PieceSymbol | undefined });
+  const out: Placed[] = [];
+  for (const sq of SQUARES) {
+    const p = before.get(sq);
+    if (!p || p.color !== color || p.type === 'k' || sq === from) continue;
+    if (!before.attackers(sq, enemy).length) continue;
+    if (after.get(sq)?.color !== color) continue;
+    if (after.attackers(sq, color).includes(to)) out.push({ square: sq, piece: p.type });
+  }
+  return out;
+}

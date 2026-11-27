@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { Chess } from 'chess.js';
 import type { CourseTree } from './opening-tree';
 import { courseLines, isCourseMove, judgeAlternative, lessonSteps, lineStatuses, nextLine, pathKey, playerNodes, quizNodes, type CourseLine } from './opening-lesson';
-import { branchWords, definingText, ideaHint, ideaSentence, introWords, moveLabel, punishWords, trapWords } from './opening-words';
+import { branchWords, compareWords, definingText, goalQuestion, ideaHint, ideaSentence, introWords, moveLabel, punishWords, shownWords, trapWords } from './opening-words';
+import { defends } from './opening-ideas';
 import { OpeningProgress } from '../app/openingstore';
 
 const RAW = import.meta.glob('../../public/openings/*.json', { eager: true, query: '?raw', import: 'default' }) as Record<string, string>;
@@ -187,5 +188,50 @@ describe('progress on the device', () => {
     expect(p.importAll({ 'caro-kann-black': { a: { tier: 1, node: 1, at: 100 }, b: { tier: 1, node: 1, at: 100 }, bad: { tier: 'x' } } })).toBe(1);
     expect(p.learned('caro-kann-black').a.at).toBe(100);
     expect(p.countFor('caro-kann-black', 1)).toBe(2);
+  });
+});
+
+describe('goal first (the Learn rework)', () => {
+  const after = (moves: string[]) => {
+    const c = new Chess();
+    for (const m of moves) c.move(m);
+    return c.fen();
+  };
+
+  it('finds the attacked piece a move defends', () => {
+    // 1.e4 c6 2.d4 d5: the pawn on e4 is attacked; 3.Nc3 defends it, 3.e5 moves it (not a defence).
+    const fen = after(['e4', 'c6', 'd4', 'd5']);
+    expect(defends(fen, 'b1c3')).toEqual([{ square: 'e4', piece: 'p' }]);
+    expect(defends(fen, 'e4e5')).toEqual([]);
+    expect(defends(fen, 'g1f3')).toEqual([]);
+  });
+
+  it('states the goal before asking, without naming the move', () => {
+    const l = find(vienna, 1, 'e4 e5 Nc3 Nf6 f4 exf4 e5 Ng8 Nf3');
+    const q = (i: number) => goalQuestion(vienna.nodes[l.nodes[i].parent].fen, l.nodes[i]);
+    // 3.f4 offers a pawn, but the goal is the pawn on e5 it attacks.
+    expect(q(4)).toBe('Attack something of theirs: look at the pawn on e5. Which move does that?');
+    expect(q(8)).toBe('Develop a piece: your knight. Which move does that?');
+    const caroLine = find(caro, 1, 'e4 c6 Nf3 d5 exd5 cxd5');
+    expect(goalQuestion(caro.nodes[caroLine.nodes[5].parent].fen, caroLine.nodes[5])).toBe('Take back. Which move does that?');
+    for (const n of quizNodes(l)) expect(q(l.nodes.indexOf(n))).not.toContain(n.san);
+  });
+
+  it('says what a wrong move does against what the course move does', () => {
+    const l = find(vienna, 1, 'e4 e5 Nc3 Nf6 f4 exf4 e5 Ng8 Nf3');
+    const fen = vienna.nodes[l.nodes[4].parent].fen;
+    // 3.Bc4 instead of 3.f4: it develops, but it does not attack e5.
+    expect(compareWords(fen, 'f1c4', l.nodes[4], 1)).toBe("Bc4 develops the bishop. But it doesn't attack the undefended pawn on e5 and fight for the centre (e5), and that is what this course does here.");
+    expect(compareWords(fen, 'a1a8', l.nodes[4], 1)).toBe('');
+  });
+
+  it('words every shown move', () => {
+    const l = find(vienna, 1, 'e4 e5 Nc3 Nf6 f4 exf4 e5 Ng8 Nf3');
+    const learned = new Set(['e2e4 e7e5 b1c3 g8f6 f2f4']);
+    const { steps } = lessonSteps(vienna, l, 1, (k) => learned.has(k));
+    expect(shownWords(vienna, steps[0], 1)).toMatch(/^1\.e4 /);
+    expect(shownWords(vienna, steps[4], 1)).toMatch(/^You know this one\. 3\.f4 offers a pawn/);
+    expect(shownWords(vienna, steps[5], 1)).toMatch(/^3…exf4 takes the pawn\. At this level, most players reply 3…exf4 \(52%\)/);
+    expect(shownWords(vienna, steps[7], 1)).toMatch(/At this level, the most common reply is 4…Ng8/);
   });
 });

@@ -26,7 +26,7 @@ import { PracticeDeck, isDue as cardDue, newCard } from './practice';
 import { deckKeys, drillPath, drillSteps, openingCardId, whyChoices } from '../coach/opening-drill';
 import { courseLines, isCourseMove, judgeAlternative, lessonSteps, lineStatuses, nextLine, pathKey, quizNodes, sanOf, type CourseLine, type LessonStep } from '../coach/opening-lesson';
 import type { CourseTree } from '../coach/opening-tree';
-import { branchWords, ideaHint, ideaSentence, introWords, lineAfterReply, lineText, nodeLabel, punishWords, trapWords } from '../coach/opening-words';
+import { branchWords, compareWords, definingText, foundSentence, goalQuestion, ideaHint, ideaSentence, introWords, lineAfterReply, lineText, nodeLabel, punishWords, shownWords, trapWords } from '../coach/opening-words';
 import { PuzzleRun, judgeOther, puzzleHint, solvedWords } from './puzzle';
 import { choosePuzzle, nextLevel, pickTheme, startLevel } from './puzzlechoice';
 import { POOL_BANDS, POOL_THEMES, bandsFor, loadBand, themeName, type Puzzle } from './puzzlepool';
@@ -37,6 +37,7 @@ import { Navigation, RemarkLog, plyLabel } from './navigation';
 import { createOpponent, type Opponent } from './opponent';
 import { applyLoaded, fetchTheme, portraitUrl, type LoadedTheme } from './theme';
 import { listAnd } from '../coach/templates';
+import { PIECE_NAME } from '../coach/facts';
 
 type ColorChoice = Color | 'random';
 
@@ -258,6 +259,11 @@ interface LessonSession {
   asked: number;
   /** A drill run (task 6.3) instead of a lesson: their replies chosen toward due moves, every move of yours asked. */
   drill?: DrillRun;
+  /** Wrong tries on the move being asked; after two the coach shows it (then it is not learned). */
+  tries?: number;
+  shown?: boolean;
+  /** "Skip to my move": the shown moves play without waiting for Next until the next question. */
+  skip?: boolean;
 }
 
 interface DrillRun {
@@ -2758,11 +2764,20 @@ export class App {
     this.openingView = courseId;
     this.openingProgress.setCurrent({ course: courseId, tier, line: line.key, at: Date.now() });
     const n = lines.indexOf(line);
+    // The first line steps through the defining moves with their ideas; later lines set them up at once.
+    let start = '';
+    if (n > 0) {
+      while (ls.steps[ls.index]?.node.defining) this.game.play(ls.steps[ls.index++].node.uci);
+      this.sync();
+      start = `It starts ${definingText(tree)}, the ${tree.opening}. `;
+    }
     const intro = n === 0 ? `${introWords(tree, tier)} ` : '';
-    const what = practice ? "You know this line, so let's practise it: I'll ask every move again." : `Line ${n + 1} of ${lines.length}. I'll play the moves you know; you find the new ones.`;
+    const what = practice
+      ? "You know this line, so let's practise it: I'll ask every move again."
+      : `Line ${n + 1} of ${lines.length}. ${start}Tap Next to go through the moves; when it is your turn I'll tell you what is needed and you find the move.`;
     this.say({ kind: 'phase', text: `${intro}${what}`, mood: 'neutral' });
-    this.status('Watch the moves…');
-    await sleep(intro ? 1600 : 900);
+    this.status('');
+    if (!(await this.waitNext(ls, token, 'Start', false))) return;
     await this.walkLesson(ls, token);
   }
 
@@ -2800,6 +2815,7 @@ export class App {
 
   /** Plays the lesson's steps from `index` until the next move to ask, or the end of the line. */
   private async walkLesson(ls: LessonSession, token: number): Promise<void> {
+    if (!ls.drill) return this.stepLesson(ls, token);
     const live = () => token === this.lessonToken && this.lesson === ls;
     const tier = ls.level.level;
     while (live() && ls.index < ls.steps.length) {
@@ -2823,15 +2839,92 @@ export class App {
     if (live()) this.lessonDone(ls);
   }
 
-  /** The player's turn in the lesson: the coach asks first (and a deeper coach says what their move does). */
-  private askLessonMove(ls: LessonSession): void {
+  /**
+   * A lesson's walk (the Learn rework): each shown move plays when the player taps Next, with a sentence on what
+   * it does (and for their move, how often it is played); their move just before a question is worded with it.
+   */
+  private async stepLesson(ls: LessonSession, token: number): Promise<void> {
+    const live = () => token === this.lessonToken && this.lesson === ls;
+    const tier = ls.level.level;
+    let pending = '';
+    while (live() && ls.index < ls.steps.length) {
+      const step = ls.steps[ls.index];
+      if (step.kind === 'quiz') return this.askLessonMove(ls, pending);
+      ls.phase = 'auto';
+      this.thinking = true;
+      await sleep(ls.skip ? 200 : 350);
+      if (!live()) return;
+      this.game.play(step.node.uci);
+      this.board.setAutoShapes([]);
+      this.sync();
+      ls.index++;
+      const words = shownWords(ls.tree, step, tier);
+      if (ls.steps[ls.index]?.kind === 'quiz' && step.node.who === 'opponent') {
+        pending = words;
+        continue;
+      }
+      pending = '';
+      if (ls.skip) continue;
+      this.say({ kind: 'phase', text: words, mood: step.trap ? 'surprised' : 'neutral' });
+      this.status('');
+      if (ls.index < ls.steps.length && !(await this.waitNext(ls, token))) return;
+    }
+    if (live()) this.lessonDone(ls);
+  }
+
+  /** Waits for Next (or Enter / Space). "Skip to my move" plays the shown moves without waiting until the next question. */
+  private waitNext(ls: LessonSession, token: number, label = 'Next ›', skip = true): Promise<boolean> {
+    const live = () => token === this.lessonToken && this.lesson === ls;
+    this.thinking = false;
+    this.sync();
+    const box = this.el.choices;
+    const more = skip && ls.steps.slice(ls.index).some((s) => s.kind === 'quiz');
+    box.innerHTML = (more ? '<button data-choice="skip">Skip to my move</button>' : '') + `<button data-choice="next" class="primary">${label}</button>`;
+    box.hidden = false;
+    return new Promise((resolve) => {
+      const done = () => {
+        box.hidden = true;
+        box.onclick = null;
+        document.removeEventListener('keydown', key);
+        resolve(live());
+      };
+      const key = (e: KeyboardEvent) => {
+        if (!live()) return document.removeEventListener('keydown', key);
+        if ((e.key === 'Enter' || e.key === ' ') && !(e.target instanceof Element && e.target.closest('button, select, input, textarea'))) {
+          e.preventDefault();
+          done();
+        }
+      };
+      document.addEventListener('keydown', key);
+      box.onclick = (e) => {
+        const c = (e.target as HTMLElement).closest('button')?.dataset.choice;
+        if (!c) return;
+        if (c === 'skip') ls.skip = true;
+        done();
+      };
+    });
+  }
+
+  /** The player's turn: in a lesson, the goal first (what is needed, from the course move's board facts); in practice and drills, asked cold. */
+  private askLessonMove(ls: LessonSession, pending = ''): void {
     ls.phase = 'quiz';
     ls.hintStep = 0;
+    ls.tries = 0;
+    ls.shown = false;
+    ls.skip = false;
     if (ls.drill) ls.drill.missed = false;
     this.thinking = false;
     this.sync();
     const tier = ls.level.level;
     const prev = ls.steps[ls.index - 1]?.node;
+    if (!ls.drill) {
+      const node = ls.steps[ls.index].node;
+      const ask = ls.practice ? 'What would you play here?' : goalQuestion(this.game.fen, node);
+      const text = `${pending ? `${pending} ` : ''}${prev?.trap ? 'Punish it. ' : ''}${ask}`;
+      this.say({ kind: 'phase', text, mood: 'thinking' });
+      this.status(`Your move${ls.practice ? ' (practice)' : ''}.`);
+      return;
+    }
     let text = '';
     if (prev?.who === 'opponent' && !prev.defining && !prev.trap && tier >= 3) {
       const idea = ideaSentence(prev.tags, tier, nodeLabel(ls.tree, prev));
@@ -2882,22 +2975,18 @@ export class App {
     }
     if (!live()) return;
     const verdict = alt && course ? judgeAlternative(alt.lossCp, course.lossCp) : undefined;
-    if (verdict === 'fine') {
-      this.game.takeback();
-      this.game.play(node.uci);
-      this.thinking = false;
-      this.sync();
-      return this.lessonFound(ls, token, move.san);
-    }
     if (verdict !== 'mistake') {
+      // Not the course move: what it does against what was needed, the engine's view, then the player plays the course move.
       this.game.takeback();
       this.log.truncate(this.game.moves.length);
       ls.phase = 'quiz';
       this.thinking = false;
       this.sync();
-      const text = alt ? `${move.san} is playable, but the engine rates it ${(alt.lossCp / 100).toFixed(1)} pawns worse than its best move here. Try again.` : `${move.san} is not this course's move. Try again.`;
-      this.say({ kind: 'line', text, mood: 'thinking' });
-      this.status('Your move. Try again.');
+      const parent = ls.tree.nodes[node.parent];
+      const previous = parent.parent >= 0 ? { to: parent.uci.slice(2, 4) as Square, captured: parent.san.includes('x') } : undefined;
+      const cmp = compareWords(fenBefore, uci, node, ls.level.level, previous);
+      const eng = !alt ? '' : verdict === 'fine' ? ' The engine is fine with it too.' : ` The engine rates it ${(alt.lossCp / 100).toFixed(1)} pawns worse than its best move here.`;
+      this.retryOrShow(ls, `${cmp}${eng}`);
       return;
     }
     // A mistake: what goes wrong (the engine's answer as a ghost line), then Try again or Explore (a sideline).
@@ -2933,7 +3022,22 @@ export class App {
     ls.phase = 'quiz';
     this.board.setAutoShapes([]);
     this.sync();
-    this.say({ kind: 'phase', text: 'Try again: what would you play here?', mood: 'thinking' });
+    this.retryOrShow(ls, '');
+  }
+
+  /** After a wrong try: try again (with the goal repeated), or after two tries the course move is shown and the player plays it. */
+  private retryOrShow(ls: LessonSession, why: string): void {
+    const node = ls.steps[ls.index].node;
+    ls.tries = (ls.tries ?? 0) + 1;
+    if (ls.tries >= 2 || ls.shown) {
+      ls.shown = true;
+      const idea = foundSentence(node.tags, ls.level.level);
+      this.say({ kind: 'line', text: `${why ? `${why} ` : ''}This course plays ${nodeLabel(ls.tree, node)}. ${idea} Play it on the board.`.trim(), mood: 'thinking', shapes: [{ orig: node.uci.slice(0, 2) as Square, dest: node.uci.slice(2, 4) as Square, brush: 'green' }] });
+      this.status('Your move: play the arrow.');
+      return;
+    }
+    const goal = ls.practice ? '' : ` ${goalQuestion(this.game.fen, node)}`;
+    this.say({ kind: 'line', text: `${why ? `${why} ` : ''}Try again.${goal}`.trim(), mood: 'thinking' });
     this.status('Your move. Try again.');
   }
 
@@ -2948,8 +3052,8 @@ export class App {
     const node = ls.steps[ls.index].node;
     const prev = tree.nodes[node.parent];
     const label = nodeLabel(tree, node);
-    const idea = ideaSentence(node.tags, tier);
-    const hinted = ls.hintStep > 0;
+    const idea = foundSentence(node.tags, tier);
+    const hinted = ls.hintStep > 0 || !!ls.shown;
     let text = altSan ? `${altSan} works too, but this course plays ${label}.` : `Right: ${label}.`;
     if (idea) text += ` ${idea}`;
     const punish = prev.trap ? punishWords(tree, prev, node) : '';
@@ -2965,15 +3069,15 @@ export class App {
         this.deck.add(openingCardId(tree.id, pathKey(tree, node)));
         ls.learnedNow++;
       }
-    } else if (!ls.practice) text += altSan ? ' Play the course move next time to learn it.' : ' You had a hint, so this move comes back next time.';
+    } else if (!ls.practice) text += altSan ? ' Play the course move next time to learn it.' : ls.shown ? ' I showed you this one, so it comes back next time.' : ' You had a hint, so this move comes back next time.';
     this.say({ kind: 'praise', text, mood: altSan ? 'neutral' : 'pleased', marks: [{ square: node.uci.slice(2, 4) as Square, kind: 'good' }] });
     if (!altSan) this.setMood('pleased');
     ls.phase = 'auto';
     this.thinking = true;
     ls.index++;
     this.sync();
-    this.status(ls.index < ls.steps.length ? 'Their move…' : '');
-    await sleep(Math.min(3200, 1200 + text.length * 10));
+    this.status('');
+    if (ls.index < ls.steps.length && !(await this.waitNext(ls, token))) return;
     if (token !== this.lessonToken || this.lesson !== ls) return;
     await this.walkLesson(ls, token);
   }
@@ -2983,7 +3087,11 @@ export class App {
     if (!ls || ls.phase !== 'quiz') return;
     const node = ls.steps[ls.index].node;
     ls.hintStep = Math.min(ls.hintStep + 1, 2);
-    if (ls.hintStep === 1) this.say({ kind: 'hint', text: ideaHint(node.tags), mood: 'thinking' });
+    const from = node.uci.slice(0, 2) as Square;
+    const p = new Chess(this.game.fen).get(from);
+    // A lesson already said the goal: the first hint is the piece. Drills ask cold: the first hint is the idea.
+    if (ls.hintStep === 1 && !ls.drill && p) this.say({ kind: 'hint', text: `The piece to move is your ${PIECE_NAME[p.type]} on ${from}.`, mood: 'thinking', shapes: [{ orig: from, brush: 'green' }] });
+    else if (ls.hintStep === 1) this.say({ kind: 'hint', text: ideaHint(node.tags), mood: 'thinking' });
     else this.say({ kind: 'hint', text: `This course plays ${nodeLabel(ls.tree, node)}.`, mood: 'thinking', shapes: [{ orig: node.uci.slice(0, 2) as Square, dest: node.uci.slice(2, 4) as Square, brush: 'green' }] });
   }
 
