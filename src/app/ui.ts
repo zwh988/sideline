@@ -567,13 +567,21 @@ export class App {
     mode.value = this.settings.mode;
     color.value = this.settings.color;
 
-    level.addEventListener('change', () => this.updateSettings({ level: Number(level.value) }));
+    level.addEventListener('change', () => {
+      this.updateSettings({ level: Number(level.value) });
+      this.screenCoach();
+    });
+    this.el['ng-level'].addEventListener('change', () => this.screenCoach());
+    this.el.newgame.addEventListener('close', () => this.screenCoach());
     mode.addEventListener('change', () => this.updateSettings({ mode: modeInfo(mode.value).id }));
     color.addEventListener('change', () => this.updateSettings({ color: color.value as ColorChoice }));
     // A long coach remark opens on a tap (phones).
     this.el['bubble-box'].addEventListener('click', () => this.root.querySelector('.coach')!.classList.toggle('expanded'));
     this.root.querySelector('#new-game')!.addEventListener('click', () => this.openNewGameSheet());
-    this.el['ng-cancel'].addEventListener('click', () => (this.el.newgame as HTMLDialogElement).close());
+    this.el['ng-cancel'].addEventListener('click', () => {
+      (this.el.newgame as HTMLDialogElement).close();
+      this.screenCoach(); // back to the board's coach now (the close event can come late)
+    });
     this.el['ng-start'].addEventListener('click', () => {
       this.updateSettings({
         level: Number((this.el['ng-level'] as HTMLSelectElement).value),
@@ -607,6 +615,7 @@ export class App {
       if (pick) {
         this.puzzlePick = Number(pick.dataset.pick);
         this.renderPuzzlesScreen();
+        this.screenCoach();
         return;
       }
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-level]');
@@ -707,6 +716,7 @@ export class App {
     (this.el['ng-color'] as HTMLSelectElement).value = this.settings.color;
     this.showScreen('play');
     (this.el.newgame as HTMLDialogElement).showModal();
+    this.screenCoach();
   }
 
   /** Switches screen: Play is the game itself; Game review and Settings are full screens over it (not modal, so the rail stays usable). */
@@ -745,6 +755,7 @@ export class App {
       if (id === screen) this.el[id].setAttribute('aria-current', 'page');
       else this.el[id].removeAttribute('aria-current');
     }
+    this.screenCoach();
   }
 
   /** Starts a new game, or (with `resume`) carries on a saved one exactly where it stopped. */
@@ -1209,9 +1220,32 @@ export class App {
 
   private face?: Mood;
   private coachToken = 0;
+  /** The coach of what is on the board (game, review, puzzle or lesson); a picker on another screen only previews. */
+  private boardCoach?: Level;
+
+  /**
+   * The whole app takes the look of the coach on screen: the one picked on Puzzles, Openings or Settings while
+   * that screen is open (or in the New game sheet), else the board's coach.
+   */
+  private screenCoach(): void {
+    const open = (id: string) => (this.el[id] as HTMLDialogElement).open;
+    const mine = this.settings.level;
+    const picked = open('newgame')
+      ? Number((this.el['ng-level'] as HTMLSelectElement).value)
+      : open('puzzles-screen')
+        ? this.puzzlePick || mine
+        : open('openings-screen')
+          ? this.openingPick || mine
+          : open('settings-screen')
+            ? mine
+            : undefined;
+    if (picked) void this.showCoach(levelInfo(picked), true);
+    else if (this.boardCoach) void this.showCoach(this.boardCoach);
+  }
 
   /** Shows the coach of a tier: its name, and its theme pack (board, pieces, accent, portraits). */
-  private async showCoach(level: Level): Promise<void> {
+  private async showCoach(level: Level, preview = false): Promise<void> {
+    if (!preview) this.boardCoach = level;
     const token = ++this.coachToken;
     for (const el of this.root.querySelectorAll('.js-coach-name')) el.textContent = level.coach.name;
     this.el.portrait.title = level.coach.name;
@@ -2718,7 +2752,8 @@ export class App {
     const pick = t.closest<HTMLElement>('[data-opick]');
     if (pick) {
       this.openingPick = Number(pick.dataset.opick);
-      return this.renderOpeningsScreen();
+      this.renderOpeningsScreen();
+      return this.screenCoach();
     }
     if (t.closest('[data-ocontinue]')) return void this.continueLesson();
     const drill = t.closest<HTMLElement>('[data-odrill]');
