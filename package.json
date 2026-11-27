@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "concepts": "node scripts/concepts.mjs",
-    "puzzles": "node scripts/build-puzzles.mjs"
+    "puzzles": "node scripts/build-puzzles.mjs",
+    "openings": "node scripts/build-opening-trees.mjs"
   },
   "dependencies": {
     "@lichess-org/chessground": "^10.5.0",

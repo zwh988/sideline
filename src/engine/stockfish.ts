@@ -30,25 +30,38 @@ export interface AnalyseOptions {
   multiPv?: number;
 }
 
-const ENGINE_URL = `${import.meta.env.BASE_URL}engine/stockfish-19-lite-single.js`;
+/** How the engine is reached: a Web Worker in the page, a child process at build time (scripts/). */
+export interface UciTransport {
+  send(cmd: string): void;
+  onLine(listener: (line: string) => void): void;
+  terminate(): void;
+}
+
+/** The lite single-threaded build, as a Web Worker (GitHub Pages can't multi-thread). */
+function workerTransport(): UciTransport {
+  const worker = new Worker(`${import.meta.env.BASE_URL}engine/stockfish-19-lite-single.js`);
+  return {
+    send: (cmd) => worker.postMessage(cmd),
+    onLine: (listener) => (worker.onmessage = (e: MessageEvent<string>) => listener(String(e.data))),
+    terminate: () => worker.terminate(),
+  };
+}
 
 export class Stockfish {
-  private worker: Worker;
   private listeners = new Set<(line: string) => void>();
   /** UCI option names the engine reported, e.g. "UCI_Elo", "Skill Level". */
   options: string[] = [];
   name = '';
 
-  private constructor() {
-    this.worker = new Worker(ENGINE_URL);
-    this.worker.onmessage = (e: MessageEvent<string>) => {
-      for (const l of this.listeners) l(String(e.data));
-    };
+  private constructor(private transport: UciTransport) {
+    transport.onLine((line) => {
+      for (const l of this.listeners) l(line);
+    });
   }
 
-  /** Starts the worker and waits until the engine is ready. */
-  static async create(): Promise<Stockfish> {
-    const sf = new Stockfish();
+  /** Starts the engine (by default the page's worker) and waits until it is ready. */
+  static async create(transport: UciTransport = workerTransport()): Promise<Stockfish> {
+    const sf = new Stockfish(transport);
     await sf.waitFor('uci', (line) => {
       if (line.startsWith('id name ')) sf.name = line.slice(8);
       const opt = line.match(/^option name (.+?) type /);
@@ -109,11 +122,11 @@ export class Stockfish {
   }
 
   terminate(): void {
-    this.worker.terminate();
+    this.transport.terminate();
   }
 
   private send(cmd: string): void {
-    this.worker.postMessage(cmd);
+    this.transport.send(cmd);
   }
 
   /** Sends a command and resolves when `done` returns true for an output line. */
