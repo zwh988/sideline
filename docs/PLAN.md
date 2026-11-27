@@ -388,13 +388,21 @@ The player's own moves in each course are chosen when building (Stockfish's top 
 - **Done when:** all 14 courses build; tests cover the tree rules (a trap included, a rare non-trap dropped, tiers nest: Pip's tree ⊆ Ardea's), the new idea detectors on real FENs, and every player move in every course passes the Stockfish check (a test over the files); the per-course player moves are listed in STATE for review.
 
 ### ⬜ 6.2 Openings tab and Learn
-- **Openings tab:** list of courses (opening, side, a small board of the start), pick a coach (default: your tier's coach; theme switches); progress per course and coach (nodes learned / total).
-- **Learn:** the coach walks the tree, most common line first, then the branches:
-  - **Your move:** the coach asks first (principle 3: "What would you play here?"). Right → it names the idea (layer 1). Wrong → a sideline shows what goes wrong (the Lines chart) and you retry; a reasonable alternative is accepted with "that works too, but this course plays …".
-  - **Their move:** "At this level, most players reply …Nf6 (60%), some play …Bc5 (25%)", each with its idea; then the course continues with each reply in turn. Traps get their own beat: "Some players grab …exf4? Here's how to punish it" (layer 2).
-  - Deeper coaches say more per move: more tags shown, longer consequence lines, more replies covered; the coach's phrase bank (1.14) gives the voice.
-- Starts from the initial position, playing the defining moves quickly (shown, not quizzed), so the player sees how the opening arises.
+Design agreed with the user (Nov 27).
+- **Openings tab** (laid out like the Puzzles tab): the coach faces at the top (default: your tier's coach; the theme follows), a Continue card if a lesson is in progress, then the courses **by side, then by what you face**, each card with a small board and progress for the chosen coach ("12 / 25 moves learned"):
+  - *Play as White.* 1.e4: Vienna Gambit, Italian, Scotch; when they reply: vs Caro-Kann, vs Scandinavian. 1.d4: London, Queen's Gambit.
+  - *Play as Black.* Against 1.e4: Caro-Kann, Scandinavian, or 1…e5 and then vs Vienna, vs Italian, vs Scotch (White picks the second move, so a 1…e5 player needs all three; say so). Against 1.d4: Queen's Gambit Declined, vs London.
+- **Course page:** the intro at the top (one or two sentences from the data: name, defining moves, the most common replies at this coach's band with percentages; no plans until 6.4), then **every line** of the course for that coach, most common first, each marked learned / next / trap. Any line can be (re)played; replaying is practice and keeps learned moves learned. "Next line" starts the most common unlearned one.
+- **A lesson = one line**, from the start to the end of one branch (3–8 player moves). The defining moves and already-learned moves play by themselves (shown, not quizzed). Lesson 1 opens with the intro, also on a replay.
+- **Your move:** the coach asks first (principle 3: "What would you play here?").
+  - The course move → it names the idea (layer 1 tags), counts as learned if found without a hint.
+  - Another move Stockfish calls fine (within the course's slack; the analyst at runtime) → "That works too, but this course plays …", the course move is played, not counted as learned.
+  - A mistake → a sideline shows what goes wrong (the Lines chart), retry.
+  - Hint: the idea first ("Attack the centre"), then the move.
+- **Their move:** at a branch, "At this level, most players reply …Nf6 (35%), some play …Nc6 (25%) or …Bc5 (10%)" (words and numbers, from the course file's share for the coach's tier); this lesson follows one, the others are their own lines. Traps get their own beat: "Some players play …Ng4? Here's how to punish it" (layer 2).
+- Deeper coaches say more per move: more tags shown, longer consequence lines, more replies covered; the coach's phrase bank (1.14) gives the voice.
 - Rule 1: every sentence comes from tags, the stored lines and templates; nothing hand-written yet.
+- Progress (learned player nodes per course and coach) is saved on the device; Drill (6.3) builds on it.
 - **Done when:** the Vienna (White) and Caro-Kann (Black) courses can be learned end to end with Pip and with Ardea in the browser at 375×650 and desktop; tests for the walk order and answer checking.
 
 ### ⬜ 6.3 Drill (spaced repetition of the lines)
