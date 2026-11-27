@@ -15,6 +15,7 @@
     "test:watch": "vitest",
     "concepts": "node scripts/concepts.mjs",
     "puzzles": "node scripts/build-puzzles.mjs",
+    "puzzle-pool": "node scripts/build-puzzle-pool.mjs",
     "openings": "node scripts/build-opening-trees.mjs"
   },
   "dependencies": {

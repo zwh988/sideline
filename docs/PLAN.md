@@ -222,7 +222,7 @@ Ideas for 1.12e (nothing here is decided beyond the flow above):
 
 ### ⬜ 1.14 Six tiers, six animal coaches, a theme per tier
 - ✅ **1.14a Infrastructure with placeholders** (Nov 27): `Level.coach`/`shownRating`/`theme`, six packs `public/themes/coach1…6` (board and accent from the table below, pieces reused), placeholder portraits per mood ("Coach N" + mood, `scripts/make-portraits.mjs`), switching at the next game (decided), Review uses the game's coach; bigger face; unfolded-foldable layout (coach column beside the board). STATE decision 35.
-- ⬜ **1.14b Personas** (when the user has chosen them): names, animals, real portraits (drop into `portraits/`), per-coach piece colours, the shared highlight colours, contrast of highlights and arrows on all six boards, phrase banks (voice), `specialty.puzzleThemes` and the `build-puzzles.mjs` themes, a board/pieces override setting.
+- ⬜ **1.14b Personas** (when the user has chosen them): names, animals, real portraits (drop into `portraits/`), per-coach piece colours, the shared highlight colours, contrast of highlights and arrows on all six boards, phrase banks (voice), a board/pieces override setting. (`specialty.puzzleThemes` and the puzzle themes were added in 3.1 with the placeholder coaches; check them when the personas are chosen.)
 Agreed with the user (Nov 27): the 6 levels stay as in the spec and `levels.ts`, but each one is a **tier with its own animal coach** (no generic "Coach"), shown with **one exact rating** instead of a range, and **picking a tier switches the theme** (board colours, piece set, accent, portraits). Replaces the spec's four personas by band. Pulls part of Phase 5 (5.1 personas, 5.2 theme packs) forward; the art itself comes later from the developer, the placeholders stay until then. Align the two new animals with the user before building.
 
 **The tiers** (shown number = the strength the coach plays at, as an approximate Chess.com rating; Maia's Lichess number stays in code; check the conversion against the bands in `levels.ts` and say "about" in the UI):
@@ -309,7 +309,7 @@ Designed with the user (Nov 27). Needs 1.14 (coaches, puzzle specialties); share
 - **First version sources:** the coach's set, your own missed tactics, Today. Woodpecker sets after (3.4).
 - **Skipped (decided):** "defend" puzzles from tactics the player allowed (many moves are safe, hard to grade).
 
-### ⬜ 3.1 Puzzle pool
+### ✅ 3.1 Puzzle pool (Nov 27; STATE decision 37)
 - New output beside `public/puzzles/sample.json` (keep that file: `npm run concepts` and its tests use it): `public/puzzles/pool/<band>.json`, one file per rating band so the app loads only the band it needs.
 - Themes: the existing `THEMES` in `scripts/build-puzzles.mjs` plus those 1.14 added to the coach mapping (`oneMove`, `opening`, `kingsideAttack`, `pawnEndgame`, `endgame`, `rookEndgame`, `advancedPawn`, `long`, `veryLong`) and any other Lichess theme that matters below ~2000; check every name against the CSV's theme column.
 - Bands: Lichess puzzle ratings in steps of about 200 from the lowest up to ~2200. Lichess puzzle ratings run higher than Chess.com's at the low end: write down each coach's band (Pip's must still be easy) in the coach data, and check with a few hand-solved samples.

@@ -1,5 +1,6 @@
 // Builds a small, reproducible sample of the Lichess puzzle database (CC0)
-// for scoring the concept detectors (npm run concepts) and, later, practice.
+// for scoring the concept detectors (npm run concepts). Puzzles for practice
+// come from the pool instead (scripts/build-puzzle-pool.mjs).
 //
 //   1. Download https://database.lichess.org/lichess_db_puzzle.csv.zst (~310 MB)
 //      into data/ (git-ignored).
@@ -7,9 +8,8 @@
 //
 // Output: public/puzzles/sample.json. Nothing here runs in the app; the app
 // only ever loads our own static file (rule 4).
-import { createReadStream, mkdirSync, writeFileSync, existsSync, openSync, readSync, closeSync } from 'node:fs';
-import { createInterface } from 'node:readline';
-import { createZstdDecompress } from 'node:zlib';
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { puzzleRows } from './lichess-puzzles.mjs';
 
 const source = process.argv[2] ?? 'data/lichess_db_puzzle.csv.zst';
 const perBucket = Number(process.argv[3] ?? 40);
@@ -18,22 +18,9 @@ if (!existsSync(source)) {
   process.exit(1);
 }
 
-// The Lichess file starts with a skippable zstd frame (magic 0x184D2A5?) that Node's decoder rejects: skip it.
-function zstdStart(path) {
-  const fd = openSync(path, 'r');
-  const head = Buffer.alloc(8);
-  let pos = 0;
-  try {
-    for (;;) {
-      if (readSync(fd, head, 0, 8, pos) < 8) return pos;
-      const magic = head.readUInt32LE(0);
-      if ((magic & 0xfffffff0) !== 0x184d2a50) return pos;
-      pos += 8 + head.readUInt32LE(4);
-    }
-  } finally {
-    closeSync(fd);
-  }
-}
+// Note: the committed sample.json (2026-11-24) was built before lichess-puzzles.mjs read past the
+// file's first zstd frame, so it holds puzzles from the first 176,448 rows only. A rebuild reads
+// all of them (and gives a different sample, so `npm run concepts` numbers would move).
 
 // Themes that matter below ~1600 (keep in sync with DETECTABLE / NOT_YET in src/coach/concepts.ts).
 const THEMES = [
@@ -58,10 +45,9 @@ const buckets = new Map(); // "theme|band" -> { seen, items }
 const wanted = new Set(THEMES);
 let rows = 0;
 
-const rl = createInterface({ input: createReadStream(source, { start: zstdStart(source) }).pipe(createZstdDecompress()), crlfDelay: Infinity });
-for await (const line of rl) {
-  if (!rows++) continue; // header
-  const [id, fen, moves, rating, rd, popularity, , themes] = line.split(',');
+for await (const row of puzzleRows(source)) {
+  rows++;
+  const [id, fen, moves, rating, rd, popularity, , themes] = row;
   const r = Number(rating);
   if (Number(rd) > 90 || Number(popularity) < 80) continue; // well-rated, liked puzzles only
   const band = BANDS.findIndex(([lo, hi]) => r >= lo && r < hi);
@@ -95,9 +81,9 @@ writeFileSync(
     source: 'https://database.lichess.org/ (puzzles, CC0)',
     bands: BANDS,
     perBucket,
-    totalRows: rows - 1,
+    totalRows: rows,
     puzzles,
   }),
 );
 const summary = [...buckets.entries()].map(([k, b]) => `${k}: ${b.items.length}/${b.seen}`).join('\n');
-console.log(`${puzzles.length} puzzles from ${rows - 1} rows\n${summary}`);
+console.log(`${puzzles.length} puzzles from ${rows} rows\n${summary}`);
