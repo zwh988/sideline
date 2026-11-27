@@ -387,6 +387,7 @@ body {
 
   :root {
     --rail-w: 0px; /* no rail: the board and the full screens use the whole width */
+    font-size: 15px; /* text a step smaller than on desktop (the user, Nov 27); every text size is in rem */
   }
 
   .layout {
