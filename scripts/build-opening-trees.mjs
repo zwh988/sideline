@@ -171,12 +171,20 @@ function explorer(fen, band) {
   return job;
 }
 
+/** The explorer writes castling as the king taking its own rook (e1h1); the tree uses e1g1. */
+const CASTLING = { e1h1: 'e1g1', e1a1: 'e1c1', e8h8: 'e8g8', e8a8: 'e8c8' };
+function castlingUci(fen, uci) {
+  if (!CASTLING[uci]) return uci;
+  const rank = fen.split(' ')[0].split('/')[uci[1] === '1' ? 7 : 0].replace(/\d/g, (d) => '.'.repeat(+d));
+  return rank[4] === (uci[1] === '1' ? 'K' : 'k') ? CASTLING[uci] : uci;
+}
+
 // ---------- Build ----------
 const providers = {
   async replies(fen, history, rule) {
     if (TOKEN) {
       const ex = await explorer(fen, rule.band);
-      if (ex.g >= MIN_GAMES) return { source: 'explorer', games: ex.g, shares: new Map(ex.m.map(([u, c]) => [u, c / ex.g])) };
+      if (ex.g >= MIN_GAMES) return { source: 'explorer', games: ex.g, shares: new Map(ex.m.map(([u, c]) => [castlingUci(fen, u), c / ex.g])) };
     }
     return { source: 'maia', shares: await maiaPolicy(fen, history, rule.maiaElo) };
   },

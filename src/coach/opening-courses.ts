@@ -31,7 +31,7 @@ export const COURSES: CourseDef[] = [
     role: 'play',
     defining: ['e4', 'e5', 'Nc3'],
     // The gambit where it works, the quiet Vienna where it doesn't (PLAN 6).
-    moves: { 'e4 e5 Nc3 Nf6': 'f4', 'e4 e5 Nc3 Nc6': 'f4', 'e4 e5 Nc3 Bc5': 'Bc4' },
+    moves: { 'e4 e5 Nc3 Nf6': 'f4', 'e4 e5 Nc3 Bc5': 'Bc4' },
   },
   {
     id: 'vienna-black',
@@ -50,7 +50,7 @@ export const COURSES: CourseDef[] = [
     defining: ['e4', 'c6'],
     moves: { 'e4 c6': 'd4', 'e4 c6 d4 d5': 'e5' }, // one simple system: the Advance
   },
-  { id: 'italian-white', opening: 'Italian Game', side: 'w', role: 'play', defining: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'] },
+  { id: 'italian-white', opening: 'Italian Game', side: 'w', role: 'play', defining: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'], moves: { 'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d4 exd4 cxd4 Bb4+': 'Bd2' } },
   { id: 'italian-black', opening: 'Italian Game', side: 'b', role: 'meet', defining: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'] },
   { id: 'scotch-white', opening: 'Scotch Game', side: 'w', role: 'play', defining: ['e4', 'e5', 'Nf3', 'Nc6', 'd4'] },
   { id: 'scotch-black', opening: 'Scotch Game', side: 'b', role: 'meet', defining: ['e4', 'e5', 'Nf3', 'Nc6', 'd4'] },

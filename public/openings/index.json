@@ -1,0 +1,461 @@
+{
+ "version": 1,
+ "engine": "Stockfish 19 WASM",
+ "depth": 16,
+ "courses": [
+  {
+   "id": "vienna-white",
+   "opening": "Vienna Game",
+   "side": "w",
+   "role": "play",
+   "defining": [
+    "e4",
+    "e5",
+    "Nc3"
+   ],
+   "startFen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 1 2",
+   "nodes": [
+    34,
+    54,
+    66,
+    118,
+    160,
+    208
+   ],
+   "playerNodes": [
+    15,
+    25,
+    31,
+    57,
+    78,
+    102
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 85322
+  },
+  {
+   "id": "vienna-black",
+   "opening": "Vienna Game",
+   "side": "b",
+   "role": "meet",
+   "defining": [
+    "e4",
+    "e5",
+    "Nc3",
+    "Nf6"
+   ],
+   "startFen": "rnbqkb1r/pppp1ppp/5n2/4p3/4P3/2N5/PPPP1PPP/R1BQKBNR w KQkq - 2 3",
+   "nodes": [
+    29,
+    35,
+    63,
+    99,
+    143,
+    203
+   ],
+   "playerNodes": [
+    12,
+    15,
+    29,
+    47,
+    69,
+    99
+   ],
+   "sources": [
+    "e",
+    "m"
+   ],
+   "bytes": 82953
+  },
+  {
+   "id": "caro-kann-black",
+   "opening": "Caro-Kann Defence",
+   "side": "b",
+   "role": "play",
+   "defining": [
+    "e4",
+    "c6"
+   ],
+   "startFen": "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+   "nodes": [
+    25,
+    37,
+    55,
+    75,
+    97,
+    159
+   ],
+   "playerNodes": [
+    11,
+    17,
+    26,
+    36,
+    47,
+    78
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 62665
+  },
+  {
+   "id": "caro-kann-white",
+   "opening": "Caro-Kann Defence",
+   "side": "w",
+   "role": "meet",
+   "defining": [
+    "e4",
+    "c6"
+   ],
+   "startFen": "rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+   "nodes": [
+    12,
+    18,
+    28,
+    50,
+    74,
+    114
+   ],
+   "playerNodes": [
+    5,
+    8,
+    13,
+    24,
+    36,
+    56
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 44327
+  },
+  {
+   "id": "italian-white",
+   "opening": "Italian Game",
+   "side": "w",
+   "role": "play",
+   "defining": [
+    "e4",
+    "e5",
+    "Nf3",
+    "Nc6",
+    "Bc4"
+   ],
+   "startFen": "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+   "nodes": [
+    38,
+    52,
+    78,
+    102,
+    156,
+    234
+   ],
+   "playerNodes": [
+    16,
+    23,
+    36,
+    48,
+    75,
+    114
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 94965
+  },
+  {
+   "id": "italian-black",
+   "opening": "Italian Game",
+   "side": "b",
+   "role": "meet",
+   "defining": [
+    "e4",
+    "e5",
+    "Nf3",
+    "Nc6",
+    "Bc4"
+   ],
+   "startFen": "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+   "nodes": [
+    29,
+    41,
+    49,
+    75,
+    127,
+    221
+   ],
+   "playerNodes": [
+    12,
+    18,
+    22,
+    35,
+    61,
+    108
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 89216
+  },
+  {
+   "id": "scotch-white",
+   "opening": "Scotch Game",
+   "side": "w",
+   "role": "play",
+   "defining": [
+    "e4",
+    "e5",
+    "Nf3",
+    "Nc6",
+    "d4"
+   ],
+   "startFen": "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 0 3",
+   "nodes": [
+    40,
+    52,
+    66,
+    102,
+    172,
+    248
+   ],
+   "playerNodes": [
+    17,
+    23,
+    30,
+    48,
+    83,
+    121
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 104074
+  },
+  {
+   "id": "scotch-black",
+   "opening": "Scotch Game",
+   "side": "b",
+   "role": "meet",
+   "defining": [
+    "e4",
+    "e5",
+    "Nf3",
+    "Nc6",
+    "d4"
+   ],
+   "startFen": "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 0 3",
+   "nodes": [
+    15,
+    27,
+    49,
+    83,
+    141,
+    247
+   ],
+   "playerNodes": [
+    5,
+    11,
+    22,
+    39,
+    68,
+    121
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 100965
+  },
+  {
+   "id": "london-white",
+   "opening": "London System",
+   "side": "w",
+   "role": "play",
+   "defining": [
+    "d4"
+   ],
+   "startFen": "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1",
+   "nodes": [
+    14,
+    22,
+    32,
+    46,
+    70,
+    120
+   ],
+   "playerNodes": [
+    6,
+    10,
+    15,
+    22,
+    34,
+    59
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 46810
+  },
+  {
+   "id": "london-black",
+   "opening": "London System",
+   "side": "b",
+   "role": "meet",
+   "defining": [
+    "d4",
+    "d5",
+    "Bf4"
+   ],
+   "startFen": "rnbqkbnr/ppp1pppp/8/3p4/3P1B2/8/PPP1PPPP/RN1QKBNR b KQkq - 1 2",
+   "nodes": [
+    21,
+    27,
+    41,
+    55,
+    89,
+    157
+   ],
+   "playerNodes": [
+    9,
+    12,
+    19,
+    26,
+    43,
+    77
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 59472
+  },
+  {
+   "id": "queens-gambit-white",
+   "opening": "Queen's Gambit",
+   "side": "w",
+   "role": "play",
+   "defining": [
+    "d4",
+    "d5",
+    "c4"
+   ],
+   "startFen": "rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq - 0 2",
+   "nodes": [
+    24,
+    32,
+    42,
+    68,
+    108,
+    148
+   ],
+   "playerNodes": [
+    10,
+    14,
+    19,
+    32,
+    52,
+    72
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 59710
+  },
+  {
+   "id": "queens-gambit-black",
+   "opening": "Queen's Gambit Declined",
+   "side": "b",
+   "role": "meet",
+   "defining": [
+    "d4",
+    "d5",
+    "c4",
+    "e6"
+   ],
+   "startFen": "rnbqkbnr/ppp2ppp/4p3/3p4/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 3",
+   "nodes": [
+    23,
+    27,
+    35,
+    55,
+    95,
+    139
+   ],
+   "playerNodes": [
+    9,
+    11,
+    15,
+    25,
+    45,
+    67
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 54082
+  },
+  {
+   "id": "scandinavian-black",
+   "opening": "Scandinavian Defence",
+   "side": "b",
+   "role": "play",
+   "defining": [
+    "e4",
+    "d5"
+   ],
+   "startFen": "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+   "nodes": [
+    29,
+    33,
+    41,
+    65,
+    89,
+    157
+   ],
+   "playerNodes": [
+    13,
+    15,
+    19,
+    31,
+    43,
+    77
+   ],
+   "sources": [
+    "e"
+   ],
+   "bytes": 60324
+  },
+  {
+   "id": "scandinavian-white",
+   "opening": "Scandinavian Defence",
+   "side": "w",
+   "role": "meet",
+   "defining": [
+    "e4",
+    "d5"
+   ],
+   "startFen": "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+   "nodes": [
+    14,
+    22,
+    54,
+    84,
+    148,
+    238
+   ],
+   "playerNodes": [
+    6,
+    10,
+    26,
+    41,
+    73,
+    118
+   ],
+   "sources": [
+    "e",
+    "m"
+   ],
+   "bytes": 96769
+  }
+ ]
+}
