@@ -236,7 +236,7 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 
 ## Theme colours
 
-To be chosen from the user's art (memory: use the user's own hex codes, never colours made up from generated images). Each coach's colours live in `public/themes/<id>/theme.json` (board light/dark, accent, accentStrong, accentSoft).
+From the user's art (Nov 29; STATE decision 50): the header is the background of the coach's picture, the accent a bold colour of the coach that carries white text, the board from the animal's own colours. Each coach's colours live in `public/themes/<id>/theme.json` (board light/dark, accent, accentStrong = header, accentSoft); portraits in `portraits/<mood>.png`.
 
 ## Open
 

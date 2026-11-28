@@ -1,8 +1,8 @@
 {
   "name": "Oscar",
   "board": {
-    "light": "#EDE6CF",
-    "dark": "#8C9A6A"
+    "light": "#F3F1EC",
+    "dark": "#94A5DE"
   },
   "pieces": {
     "folder": "../default/pieces",
@@ -15,13 +15,13 @@
     "check": "rgba(220, 30, 30, 0.85)"
   },
   "coach": {
-    "accent": "#5F8A5B",
-    "accentStrong": "#4E7A4A",
-    "accentSoft": "#E4EEDF"
+    "accent": "#3659CF",
+    "accentStrong": "#3659CF",
+    "accentSoft": "#E4EBFF"
   },
   "portraits": {
     "folder": "portraits",
-    "format": "svg"
+    "format": "png"
   },
   "credits": "Pieces: rhosgfx by RhosGFX (CC0 1.0), via the Lichess piece collection."
 }
