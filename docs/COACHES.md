@@ -8,7 +8,7 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 
 - Short: a phrase is a few words, at most one short sentence.
 - Kind underneath. Even Jimmeny's yelling is never at the player, only *about* the board.
-- No real-world brands, slurs or swearing. Jimmeny's "dang" and Doug's sighs are the ceiling.
+- No real-world brands, slurs or swearing. Jimmeny's "dang" and Mortimer's "bah" are the ceiling.
 - One gimmick per line at most (one CAPS word, one Britishism, one bit of office jargon).
 - The coach is the same character in games, Review, Puzzles and Openings.
 
@@ -33,6 +33,21 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 
 **Plays like (5.1).** Simple, natural moves; leaves things loose sometimes, like a real beginner.
 
+**Lines (agreed Nov 29).**
+- *Game start:* "Yo, let's get it!" · "Ayy, new game!" · "Headphones on. Let's go!"
+- *Your good move / tactic found:* "Yo, let's GO!" · "Clean!" · "Ooh, that's slick." · "Sheesh!"
+- *Your mistake:* "Uh oh, hold up…" · "Wait wait wait." · "Hmm, wanna rewind that?"
+- *Your blunder:* "Yo… WAIT." · "Oh no no no." · "Hold up, hold up!"
+- *Tactic available:* "Psst… something's cooking." · "Ooh, I smell something."
+- *You spotted his threat:* "Ha, you caught that!" · "Aw, you peeped it."
+- *Thinking aloud on his move:* "Lemme vibe on this…" · "Okay okay, my turn."
+- *His own weaker move:* "Okay, that one was not my best." · "My bad, my bad." · "Lowkey messed that up."
+- *Puzzle solved:* "Let's GO!" · "You crushed it!" · "Easy!"
+- *Puzzle missed:* "Nah, run it back!" · "So close! Again?"
+- *Opening lesson, right answer:* "Yesss!" · "You got it!"
+- *Small talk (opening over, endgame):* "Okay, halftime!" · "Endgame vibes."
+- *Game end:* win "GG! You got me!" · loss "GG! Run it back?" · draw "Tie game. Respect."
+
 ---
 
 ## Tier 2 · Cheese · about 550
@@ -54,6 +69,21 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 
 **Plays like (5.1).** Calm and steady; sets up quiet tricks (forks, back rank) rather than charging.
 
+**Lines (agreed Nov 29).**
+- *Game start:* "Hey. No rush." · "Alright. Let's play." · "Take your time."
+- *Your good move / tactic found:* "Nice." · "Smooth." · "Mm. Clean." · "Easy."
+- *Your mistake:* "Hm. Take a breath." · "Easy now." · "Slow down a sec."
+- *Your blunder:* "…Oh!" · "Whoa. Okay." · "Hm. Look again."
+- *Tactic available:* "Look closer." · "Something's here. No rush."
+- *You spotted her threat:* "Ah. You saw it." · "Mm. Good eyes."
+- *Thinking aloud on her move:* "Let me sit with this." · "Hm." · "Okay."
+- *Her own weaker move:* "Eh. Not my finest." · "Hm. Sloppy of me." · "Oops. Mine."
+- *Puzzle solved:* "Nice." · "Smooth." · first try: "Oh, nice!"
+- *Puzzle missed:* "Eh, happens. Again." · "Breathe. Try again."
+- *Opening lesson, right answer:* "Yep." · "That's it."
+- *Small talk (opening over, endgame):* "Opening's done. Breathe." · "Endgame. Slow is good."
+- *Game end:* win "Well played. Really." · loss "Good game. Again?" · draw "Even. Fair."
+
 ---
 
 ## Tier 3 · Jimmeny · about 850
@@ -64,7 +94,7 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 
 **Who he is.** The loudest gunslinger in the saloon. Cocky, brash, always spoiling for a fight on the board, and secretly delighted when you beat him. All bark, good heart.
 
-**Voice.** Loud, Wild West. One CAPS word per line, not whole lines (readability on a phone). "YEEHAW", "partner", "varmint", "draw!", "this town ain't big enough". Brags about himself, not against you.
+**Voice.** Loud, Wild West. One CAPS word per line, not whole lines (readability on a phone). "YEEHAW", "partner", "varmint", "draw!", "this town ain't big enough". **A heavy Southern accent in every line, and he calls the player "partner"** (most lines): dropped g's, "y'all", "reckon", "fixin' to", "ain't", "mighty". Brags about himself, not against you.
 
 **Moods.**
 - *Pleased (your good move):* grudging respect. "Well, I'll be. Nice shootin', partner."
@@ -75,13 +105,28 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 
 **Plays like (5.1).** Early attacks and gambits; goes for the king. Teaches you to stay safe and punish over-reaching.
 
+**Lines (agreed Nov 29).**
+- *Game start:* "Howdy, partner! Y'all ready to DRAW?" · "This here town ain't big enough for the both of us, partner." · "Saddle up, partner. It's high NOON."
+- *Your good move / tactic found:* "Well, I'll be. Mighty fine shootin', partner." · "YEEHAW! Now that's how ya do it, partner." · "Dang, you're quicker on the draw than I reckoned."
+- *Your mistake:* "WHOA there, partner!" · "Easy on that trigger, partner." · "Now hold on just a minute, partner…"
+- *Your blunder:* "Well, DANG, partner." · "WHOA, WHOA, WHOA!" (the one line allowed three CAPS) · "Lordy, partner… I reckon ya might wanna look again."
+- *Tactic available:* "I'm smellin' gunpowder, partner." · "Somethin's fixin' to happen here, partner."
+- *You spotted his threat:* "Hmph. Sniffed out my ambush, didja, partner?" · "Ya got sharp eyes, partner."
+- *Thinking aloud on his move:* "Hold yer horses, partner, I'm aimin'…" · "Lemme chew on this a spell." · "Steady now… steady…" (no brags before his own move: it may be weak)
+- *His own weaker move:* "That there was… a warnin' shot." · "Aw, dang. Plumb misfired." · "Sun was in my eyes, partner."
+- *Puzzle solved:* "YEEHAW!" · "Fastest gun this side of the Mississippi!" · first try: "Bullseye, partner!"
+- *Puzzle missed:* "Reload, partner. Ya got this." · "Missed 'er! Saddle on back up, partner."
+- *Opening lesson, right answer:* "Darn tootin', partner!" · "Now yer ridin'!"
+- *Small talk (opening over, endgame):* "Openin's done, partner. Time to RIDE." · "Endgame, partner. Last ones standin'."
+- *Game end:* win "Well, I'll be. Ya outdrew me fair 'n' square, partner." · loss "Mosey on back anytime, partner." · draw "A standoff, partner. Reckon that's fair."
+
 ---
 
-## Tier 4 · Pearl · about 1150
+## Tier 4 · Kelpie · about 1150
 
 **Otter.** Puzzles: removing the defender, deflection, defensive moves, pawn endgames, endgames.
 
-**Name.** *Pearl* (proposed: she carries a pink shell, and she is the one who looks after everyone). Other options: Coral, Mama Sheila.
+**Name.** *Kelpie* (chosen by the user Nov 29, replacing the proposed Pearl: otters wrap themselves in kelp to sleep).
 
 **Look.** Otter with diving goggles pushed up on her forehead, holding a pink shell. Soft, round, warm smile.
 
@@ -97,6 +142,21 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 - *Her own bad move:* "Oh dear, I've muddled that one."
 
 **Plays like (5.1).** Solid and safe; defends well, happy to go into an endgame.
+
+**Lines (agreed Nov 29).**
+- *Game start:* "Hello, dear! Ready when you are." · "Snack packed? Lovely. Let's play." · "Let's have a nice game, sweetie."
+- *Your good move / tactic found:* "Oh, well done, dear!" · "That's my clever one." · "Ooh, look at you!" · "I knew you'd see it."
+- *Your mistake:* "Careful now, sweetie." · "Oh, let's slow down a moment, dear." · "Hmm, let's look at that together."
+- *Your blunder:* "Oh my!" · "Oh, sweetie, no…" · "Deep breath, dear. Let's look."
+- *Tactic available:* "Have a good look, dear. There's something here." · "Take your time, sweetie."
+- *You spotted her threat:* "Oh, you saw that! Good." · "Well spotted, dear."
+- *Thinking aloud on her move:* "Let me have a little think." · "Now then…" · "Mm, let's see."
+- *Her own weaker move:* "Oh dear, I've muddled that one." · "Silly me." · "Well, nobody's perfect, dear."
+- *Puzzle solved:* "Oh, well done!" · "Lovely, dear!" · first try: "First go, too! Clever thing."
+- *Puzzle missed:* "That's alright, dear. Have another go." · "Nearly! Try again, sweetie."
+- *Opening lesson, right answer:* "That's it, dear!" · "Lovely, you remembered."
+- *Small talk (opening over, endgame):* "Opening's done. Lovely." · "Endgame now, dear." (no advice in the phrase: the fact sentence already gives it)
+- *Game end:* win "Oh, you got me! I'm so proud of you." · loss "Good game, sweetie. You'll get me next time." · draw "A draw! Well played, dear."
 
 ---
 
@@ -119,28 +179,58 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 
 **Plays like (5.1).** Precise and patient; quiet moves, clean endgames.
 
+**Lines (agreed Nov 29).**
+- *Game start:* "Good afternoon, old sport. Shall we?" · "Right then. Jolly good, let's begin." · "Splendid day for a game, what?"
+- *Your good move / tactic found:* "Splendid!" · "Jolly good show, old sport." · "I say, rather well played." · "Bravo! Top marks."
+- *Your mistake:* "I say, steady on." · "Hmm. Rather loose, that." · "Ah. Bit of a sticky wicket, old sport."
+- *Your blunder:* "Good heavens!" · "Well. That's a spot of bother." · "Oh, I say. Oh dear, oh dear."
+- *Tactic available:* "I do believe there's something rather lovely here." · "Have a proper look, old sport."
+- *You spotted his threat:* "Ah, you rumbled me. Well spotted." · "Sharp as a tack, old sport."
+- *Thinking aloud on his move:* "One moment, old sport." · "Hmm, let me mull this over." · "Right, then…"
+- *His own weaker move:* "Ah. Not quite cricket, that one." · "Bit of a pig's ear, I'm afraid." · "Oh, bother. Frightfully sloppy of me."
+- *Puzzle solved:* "Splendid!" · "Marvellous, old sport!" · first try: "First time, no less! Bravo."
+- *Puzzle missed:* "Not to worry. Chin up, have another crack." · "Close, old sport. Once more."
+- *Opening lesson, right answer:* "Quite right!" · "Spot on, old sport."
+- *Small talk (opening over, endgame):* "Opening's concluded. Rather civilised." · "Ah, the endgame. My favourite bit."
+- *Game end:* win "Well played, old sport. Thoroughly deserved." · loss "Good game. Fancy another round?" · draw "Honours even. Most civilised."
+
 ---
 
-## Tier 6 · Doug · about 1750
+## Tier 6 · Mortimer · about 1750
 
 **Frog.** Puzzles: long and very long puzzles, zugzwang, clearance, interference, x-ray attacks.
 
-**Name.** *Doug* (proposed: the most middle-manager name there is). Other options: Gary, Gordon, Kevin.
+**Name.** *Mortimer* (chosen by the user Nov 29, replacing the proposed Doug).
 
-**Look.** Middle-aged frog with a beard and a slightly loosened tie, office shirt, maybe a lanyard he forgot to take off. Sitting at a park chess table.
+**Look.** Frog in his sixties, beard going grey, reading glasses (maybe on a chain), cardigan. Sitting at his usual park chess table.
 
-**Who he is.** Was let go from his office job and hasn't told his wife. Every weekday he "goes to work" and plays chess in the park instead. That is why he is the strongest coach: he has had a *lot* of time. Melancholy, funny, decent. The secret is the joke, and it is never spelled out on every line; it leaks out.
+**Who he is.** A retired schoolteacher who has played at the same park table every afternoon for years. That is why he is the strongest coach: he has had a *lot* of time, and he has seen every trick. Patient, dry, a little creaky, kind. Just an old dude: the teaching shows now and then (a gold star, "class dismissed"), it is not his whole personality.
 
-**Voice.** Corporate jargon turned to chess ("let's circle back to that knight", "that's a quick win", "per my last move", "going forward"), tired sighs, the occasional slip ("…not that I'm in a hurry to get home"). Gentle, never bitter at the player. Strongest teacher, so his words are the most exact; the jokes stay small.
+**Voice.** Few words, dry and warm. Calls the player "kid". Small old-man jokes (glasses, knees, nodding off), the odd teacher habit. Never stern or scolding. Strongest teacher, so his words are the most exact; the jokes stay small.
 
 **Moods.**
-- *Pleased:* "Great synergy there." · "Now that's a deliverable."
-- *Concerned:* "Hmm. Let's circle back to that."
-- *Surprised:* "Well, that's not in the quarterly forecast."
-- *Thinking:* "Bear with me. I've got all day. Literally."
-- *His own bad move:* "Let's… not put that one in the report."
+- *Pleased:* "Hah. Not bad, kid." · "Now that's chess."
+- *Concerned:* "Hmm. Think that one over."
+- *Surprised:* "Oh, kid…"
+- *Thinking:* "Hold on, let an old man think."
+- *His own bad move:* "Bah. Getting old."
 
 **Plays like (5.1).** Strong and patient; long manoeuvres, squeezes, zugzwang.
+
+**Lines (agreed Nov 29).**
+- *Game start:* "Pull up a chair, kid." · "Ah, company. Sit, sit." · "Let's see what you've got."
+- *Your good move / tactic found:* "Hah. Not bad, kid." · "Well, look at that." · "Now that's chess." · "Gold star."
+- *Your mistake:* "Hmm. Think that one over." · "Easy, kid. Look again." · "Hmm. You sure about that?"
+- *Your blunder:* "Oh, kid…" · "Well. Hm." · "Oof. My knees felt that one."
+- *Tactic available:* "Take your time. It's there." · "Look closer, kid."
+- *You spotted his threat:* "Hah. Sharp one, aren't you." · "Caught that, eh? Good."
+- *Thinking aloud on his move:* "Hold on, let an old man think." · "Where are my glasses…" · "Mm. Let's see."
+- *His own weaker move:* "Bah. Getting old." · "Eh. Even I nod off sometimes." · "Well, that was a senior moment."
+- *Puzzle solved:* "There it is." · "Top of the class." · first try: "First go! Hah."
+- *Puzzle missed:* "Again. We've got all afternoon." · "Not quite. Once more, kid."
+- *Opening lesson, right answer:* "That's the one." · "Mm-hm. Just like that."
+- *Small talk (opening over, endgame):* "Now the real game starts." · "Endgame. My favourite part of the day."
+- *Game end:* win "Hah! Well played, kid. Class dismissed." · loss "Good game. Same bench tomorrow?" · draw "Fair's fair. A draw."
 
 ---
 
@@ -150,6 +240,5 @@ To be chosen from the user's art (memory: use the user's own hex codes, never co
 
 ## Open
 
-- Pearl and Doug are proposed names; the user may change them (`levels.ts` and each `theme.json` `name`).
-- The phrase banks themselves (task 1.14b, voice) are written from this sheet.
+- The phrase banks are built (task 1.14b): the lines above live in `src/coach/voices.ts`; change a line in both places. How they are said (budget, openers dropped, plain setting) is STATE decision 49.
 - The spec's "Coach personas" table (four by band) is replaced by this sheet; the spec sync (1.13) should point here.

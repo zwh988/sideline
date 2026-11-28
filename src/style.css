@@ -2516,3 +2516,9 @@ button.primary {
   background: var(--header);
   pointer-events: none;
 }
+
+/* The coach's phrase in front of the facts (voices.ts): its voice, in its colour (lifted to read on the panel). */
+.entry .phrase {
+  font-weight: 700;
+  color: color-mix(in srgb, var(--coach-accent) 60%, var(--text));
+}

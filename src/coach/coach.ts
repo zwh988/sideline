@@ -27,6 +27,7 @@ import { reasonsFor } from './position';
 import { failedRecapture, PIECE_NAME, playAndDescribe, type FailedRecapture } from './facts';
 import { coachMoveFacts } from './narration';
 import type { OpeningBook } from './openings';
+import type { Cue } from './voices';
 import {
   byImportance,
   capitalize,
@@ -113,6 +114,10 @@ export interface Remark {
   shapes?: Shape[];
   /** Set on a mistake, a missed tactic or a found tactic: saved with the game. */
   moment?: Moment;
+  /** The moment, for the coach's phrase bank (voices.ts); the screen decides whether a phrase is said. */
+  cue?: Cue;
+  /** The coach's phrase in front of the text, set when said (never part of `text`, which stays the facts). */
+  phrase?: string;
 }
 
 /** What the coach knows about the position on the player's turn. */
@@ -154,6 +159,8 @@ export class Coach {
   /** The tactic the player started (and was praised for), while they carry it out. */
   private combination?: TaughtLine;
   private continuing = false;
+  /** The ply of the coach's last move if the engine rated it a mistake (for its phrase bank's "my bad"). */
+  private slipAt?: number;
   /** Hints used this game, for later mastery tracking. */
   hintsUsed = 0;
 
@@ -215,6 +222,7 @@ export class Coach {
         kind: 'tactic',
         text: "There's something strong here. Take your time.",
         mood: 'pleased',
+        cue: 'tactic',
         offerSideline: true,
         line: t.tactic.moves.map((m) => m.uci),
       });
@@ -252,10 +260,13 @@ export class Coach {
     if (t.tactic && uci === t.tactic.moves[0].uci) {
       if (this.continuing) return undefined;
       this.combination = t.tactic;
+      // Punishing the coach's own weaker move: the coach owns it now (never before, which would give it away).
+      const cue: Cue = this.slipAt === ply - 1 ? 'ownSlip' : 'good';
       return this.remark(ply, {
         kind: 'praise',
         text: praise(t.tactic),
         mood: 'pleased',
+        cue,
         severity: 'good',
         marks: [{ square: uci.slice(2, 4) as Square, kind: 'good' }],
         moment: { kind: 'found-tactic', fen: fenBefore, played: uci, line: t.tactic.moves.map((m) => m.uci), concept: lineConceptOf(fenBefore, t.tactic.moves.map((m) => m.uci), undefined, t.tactic.motif) },
@@ -276,6 +287,7 @@ export class Coach {
             : `You had something stronger than ${move.san} here.`,
           mood: 'concerned',
           severity: 'mistake',
+          cue: 'mistake',
           marks: [{ square: uci.slice(2, 4) as Square, kind: 'bad' }],
           offerTakeback: this.mode.takebacks,
           moment: {
@@ -316,12 +328,13 @@ export class Coach {
         kind: 'praise',
         text: `Bold! ${move.san} offers ${sacrifice}, but the engine rates it among the best moves here. Can you see what you get for it?`,
         mood: 'surprised',
+        cue: 'good',
       });
     }
 
     // Dealt with the coach's threat (a low-priority remark).
     if (this.mode.smallTalk && t.threat && loss < FOUND_CP && this.budgetAllows(ply)) {
-      return this.remark(ply, { kind: 'defended', text: 'Good, you saw my threat.', mood: 'pleased' });
+      return this.remark(ply, { kind: 'defended', text: 'Good, you saw my threat.', mood: 'pleased', cue: 'sawThreat' });
     }
     return undefined;
   }
@@ -356,6 +369,7 @@ export class Coach {
         kind: 'narration',
         text: `I'm playing the ${gambit.gambit}, a known opening: I offer ${offer}.`,
         mood: 'thinking',
+        cue: 'thinking',
       });
     }
     const before =
@@ -375,12 +389,14 @@ export class Coach {
       mistakeCp: this.level.mistakeCp,
       ply: ply - 1,
     });
+    // The engine rates the coach's move a mistake: owned only if the player punishes it.
+    this.slipAt = facts.quality === 'mistake' ? ply : undefined;
     const n = narrateCoachMove(facts);
     if (!n || ply - this.lastRemarkPly < NARRATION_GAP[n.priority]) return undefined;
     const count = this.topicCount.get(n.topic) ?? 0;
     if (count >= (TOPIC_LIMIT[n.topic] ?? Infinity)) return undefined;
     this.topicCount.set(n.topic, count + 1);
-    return this.remark(ply, { kind: 'narration', text: n.text, mood: 'thinking' });
+    return this.remark(ply, { kind: 'narration', text: n.text, mood: 'thinking', cue: 'thinking' });
   }
 
   /**
@@ -438,6 +454,7 @@ export class Coach {
         kind: 'mistake',
         text: `Careful: ${san} gives me a chance ${refutation.mate ? 'to checkmate you' : 'to win material'}.`,
         mood: 'concerned',
+        cue: refutation.mate || ctx.loss >= BLUNDER_CP ? 'blunder' : 'mistake',
         moment,
       });
     }
@@ -465,6 +482,7 @@ export class Coach {
       }`.trim(),
       mood: blunder ? 'surprised' : 'concerned',
       severity: blunder ? 'blunder' : ctx.loss < this.level.mistakeCp ? 'slip' : 'mistake',
+      cue: blunder ? 'blunder' : 'mistake',
       marks,
       offerTakeback: this.mode.takebacks,
       shapes: [{ orig: first.from, dest: first.to, brush: 'red' }],
@@ -707,6 +725,7 @@ export class Coach {
         kind: 'phase',
         text: "We're in the endgame now. Kings become fighters here: bring yours toward the middle.",
         mood: 'neutral',
+        cue: 'endgame',
       });
     }
     if (ply >= 16 && !this.said.has('opening') && !isEndgame(chess)) {
@@ -715,6 +734,7 @@ export class Coach {
         kind: 'phase',
         text: "The opening's done. Which of your pieces isn't doing anything yet?",
         mood: 'thinking',
+        cue: 'openingDone',
       });
     }
     return undefined;
@@ -764,6 +784,7 @@ export function joinRemarks(first: Remark | undefined, second: Remark | undefine
   return {
     ...second,
     text: `${first.text} ${second.text}`,
+    cue: second.cue ?? first.cue,
     shapes: [...(first.shapes ?? []), ...(second.shapes ?? [])],
   };
 }

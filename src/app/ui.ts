@@ -12,6 +12,7 @@ import type { LineMove as LineMoveLike } from '../coach/linecheck';
 import { Coach, joinRemarks, type Mark, type Mood, type Remark, type Shape } from '../coach/coach';
 import { HEADLINE, LABEL_INFO, type MoveLabel } from '../coach/movelabels';
 import { richSegments } from './richtext';
+import { afterPhrase, Voice, type Cue } from '../coach/voices';
 import { LANE_ARROW, LANE_COLOUR, drawChart, laneBadgeSvg } from './linechart';
 import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode, type Option } from './linetree';
 import { gameToPgn } from './pgn';
@@ -48,6 +49,8 @@ interface Settings {
   level: number;
   color: ColorChoice;
   mode: ModeId;
+  /** "Plain coach": no phrases in the coach's voice, only the facts (task 1.14b). */
+  plain?: boolean;
 }
 
 const SETTINGS_KEY = 'sideline.settings';
@@ -115,6 +118,17 @@ function labelShape(square: string, label: MoveLabel): DrawShape {
 }
 
 /** Puts text into an element with the moves as chips and the key words in bold (formatting only: no words added). */
+/** A remark in the bubble: the coach's phrase (unless plain), then the facts as rich text. */
+function setRemark(el: HTMLElement, r: Remark, plain: boolean): void {
+  const phrase = plain ? undefined : r.phrase;
+  setRich(el, phrase ? afterPhrase(r.text) : r.text);
+  if (!phrase) return;
+  const span = document.createElement('span');
+  span.className = 'phrase';
+  span.textContent = phrase;
+  el.prepend(span, el.childNodes.length ? ' ' : '');
+}
+
 function setRich(el: HTMLElement, text: string): void {
   el.replaceChildren(
     ...richSegments(text).map((s) => {
@@ -328,6 +342,7 @@ export class App {
   private thinking = false;
   private nav = new Navigation();
   private log = new RemarkLog();
+  private voice = new Voice();
   /** True while the board shows arrows from a viewed position's remark. */
   private viewShapes = false;
   /** The sideline the player is trying, if any ("Try a sideline"): a tree of Lines, the game is paused. */
@@ -476,6 +491,12 @@ export class App {
         <div class="settings-list">
           <label>Coach <select id="level">${LEVELS.map((l) => `<option value="${l.level}">${levelLabel(l)}</option>`).join('')}</select></label>
           <label>Mode <select id="mode">${MODES.map((m) => `<option value="${m.id}">${m.name}</option>`).join('')}</select></label>
+          <label>Coach personality
+            <select id="plain">
+              <option value="on">On</option>
+              <option value="plain">Plain (facts only)</option>
+            </select>
+          </label>
           <label>Play as
             <select id="color">
               <option value="white">White</option>
@@ -592,7 +613,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-timeline', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file', 'rail-puzzles', 'menu-puzzles', 'puzzles-screen', 'puzzles-close', 'puzzles-note', 'puzzles-list', 'puzzle-bar', 'puzzle-text', 'puzzle-skip', 'puzzle-exit', 'rail-openings', 'menu-openings', 'openings-screen', 'openings-close', 'openings-note', 'openings-list', 'openings-title', 'lesson-bar', 'lesson-text', 'lesson-exit']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'plain', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-timeline', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file', 'rail-puzzles', 'menu-puzzles', 'puzzles-screen', 'puzzles-close', 'puzzles-note', 'puzzles-list', 'puzzle-bar', 'puzzle-text', 'puzzle-skip', 'puzzle-exit', 'rail-openings', 'menu-openings', 'openings-screen', 'openings-close', 'openings-note', 'openings-list', 'openings-title', 'lesson-bar', 'lesson-text', 'lesson-exit']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -610,6 +631,12 @@ export class App {
     this.el.newgame.addEventListener('close', () => this.screenCoach());
     mode.addEventListener('change', () => this.updateSettings({ mode: modeInfo(mode.value).id }));
     color.addEventListener('change', () => this.updateSettings({ color: color.value as ColorChoice }));
+    const plain = this.el.plain as HTMLSelectElement;
+    plain.value = this.settings.plain ? 'plain' : 'on';
+    plain.addEventListener('change', () => {
+      this.updateSettings({ plain: plain.value === 'plain' }, true);
+      this.renderBubble(); // applies at once, to what is already said too
+    });
     // A long coach remark opens on a tap (phones).
     this.el['bubble-box'].addEventListener('click', () => this.root.querySelector('.coach')!.classList.toggle('expanded'));
     this.root.querySelector('#new-game')!.addEventListener('click', () => this.openNewGameSheet());
@@ -780,6 +807,7 @@ export class App {
       (this.el.level as HTMLSelectElement).value = String(this.settings.level);
       (this.el.mode as HTMLSelectElement).value = this.settings.mode;
       (this.el.color as HTMLSelectElement).value = this.settings.color;
+      (this.el.plain as HTMLSelectElement).value = this.settings.plain ? 'plain' : 'on';
       settings.show();
     }
     this.railCurrent();
@@ -890,10 +918,10 @@ export class App {
     }
     const side = color === 'white' ? 'White' : 'Black';
     if (this.game.isPlayerTurn) {
-      this.say({ kind: 'phase', text: `Let's play! You're ${side}, so you go first.`, mood: 'neutral' });
+      this.say({ kind: 'phase', text: `Let's play! You're ${side}, so you go first.`, mood: 'neutral', cue: 'start' });
       await this.startPlayerTurn(id);
     } else {
-      this.say({ kind: 'phase', text: `Let's play! You're ${side}, so I'll start.`, mood: 'neutral' });
+      this.say({ kind: 'phase', text: `Let's play! You're ${side}, so I'll start.`, mood: 'neutral', cue: 'start' });
       await this.opponentMove(id);
     }
   }
@@ -1263,7 +1291,7 @@ export class App {
     entries.forEach((e, i) => {
       const p = document.createElement('p');
       p.className = !nav.viewing && i < entries.length - 1 ? 'entry old' : 'entry';
-      setRich(p, e.remark.text);
+      setRemark(p, e.remark, !!this.settings.plain);
       bubble.append(p);
     });
     const newest = entries.at(-1)?.remark;
@@ -1419,6 +1447,10 @@ export class App {
 
   /** The coach speaks: new text in the bubble, with arrows or circles on the board. */
   private say(r: Remark): void {
+    // The coach's phrase (voices.ts): its budget counts every bubble. Sparring games keep to the rare ones.
+    const sparring = !this.puzzling && !this.lesson && this.mode.id === 'sparring';
+    const phrase = this.voice.next(this.boardCoach?.coach.id ?? '', r.cue, { plain: this.settings.plain, sparring });
+    r = { ...r, phrase };
     // Kept with its ply: it stays readable after the coach moves, and shows
     // again when that position is viewed.
     this.log.add(this.game.moves.length, r);
@@ -1584,12 +1616,12 @@ export class App {
   private checkGameOver(): boolean {
     const r = this.game.result;
     if (!r.over) return false;
-    if (r.winner === this.game.playerColor) this.say({ kind: 'praise', text: 'Checkmate. You win, well played!', mood: 'pleased' });
+    if (r.winner === this.game.playerColor) this.say({ kind: 'praise', text: 'Well played! Checkmate, you win.', mood: 'pleased', cue: 'win' });
     else if (r.winner) {
       const next = this.mode.takebacks ? 'Take back to see what happened, or start a new game.' : 'Start a new game when you’re ready.';
-      this.say({ kind: 'phase', text: `Checkmate, I win this one. ${next}`, mood: 'concerned' });
+      this.say({ kind: 'phase', text: `Checkmate, I win this one. ${next}`, mood: 'concerned', cue: 'loss' });
     }
-    else this.say({ kind: 'phase', text: `It's a draw by ${r.reason}.`, mood: 'neutral' });
+    else this.say({ kind: 'phase', text: `It's a draw by ${r.reason}.`, mood: 'neutral', cue: 'draw' });
     // What the game's moments and takebacks add up to (task 1.12b).
     const summary = this.record ? gameSummary(this.record) : '';
     if (summary) this.say({ kind: 'phase', text: `This game: ${summary}`, mood: 'neutral' });
@@ -2468,6 +2500,7 @@ export class App {
       text: `Not this one. ${judged?.text ?? ''}`.trim(),
       mood: 'concerned',
       severity: 'mistake',
+      cue: 'missed',
       marks: [{ square: to, kind: 'bad' }],
     };
     this.say(remark);
@@ -2562,7 +2595,8 @@ export class App {
     const words = solvedWords(run, pz.line);
     const last = pz.line.at(-1)!;
     const hinted = pz.attempt.hints >= 3 ? ' Next time, try it with fewer hints.' : '';
-    this.say({ kind: 'praise', text: words.text + hinted, mood: 'pleased', marks: [{ square: last.slice(2, 4) as Square, kind: 'good' }] });
+    const cue: Cue = !pz.attempt.misses && !pz.attempt.hints ? 'solvedFirstTry' : 'solved';
+    this.say({ kind: 'praise', text: words.text + hinted, mood: 'pleased', marks: [{ square: last.slice(2, 4) as Square, kind: 'good' }], cue });
     this.setMood('pleased');
     this.sync();
     this.status('Solved.');
@@ -3328,7 +3362,7 @@ export class App {
       ...tagShapes(foundTags(node.tags, tier), node.uci.slice(2, 4) as Square, node.fen, 'green'),
       ...defends(prev.fen, node.uci).map((p) => ({ orig: p.square, brush: 'green' as const })),
     ];
-    this.say({ kind: 'praise', text, mood: altSan ? 'neutral' : 'pleased', marks: [{ square: node.uci.slice(2, 4) as Square, kind: 'good' }], shapes });
+    this.say({ kind: 'praise', text, mood: altSan ? 'neutral' : 'pleased', marks: [{ square: node.uci.slice(2, 4) as Square, kind: 'good' }], shapes, cue: altSan || hinted ? undefined : 'lessonRight' });
     if (!altSan) this.setMood('pleased');
     ls.phase = 'auto';
     this.thinking = true;
@@ -3564,7 +3598,7 @@ export class App {
     let text: string;
     const why = clean && !prev.trap && Math.random() < WHY_CHANCE ? whyChoices(node.tags) : undefined;
     if (why) {
-      this.say({ kind: 'praise', text: `Right: ${label}. Why this move?`, mood: 'pleased', marks });
+      this.say({ kind: 'praise', text: `Right: ${label}. Why this move?`, mood: 'pleased', marks, cue: 'lessonRight' });
       this.setMood('pleased');
       this.status('Pick the idea behind it.');
       const i = await this.askChoices(why.choices.map((c) => c.text));
@@ -3576,7 +3610,7 @@ export class App {
     else text = !wrongBefore ? `That's it: ${label}. You had a hint, so it comes back sooner.` : `That's it: ${label}.`;
     const punish = prev.trap ? punishWords(tree, prev, node) : '';
     if (punish) text += ` ${punish}`;
-    this.say({ kind: 'praise', text, mood: clean ? 'pleased' : 'neutral', marks });
+    this.say({ kind: 'praise', text, mood: clean ? 'pleased' : 'neutral', marks, cue: clean && !why ? 'lessonRight' : undefined });
     if (clean) this.setMood('pleased');
     ls.index++;
     this.sync();
