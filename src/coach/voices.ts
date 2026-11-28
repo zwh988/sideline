@@ -232,3 +232,27 @@ export class Voice {
     return lines[i];
   }
 }
+
+/** A blunder in the phrase bank's sense: this much lost (centipawns), as `coach.ts` counts one. */
+const BLUNDER_LOSS = 500;
+/** A sideline move this much worse than the best is a mistake for the phrase bank. */
+const SIDELINE_MISTAKE_LOSS = 150;
+
+/**
+ * The moment for a move the player tried in a sideline, from the engine's rating of it: the best or an
+ * excellent move is a good one, a move far below the best a mistake or a blunder, and the rest gets no phrase.
+ */
+export function cueForSidelineMove(r: { lane: 'best' | 'great' | 'good' | 'other'; lossCp: number }): Cue | undefined {
+  if (r.lane === 'best' || r.lane === 'great') return 'good';
+  if (r.lossCp >= BLUNDER_LOSS) return 'blunder';
+  if (r.lane === 'other' && r.lossCp >= SIDELINE_MISTAKE_LOSS) return 'mistake';
+  return undefined;
+}
+
+/** The moment for a Review moment, from its kind (the opponent's moments get no phrase: they are not the player's). */
+export function cueForMoment(kind: string, lossCp?: number): Cue | undefined {
+  if (kind === 'found-tactic') return 'good';
+  if (kind === 'mistake') return (lossCp ?? 0) >= BLUNDER_LOSS ? 'blunder' : 'mistake';
+  if (kind === 'missed-tactic') return 'mistake';
+  return undefined;
+}

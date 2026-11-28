@@ -159,6 +159,8 @@ export interface LineNode {
   rating?: Rating;
   /** What the coach said about this move (shown only while it is the cursor). */
   notes: string[];
+  /** The coach's phrase in front of the first note (voices.ts), for a move the player tried; never part of `notes`. */
+  phrase?: string;
   /** What stands out in the position after this move, with the squares to light up. */
   reason?: { text: string; squares: string[] };
   kids: LineNode[];

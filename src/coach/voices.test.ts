@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LEVELS } from '../app/levels';
-import { afterPhrase, OPENERS, Voice, voiced, VOICES, type Cue } from './voices';
+import { afterPhrase, cueForMoment, cueForSidelineMove, OPENERS, Voice, voiced, VOICES, type Cue } from './voices';
 
 const CUES: Cue[] = ['start', 'good', 'mistake', 'blunder', 'tactic', 'sawThreat', 'thinking', 'ownSlip', 'solved', 'solvedFirstTry', 'missed', 'lessonRight', 'openingDone', 'endgame', 'win', 'loss', 'draw'];
 const all = Object.entries(VOICES).flatMap(([id, bank]) => CUES.flatMap((cue) => bank[cue].map((line) => ({ id, cue, line }))));
@@ -138,5 +138,25 @@ describe('Voice', () => {
 
   it('says nothing for an unknown coach', () => {
     expect(new Voice().next('nobody', 'start')).toBeUndefined();
+  });
+});
+
+describe('cues outside the game (sidelines, Review)', () => {
+  it('a sideline move: best or excellent is good, far below the best a mistake or blunder, the rest quiet', () => {
+    expect(cueForSidelineMove({ lane: 'best', lossCp: 0 })).toBe('good');
+    expect(cueForSidelineMove({ lane: 'great', lossCp: 30 })).toBe('good');
+    expect(cueForSidelineMove({ lane: 'good', lossCp: 80 })).toBeUndefined();
+    expect(cueForSidelineMove({ lane: 'other', lossCp: 100 })).toBeUndefined();
+    expect(cueForSidelineMove({ lane: 'other', lossCp: 200 })).toBe('mistake');
+    expect(cueForSidelineMove({ lane: 'other', lossCp: 900 })).toBe('blunder');
+  });
+
+  it('a Review moment: the player’s own kinds only', () => {
+    expect(cueForMoment('found-tactic')).toBe('good');
+    expect(cueForMoment('mistake', 200)).toBe('mistake');
+    expect(cueForMoment('mistake', 600)).toBe('blunder');
+    expect(cueForMoment('missed-tactic', 300)).toBe('mistake');
+    expect(cueForMoment('their-tactic')).toBeUndefined();
+    expect(cueForMoment('their-blunder')).toBeUndefined();
   });
 });

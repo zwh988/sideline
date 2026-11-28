@@ -12,7 +12,7 @@ import type { LineMove as LineMoveLike } from '../coach/linecheck';
 import { Coach, joinRemarks, type Mark, type Mood, type Remark, type Shape } from '../coach/coach';
 import { HEADLINE, LABEL_INFO, type MoveLabel } from '../coach/movelabels';
 import { richSegments } from './richtext';
-import { afterPhrase, Voice, type Cue } from '../coach/voices';
+import { afterPhrase, cueForSidelineMove, Voice, type Cue } from '../coach/voices';
 import { Sound } from './sound';
 import { LANE_ARROW, LANE_COLOUR, drawChart, laneBadgeSvg } from './linechart';
 import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode, type Option } from './linetree';
@@ -132,8 +132,13 @@ function setCoachName(el: HTMLElement, l: Level, mark = ''): void {
 
 /** A remark in the bubble: the coach's phrase (unless plain), then the facts as rich text. */
 function setRemark(el: HTMLElement, r: Remark, plain: boolean): void {
-  const phrase = plain ? undefined : r.phrase;
-  setRich(el, phrase ? afterPhrase(r.text) : r.text);
+  setPhrased(el, r.text, r.phrase, plain);
+}
+
+/** The coach's words with its phrase in front (unless plain): the text is untouched but for a listed opener. */
+function setPhrased(el: HTMLElement, text: string, phrase: string | undefined, plain: boolean): void {
+  if (plain) phrase = undefined;
+  setRich(el, phrase ? afterPhrase(text) : text);
   if (!phrase) return;
   const span = document.createElement('span');
   span.className = 'phrase';
@@ -389,7 +394,7 @@ export class App {
     /** The moment shown, or -1 before the first. */
     index: number;
     /** What the coach says at `ply` instead of the game's log (the question before a moment, the intro). */
-    say?: { ply: number; text: string; offerAnswer: boolean };
+    say?: { ply: number; text: string; offerAnswer: boolean; phrase?: string };
     opponent?: string;
     /** White's evaluation by ply, for the strip over the board. */
     curve?: number[];
@@ -1272,10 +1277,10 @@ export class App {
       // and who is better after it); earlier moves are one tap back (‹).
       const node = sideline.cursor;
       const lines = node.notes.length ? node.notes : node === sideline.root ? [] : ['Thinking…'];
-      const entries = lines.map((text) => {
+      const entries = lines.map((text, i) => {
         const p = document.createElement('p');
         p.className = 'entry';
-        setRich(p, text);
+        setPhrased(p, text, i === 0 && node.notes.length ? node.phrase : undefined, !!this.settings.plain);
         return p;
       });
       if (node.rating) {
@@ -1304,7 +1309,7 @@ export class App {
     if (say && say.ply === nav.ply) {
       const p = document.createElement('p');
       p.className = 'entry';
-      setRich(p, say.text);
+      setPhrased(p, say.text, say.phrase, !!this.settings.plain);
       bubble.replaceChildren(p);
       this.el.mood.textContent = '';
       this.setMood('thinking');
@@ -1747,7 +1752,7 @@ export class App {
     this.game = game;
     this.mode = REVIEW;
     this.record = saved;
-    this.reviewing = { moments, index: -1, opponent, curve: saved.curve, say: { ply: 0, text: this.reviewIntroOf(saved, moments.length), offerAnswer: false } };
+    this.reviewing = { moments, index: -1, opponent, curve: saved.curve, say: { ply: 0, text: this.reviewIntroOf(saved, moments.length), offerAnswer: false, phrase: this.reviewOpener(saved) } };
     const level = levelInfo(saved.level);
     // A game played against a coach is reviewed by that coach; an imported game by the current tier's coach.
     void this.showCoach(saved.imported ? levelInfo(this.settings.level) : level);
@@ -1769,6 +1774,12 @@ export class App {
   }
 
   /** The coach's first words in Review: the opponent, one line per side on how they played, the moments. */
+  /** The reviewing coach's greeting in front of Review's intro (the game's coach; an imported game's: the current tier's). */
+  private reviewOpener(saved: SavedGame): string | undefined {
+    const reviewer = saved.imported ? levelInfo(this.settings.level) : levelInfo(saved.level);
+    return this.voice.next(reviewer.coach.id, 'start', { plain: this.settings.plain });
+  }
+
   private reviewIntroOf(saved: SavedGame, total: number): string {
     const stats = needsAnalysis(saved) ? undefined : gameStats(saved.curve, saved.startFen, saved.labels);
     const them = this.opponentName(saved);
@@ -1810,7 +1821,7 @@ export class App {
       r.curve = saved.curve;
       this.log.clear();
       for (const e of saved.remarks) this.log.add(e.ply, e.remark);
-      r.say = { ply: 0, text: this.reviewIntroOf(saved, r.moments.length), offerAnswer: false };
+      r.say = { ply: 0, text: this.reviewIntroOf(saved, r.moments.length), offerAnswer: false, phrase: this.reviewOpener(saved) };
       this.status('Reviewing a saved game.');
     } catch (e) {
       console.error(e);
@@ -1917,6 +1928,10 @@ export class App {
     if (!r) return;
     r.say = undefined;
     const m = r.moments[r.index];
+    // The coach's phrase for the moment, picked once when it is first shown (kept with the remark, not its text).
+    for (const e of this.log.at(m.ply)) {
+      if (e.remark.cue && e.remark.phrase === undefined) e.remark.phrase = this.voice.next(this.boardCoach?.coach.id ?? '', e.remark.cue, { plain: this.settings.plain }) ?? '';
+    }
     this.navigate(() => this.nav.goTo(m.ply));
   }
 
@@ -3916,7 +3931,7 @@ export class App {
     sl.goto(node);
     this.sound.board(node.san);
     this.cursorMoved(sl);
-    void this.noteFor(sl, node);
+    void this.noteFor(sl, node, true);
   }
 
   /** The moves that led to `node`, for Maia: the game up to where the sideline starts, then the Line. */
@@ -3925,7 +3940,8 @@ export class App {
   }
 
   /** Rates a move if needed (one search when it is not among the engine's lines) and words it. */
-  private async noteFor(sl: LineTree, node: LineNode): Promise<void> {
+  /** `voiced`: a move the player played on the board, which may get the coach's phrase. */
+  private async noteFor(sl: LineTree, node: LineNode, voiced = false): Promise<void> {
     this.pendingNodes.add(node);
     try {
       const coach = await this.coach;
@@ -3939,6 +3955,7 @@ export class App {
       if (this.sideline === sl) this.renderSideline();
       node.notes = [await coach.lineNote(sl.rootFen, sl.ucis(node), node.rating)];
       node.reason = coach.reason(sl.rootFen, sl.ucis(node), node.fen, node.rating);
+      if (voiced) node.phrase = this.voice.next(this.boardCoach?.coach.id ?? '', cueForSidelineMove(node.rating), { plain: this.settings.plain });
     } catch {
       node.notes = ['I could not rate this move.'];
     }

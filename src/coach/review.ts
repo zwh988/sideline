@@ -9,6 +9,7 @@
 // evaluation curve. The caller decides how to keep the page responsive: the
 // engine runs in a worker, this loop awaits one move at a time, reports
 // progress after each and stops at the next move when the signal is aborted.
+import { cueForMoment } from './voices';
 import { Chess, type Color } from 'chess.js';
 import type { SavedMoment } from '../app/store';
 import type { Analyst, PositionEval } from './analyst';
@@ -241,6 +242,8 @@ export async function reviewGame(
       text: words.text,
       mood: moment.kind === 'mistake' || moment.kind === 'missed-tactic' ? 'concerned' : moment.kind === 'found-tactic' ? 'pleased' : 'thinking',
       moment,
+      // The phrase is picked when the moment is shown (the screen's budget), from this.
+      cue: cueForMoment(moment.kind, moment.lossCp),
     };
     out.remarks.push({ ply, remark });
     out.moments.push({ ...moment, ply, text: words.text });
