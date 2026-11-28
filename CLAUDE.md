@@ -6,6 +6,7 @@ A chess app where you play an AI coach who thinks aloud, hints at the right mome
 - The idea behind the product (read before designing any feature): the spec's "The idea behind the product". Every feature is a step in its improvement loop.
 - Where things stand: [docs/STATE.md](docs/STATE.md). Read this first in every session.
 - What to build next: [docs/PLAN.md](docs/PLAN.md). Work on one task from it per session.
+- The six coaches (looks, personalities, voice rules): [docs/COACHES.md](docs/COACHES.md).
 
 ## Commands
 
