@@ -15,7 +15,7 @@ import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
-import { kindLabel, momentDot, momentUniverses, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
+import { gameStats, kindLabel, momentDot, momentUniverses, needsAnalysis, reviewableGames, type SideStats, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
 import { REVIEW_VERSION, reviewGame } from '../coach/review';
 import { Game, resultOf, type Color } from './game';
 import { LEVELS, levelInfo, levelLabel, type Level } from './levels';
@@ -159,6 +159,9 @@ export function faceSvg(mood: Mood): string {
 
 const TIMELINE_W = 300;
 const TIMELINE_H = 100;
+
+/** Text for innerHTML (player names come from imported games). */
+const escapeHtml = (t: string): string => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** Where a ply and an evaluation fall on the Review timeline. */
 function timelineScale(curve: number[]): { x: (ply: number) => number; y: (cp: number) => number } {
@@ -320,6 +323,9 @@ export class App {
   private record?: SavedGame;
   private el: Record<string, HTMLElement> = {};
   private importDialog!: ImportDialog;
+  /** Game review's background analysis of games without a (current) one, while the screen is open. */
+  private historyJob?: AbortController;
+  private historyProgress?: { id: string; done: number; total: number };
   /** A saved game being looked at (Review): moments to walk through; the board is read-only. */
   private reviewing?: {
     moments: SavedMoment[];
@@ -485,10 +491,10 @@ export class App {
         </div>
         <dialog id="history" class="history" aria-label="Game review">
           <div class="history-head"><h2>Game review</h2><button id="history-close" class="ghost">Back to play</button></div>
+          <div class="history-top"><button id="import-open" class="primary">Import games</button></div>
           <p id="history-note" class="history-note" aria-live="polite">Saved on this device only.</p>
           <ol id="history-list" class="history-list"></ol>
           <div class="history-foot">
-            <button id="import-open">Import games</button>
             <button id="backup">Back up all data</button>
             <button id="restore">Restore from file</button>
             <input id="restore-file" type="file" accept="application/json,.json" hidden>
@@ -605,7 +611,10 @@ export class App {
     this.el['openings-list'].addEventListener('click', (e) => this.onOpeningsClick(e));
     this.el['lesson-exit'].addEventListener('click', () => void this.exitLesson());
     this.el['settings-close'].addEventListener('click', () => this.showScreen('play'));
-    this.el.history.addEventListener('close', () => this.railCurrent());
+    this.el.history.addEventListener('close', () => {
+      this.historyJob?.abort(); // the list's background analysis stops with the screen
+      this.railCurrent();
+    });
     this.el['settings-screen'].addEventListener('close', () => this.railCurrent());
     this.el['puzzles-screen'].addEventListener('close', () => this.railCurrent());
     this.el['puzzles-close'].addEventListener('click', () => this.showScreen('play'));
@@ -1658,7 +1667,6 @@ export class App {
         analyst,
         { startFen: saved.startFen, moves: saved.moves, playerColor: saved.playerColor, opponent: r.opponent },
         {
-          level: levelInfo(saved.level),
           book,
           signal: abort.signal,
           onProgress: (done, total) => {
@@ -1833,16 +1841,77 @@ export class App {
     this.renderHistory();
     this.el['history-note'].textContent = 'Pick a game to review it with the coach. Saved on this device only; back up to move them elsewhere.';
     (this.el.history as HTMLDialogElement).show();
+    void this.analyseHistory();
+  }
+
+  /**
+   * Analyses, one at a time in a worker of its own, the listed games that have no current analysis, so
+   * every card gets its graph and accuracy. Stops when the screen closes; what finished is kept.
+   */
+  private async analyseHistory(): Promise<void> {
+    if (this.historyJob) return;
+    const abort = (this.historyJob = new AbortController());
+    const failed = new Set<string>();
+    let analyst: Analyst | undefined;
+    try {
+      const book = await this.book;
+      while (!abort.signal.aborted) {
+        const g = reviewableGames(this.store.list()).find((x) => needsAnalysis(x) && !failed.has(x.id));
+        if (!g) break;
+        analyst ??= await Analyst.create();
+        if (abort.signal.aborted) break;
+        this.historyProgress = { id: g.id, done: 0, total: g.moves.length };
+        this.renderCardGraph(g);
+        const opponent = g.imported ? (g.playerColor === 'white' ? g.imported.black : g.imported.white) : undefined;
+        let result;
+        try {
+          result = await reviewGame(analyst, { startFen: g.startFen, moves: g.moves, playerColor: g.playerColor, opponent }, {
+            book,
+            signal: abort.signal,
+            onProgress: (done, total) => {
+              this.historyProgress = { id: g.id, done, total };
+              this.renderCardGraph(g);
+            },
+          });
+        } catch (e) {
+          console.error(e);
+          failed.add(g.id); // a record the engine can't read is skipped, the rest go on
+          continue;
+        }
+        if (!result) break;
+        const fresh = this.store.get(g.id);
+        if (!fresh) continue; // deleted meanwhile
+        mergeAnalysis(fresh, result);
+        // Saving would move it to the front of the store's order; the list is by date, so that is fine.
+        this.store.save(fresh);
+        if (fresh.id === this.record?.id) this.record = fresh;
+        this.historyProgress = undefined;
+        this.renderHistory(); // the card's moment count changes too
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      analyst?.terminate();
+      if (this.historyJob === abort) {
+        this.historyJob = undefined;
+        this.historyProgress = undefined;
+      }
+    }
   }
 
   private renderHistory(): void {
-    const games = this.store.list();
+    const all = this.store.list();
+    const games = reviewableGames(all);
     const list = this.el['history-list'];
+    // A card's open "more" panel stays open when the list is drawn again (the background analysis redraws it).
+    const opened = new Set([...list.querySelectorAll<HTMLElement>('li')].filter((li) => li.querySelector<HTMLElement>('.history-buttons')?.hidden === false).map((li) => li.dataset.id));
     list.replaceChildren();
     if (!games.length) {
       const li = document.createElement('li');
       li.className = 'history-empty';
-      li.textContent = 'No games yet. Play a move with the coach, or import your games from Chess.com or Lichess, and they show up here to review.';
+      li.textContent = all.length
+        ? 'No finished games yet. Finish a game with the coach, or import your games from Chess.com or Lichess, and they show up here to review.'
+        : 'No games yet. Play a game with the coach, or import your games from Chess.com or Lichess, and they show up here to review.';
       list.append(li);
       return;
     }
@@ -1866,26 +1935,18 @@ export class App {
       const takebacks = g.takebacks?.length ? ` · ${g.takebacks.length} takeback${g.takebacks.length === 1 ? '' : 's'}` : '';
       const moveCount = `${Math.ceil(g.moves.length / 2)} move${g.moves.length > 2 ? 's' : ''}${g.opening ? ` (${g.opening.name})` : ''}`;
       const side = g.playerColor === 'white' ? 'White' : 'Black';
-      if (g.imported) {
-        const im = g.imported;
-        const opponent = g.playerColor === 'white' ? im.black : im.white;
-        const result = !g.result ? 'unfinished' : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'you lost') : 'draw';
-        title.textContent = `${date} · ${side} vs ${opponent}`;
-        chip.textContent = result;
-        chip.classList.toggle('win', result === 'you won');
-        chip.classList.toggle('loss', result === 'you lost');
-        meta.textContent = `${moveCount}${moments}${takebacks}`;
-      } else {
-        const result = !g.result ? (g.id === this.record?.id ? 'in progress' : 'unfinished') : g.result.winner ? (g.result.winner === g.playerColor ? 'you won' : 'coach won') : 'draw';
-        title.textContent = `${date} · ${side}`;
-        chip.textContent = result;
-        chip.classList.toggle('win', result === 'you won');
-        chip.classList.toggle('loss', result === 'coach won');
-        meta.textContent = `Tier ${g.level} · ${levelInfo(g.level).coach.name} · ${modeInfo(g.mode).name} · ${moveCount}${moments}${takebacks}`;
-      }
+      const won = g.result!.winner === g.playerColor;
+      const result = !g.result!.winner ? 'draw' : won ? 'you won' : g.imported ? 'you lost' : 'coach won';
+      chip.textContent = result;
+      chip.classList.toggle('win', !!g.result!.winner && won);
+      chip.classList.toggle('loss', !!g.result!.winner && !won);
+      title.textContent = `${date} · ${side} vs ${this.opponentName(g)}`;
+      meta.textContent = `${g.imported ? '' : `${modeInfo(g.mode).name} · `}${moveCount}${moments}${takebacks}`;
+      const graph = document.createElement('div');
+      graph.className = 'h-graph';
       const buttons = document.createElement('div');
       buttons.className = 'history-buttons';
-      buttons.hidden = true;
+      buttons.hidden = !opened.has(g.id);
       for (const [action, label] of [['copy', 'Copy PGN'], ['download', 'Download PGN'], ['delete', 'Delete']] as const) {
         const b = document.createElement('button');
         b.dataset.action = action;
@@ -1900,18 +1961,71 @@ export class App {
       more.dataset.action = 'more';
       more.textContent = '⋯';
       more.setAttribute('aria-label', 'More: copy, download or delete this game');
-      more.setAttribute('aria-expanded', 'false');
+      more.setAttribute('aria-expanded', String(!buttons.hidden));
       const tag = document.createElement('span');
       tag.className = 'h-source';
-      tag.textContent = g.imported ? { pgn: 'Pasted', 'chess.com': 'Chess.com', lichess: 'Lichess' }[g.imported.source] : 'With the coach';
+      tag.textContent = g.imported ? { pgn: 'Pasted', 'chess.com': 'Chess.com', lichess: 'Lichess' }[g.imported.source] : `With ${levelInfo(g.level).coach.name}`;
       main.append(title, chip);
-      card.append(main, meta, tag);
+      card.append(main, graph, meta, tag);
       const row = document.createElement('div');
       row.className = 'h-row';
       row.append(card, more);
       li.append(row, buttons);
       list.append(li);
+      this.renderCardGraph(g);
     }
+  }
+
+  /** The other side's name on a card: the imported game's player, or the coach the game was played against. */
+  private opponentName(g: SavedGame): string {
+    if (g.imported) return (g.playerColor === 'white' ? g.imported.black : g.imported.white) || 'opponent';
+    return levelInfo(g.level).coach.name;
+  }
+
+  /**
+   * A card's picture of the game: the evaluation through it (White above the line) with the player's moments
+   * on it, and each side's accuracy with its blunders and mistakes. Before the analysis: where it stands.
+   */
+  private renderCardGraph(g: SavedGame): void {
+    const box = this.el['history-list'].querySelector<HTMLElement>(`li[data-id="${CSS.escape(g.id)}"] .h-graph`);
+    if (!box) return;
+    const p = this.historyProgress?.id === g.id ? this.historyProgress : undefined;
+    const stats = needsAnalysis(g) ? undefined : gameStats(g.curve, g.startFen);
+    if (!stats || !g.curve) {
+      box.className = 'h-graph pending';
+      const pct = p && p.total ? Math.round((p.done / p.total) * 100) : 0;
+      box.innerHTML = `<div class="h-bar"><span style="width:${pct}%"></span></div><span class="h-wait">${p ? `The coach is looking at this game… ${pct}%` : 'Waiting for the coach to look at it'}</span>`;
+      return;
+    }
+    box.className = 'h-graph';
+    const curve = g.curve;
+    const W = 300;
+    const H = 56;
+    const most = Math.max(300, ...curve.map(Math.abs));
+    const x = (ply: number) => (ply / (curve.length - 1)) * W;
+    const y = (cp: number) => H / 2 - (cp / most) * (H / 2 - 3);
+    const pts = curve.map((cp, i) => `${x(i).toFixed(1)},${y(cp).toFixed(1)}`).join(' ');
+    const dots = sortedMoments(g)
+      .map((m) => `<circle cx="${x(m.ply).toFixed(1)}" cy="${y(curve[m.ply] ?? 0).toFixed(1)}" r="3.2" class="g-dot ${momentDot(m).tone}"/>`)
+      .join('');
+    // White's share is the light area above the middle, Black's the dark one below.
+    const svg = `<svg class="h-eval" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+      <rect x="0" y="0" width="${W}" height="${H}" class="g-black"/>
+      <polygon points="0,${H} ${pts} ${W},${H}" class="g-white"/>
+      <line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" class="g-mid"/>
+      <polyline points="${pts}" class="g-line"/>${dots}</svg>`;
+    const mine = g.playerColor;
+    const side = (who: string, color: 'white' | 'black', st: SideStats) => {
+      const marks = [
+        st.blunders ? `<span class="g-count blunder" title="Blunders">??&thinsp;${st.blunders}</span>` : '',
+        st.mistakes ? `<span class="g-count bad" title="Mistakes">?&thinsp;${st.mistakes}</span>` : '',
+        st.inaccuracies ? `<span class="g-count inacc" title="Inaccuracies">?!&thinsp;${st.inaccuracies}</span>` : '',
+      ].join('');
+      return `<div class="g-side ${color}"><span class="g-who"><i class="g-swatch ${color}"></i>${escapeHtml(who)}</span><b class="g-acc">${st.accuracy}%</b><span class="g-marks">${marks || '<span class="g-clean">no mistakes</span>'}</span></div>`;
+    };
+    const you = side('You', mine, stats[mine]);
+    const them = side(this.opponentName(g), mine === 'white' ? 'black' : 'white', stats[mine === 'white' ? 'black' : 'white']);
+    box.innerHTML = `${svg}<div class="g-sides" aria-label="Accuracy: you ${stats[mine].accuracy}%, ${escapeHtml(this.opponentName(g))} ${stats[mine === 'white' ? 'black' : 'white'].accuracy}%">${you}${them}</div>`;
   }
 
   private onHistoryClick(e: MouseEvent): void {

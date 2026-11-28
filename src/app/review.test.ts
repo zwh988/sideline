@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { BAD_MOVE_PGN } from './import-fixtures';
 import { parseGame, toSavedGame } from './pgnimport';
-import { momentDot, momentUniverses, mergeAnalysis, moveLabels, playedSan, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, turningPoints } from './review';
+import { gameStats, momentDot, momentUniverses, mergeAnalysis, moveLabels, needsAnalysis, playedSan, reviewableGames, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, turningPoints } from './review';
+import { REVIEW_VERSION } from '../coach/review';
 import { SCOTCH_FEN } from './import-fixtures';
-import type { SavedMoment } from './store';
+import type { SavedGame, SavedMoment } from './store';
 
 const game = toSavedGame(parseGame(BAD_MOVE_PGN), 'white', 2, 'lichess');
 const mistake: SavedMoment = { kind: 'mistake', fen: SCOTCH_FEN, played: 'f1c4', better: 'c6d4', ply: 9, text: 'Careful: …' };
@@ -100,5 +101,50 @@ describe('the timeline dots', () => {
     expect(text).toContain('You took back 2 moves, both on loose pieces.');
     expect(text).toContain('a dot on the line');
     expect(text).not.toContain('3 moments.'); // the count is already said once
+  });
+});
+
+describe('Game review list and accuracy', () => {
+  const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  const base = (over: Partial<SavedGame>): SavedGame => ({
+    version: 1, id: 'x', startedAt: 0, updatedAt: 0, startFen: START, playerColor: 'white', level: 2, mode: 'lesson',
+    moves: ['e2e4'], remarks: [], sidelines: [], moments: [], hintsUsed: 0, ...over,
+  });
+
+  it('lists finished games only, newest first', () => {
+    const games = [
+      base({ id: 'old', startedAt: 1, result: { winner: 'white', reason: 'checkmate' } }),
+      base({ id: 'open', startedAt: 3 }),
+      base({ id: 'new', startedAt: 2, result: { winner: null, reason: 'stalemate' } }),
+      base({ id: 'empty', startedAt: 4, moves: [], result: { winner: 'black', reason: 'resign' } }),
+    ];
+    expect(reviewableGames(games).map((g) => g.id)).toEqual(['new', 'old']);
+  });
+
+  it('a level game played perfectly is 100% for both sides', () => {
+    const s = gameStats([20, 20, 20, 20], START)!;
+    expect(s.white).toMatchObject({ accuracy: 100, moves: 2, blunders: 0 });
+    expect(s.black).toMatchObject({ accuracy: 100, moves: 1 });
+  });
+
+  it("a blunder counts against the side that made it, and pulls its accuracy down", () => {
+    // White keeps +0.2; Black's move drops from +0.2 to +5.0 for White.
+    const s = gameStats([20, 20, 500, 500, 500], START)!;
+    expect(s.black.blunders).toBe(1);
+    expect(s.white.blunders).toBe(0);
+    expect(s.white.accuracy).toBe(100);
+    expect(s.black.accuracy).toBeLessThan(60);
+  });
+
+  it('starts with Black when the position does', () => {
+    const s = gameStats([0, 600], '4k3/8/8/8/8/8/4P3/4K3 b - - 0 1')!;
+    expect(s.black.blunders).toBe(1);
+    expect(s.white.moves).toBe(0);
+  });
+
+  it('a stale or missing analysis needs doing again', () => {
+    expect(needsAnalysis(base({}))).toBe(true);
+    expect(needsAnalysis(base({ curve: [0, 0], reviewVersion: REVIEW_VERSION }))).toBe(false);
+    expect(needsAnalysis(base({ curve: [0, 0], reviewVersion: REVIEW_VERSION - 1 }))).toBe(true);
   });
 });

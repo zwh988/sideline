@@ -1119,6 +1119,132 @@ button.primary {
   padding-inline: var(--sp-3);
 }
 
+/* Game review: import on top, and each card's picture of the game */
+.history-top {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.history-list .h-graph {
+  margin: var(--sp-2) 0 4px;
+}
+
+.history-list .h-eval {
+  display: block;
+  width: 100%;
+  height: 56px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.h-eval .g-black { fill: #3a3f3c; }
+.h-eval .g-white { fill: #eef0ec; }
+.h-eval .g-mid {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.h-eval .g-line {
+  fill: none;
+  stroke: var(--coach-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.h-eval .g-dot {
+  stroke: var(--panel);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.h-eval .g-dot.bad { fill: var(--mark-bad); }
+.h-eval .g-dot.blunder { fill: var(--mark-blunder); }
+.h-eval .g-dot.good { fill: var(--mark-good); }
+.h-eval .g-dot.theirs { fill: var(--muted); }
+
+.history-list .g-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.history-list .g-side {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 0 var(--sp-2);
+  padding: 6px var(--sp-2);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.history-list .g-who {
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-list .g-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  border: 1px solid var(--muted);
+  vertical-align: -1px;
+}
+.history-list .g-swatch.white { background: #eef0ec; }
+.history-list .g-swatch.black { background: #3a3f3c; }
+
+.history-list .g-acc {
+  font-size: var(--fs-lg);
+  font-weight: 800;
+}
+
+.history-list .g-marks {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  min-height: 1.4em;
+}
+
+.history-list .g-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 800;
+}
+.history-list .g-count.blunder { background: var(--mark-blunder); }
+.history-list .g-count.bad { background: var(--mark-bad); }
+.history-list .g-count.inacc { background: color-mix(in srgb, var(--mark-bad) 55%, var(--muted)); }
+.history-list .g-clean { color: var(--mark-good); font-weight: 700; }
+
+.history-list .h-graph.pending {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.history-list .h-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  overflow: hidden;
+}
+
+.history-list .h-bar span {
+  display: block;
+  height: 100%;
+  background: var(--coach-accent);
+  transition: width 0.3s;
+}
+
 /* Import games */
 .import h3 {
   margin: 14px 0 6px;

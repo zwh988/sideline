@@ -11,16 +11,16 @@
 // move. Every game that finished before that is kept.
 import type { Analyst } from '../coach/analyst';
 import { loadOpeningBook } from '../coach/openings';
-import { reviewGame } from '../coach/review';
+import { REVIEW_VERSION, reviewGame } from '../coach/review';
 import { guessColor, importedId, parseGame, parsePgn, toSavedGame, describeGame, type ParsedGame } from './pgnimport';
-import { LEVELS, levelInfo, levelLabel } from './levels';
+import { levelInfo } from './levels';
 import { cleanUsername, fetchChessCom, fetchLichess, SourceError, type Fetch, type FetchedGame } from './sources';
 import type { Color } from './game';
 import type { GameStore, ImportedInfo } from './store';
 
 export interface ImportDeps {
   store: GameStore;
-  /** The level the player has selected: the default for what the coach looks for. */
+  /** The level the player has selected, kept on the saved game (Review itself is the same at every level). */
   level: () => number;
   /** A fresh engine for the analysis; the dialog terminates it when it is done. */
   createAnalyst: () => Promise<Analyst>;
@@ -39,9 +39,8 @@ interface Candidate {
 
 const NAMES_KEY = 'sideline.import.names';
 const SERVICES = { 'chess.com': 'Chess.com', lichess: 'Lichess' } as const;
-/** Games fetched from a service, and how many start ticked (analysis takes a while). */
+/** Games fetched from a service. None start ticked: the player picks (analysis takes a while). */
 const FETCH_COUNT = 20;
-const TICKED = 5;
 
 function loadNames(): Record<string, string> {
   try {
@@ -98,16 +97,12 @@ export class ImportDialog {
       </section>
       <section data-id="picker" hidden>
         <h3 data-id="picker-title">Games</h3>
-        <ol data-id="list" class="history-list import-list"></ol>
-        <div class="import-row">
-          <label>Your level (sets how big a swing is listed)
-            <select data-id="level">${LEVELS.map((l) => `<option value="${l.level}">${levelLabel(l)}</option>`).join('')}</select>
-          </label>
-        </div>
         <div class="import-row">
           <button data-id="analyse" class="primary">Analyse and save</button>
-          <button data-id="back">Back</button>
+          <button data-id="all" class="ghost">Tick all</button>
+          <button data-id="back" class="ghost">Back</button>
         </div>
+        <ol data-id="list" class="history-list import-list"></ol>
       </section>
       <section data-id="progress" hidden>
         <p data-id="progress-text" aria-live="polite"></p>
@@ -127,13 +122,13 @@ export class ImportDialog {
     this.q('service').addEventListener('change', () => this.fillName());
     this.q('back').addEventListener('click', () => this.showInputs());
     this.q('analyse').addEventListener('click', () => void this.analyse());
+    this.q('all').addEventListener('click', () => this.tickAll());
     this.q('cancel').addEventListener('click', () => this.abort?.abort());
     this.q('list').addEventListener('change', (e) => this.onRowChange(e));
     this.fillName();
   }
 
   open(): void {
-    this.q<HTMLSelectElement>('level').value = String(levelInfo(this.deps.level()).level);
     if (!this.busy) this.showInputs();
     this.dialog.showModal();
   }
@@ -177,7 +172,7 @@ export class ImportDialog {
     if (!games.length) return this.note(errors[0] ?? 'No games found in that text.');
     const names = Object.values(loadNames()).filter(Boolean);
     this.setCandidates(
-      games.map((parsed) => ({ parsed, source: 'pgn' as const, color: guessColor(parsed, names), checked: !!guessColor(parsed, names) })),
+      games.map((parsed) => ({ parsed, source: 'pgn' as const, color: guessColor(parsed, names), checked: false })),
       errors.length ? `${errors.length} game${errors.length === 1 ? '' : 's'} could not be read: ${errors[0]}` : undefined,
     );
   }
@@ -197,7 +192,7 @@ export class ImportDialog {
       for (const g of fetched) {
         try {
           const parsed = parseGame(g.pgn);
-          candidates.push({ parsed, source: service, url: g.url, color: guessColor(parsed, [user]), checked: candidates.length < TICKED });
+          candidates.push({ parsed, source: service, url: g.url, color: guessColor(parsed, [user]), checked: false });
         } catch {
           /* a game that can't be read is left out */
         }
@@ -282,6 +277,15 @@ export class ImportDialog {
     this.refreshCount();
   }
 
+  /** Ticks every game that can be ticked (its side known, not saved yet), or unticks them all when they already are. */
+  private tickAll(): void {
+    const open = this.candidates.filter((c) => c.color && !this.saved(c));
+    const all = open.length > 0 && open.every((c) => c.checked);
+    for (const c of open) c.checked = !all;
+    this.candidates.forEach((_, i) => this.refreshRow(i));
+    this.refreshCount();
+  }
+
   private chosen(): (Candidate & { color: Color })[] {
     return this.candidates.filter((c): c is Candidate & { color: Color } => c.checked && !!c.color && !this.saved(c));
   }
@@ -291,7 +295,9 @@ export class ImportDialog {
     const plies = this.chosen().reduce((sum, c) => sum + Math.ceil(c.parsed.moves.length / 2), 0);
     const b = this.q<HTMLButtonElement>('analyse');
     b.disabled = n === 0;
-    b.textContent = n ? `Analyse ${n} game${n === 1 ? '' : 's'} (${plies} of your moves)` : 'Analyse and save';
+    b.textContent = n ? `Analyse ${n} game${n === 1 ? '' : 's'} (${plies} of your moves)` : 'Tick games to analyse';
+    const open = this.candidates.filter((c) => c.color && !this.saved(c));
+    this.q('all').textContent = open.length && open.every((c) => c.checked) ? 'Untick all' : 'Tick all';
   }
 
   // --- Analysing ---------------------------------------------------------
@@ -300,7 +306,7 @@ export class ImportDialog {
     const chosen = this.chosen();
     if (!chosen.length || this.busy) return;
     this.busy = true;
-    const level = levelInfo(Number(this.q<HTMLSelectElement>('level').value));
+    const level = levelInfo(this.deps.level());
     const abort = (this.abort = new AbortController());
     const text = this.q('progress-text');
     const bar = this.q<HTMLProgressElement>('bar');
@@ -321,7 +327,6 @@ export class ImportDialog {
         const label = `Game ${k + 1} of ${chosen.length}`;
         text.textContent = `${label} · starting…`;
         const result = await reviewGame(analyst, { ...game, opponent: game.imported ? (game.playerColor === 'white' ? game.imported.black : game.imported.white) : undefined }, {
-          level,
           book,
           signal: abort.signal,
           onProgress: (done, total) => {
@@ -334,6 +339,7 @@ export class ImportDialog {
         game.remarks = result.remarks;
         game.moments = result.moments;
         game.curve = result.curve;
+        game.reviewVersion = REVIEW_VERSION;
         game.opening = book.openingOf(game.startFen, game.moves);
         if (!this.deps.store.save(game)) {
           full = true;

@@ -173,3 +173,67 @@ export function momentUniverses(m: SavedMoment): Universe[] {
   }
   return out;
 }
+
+// --- Game review list: which games, and how well each side played --------------
+
+/** The games Game review lists: finished ones only (an unfinished game has nothing settled to review), newest first. */
+export function reviewableGames(games: SavedGame[]): SavedGame[] {
+  return games.filter((g) => !!g.result && g.moves.length > 0).sort((a, b) => b.startedAt - a.startedAt);
+}
+
+/** The game has no analysis yet, or one made by an older version of the moment-finding. */
+export function needsAnalysis(g: SavedGame): boolean {
+  return g.moves.length > 0 && (!g.curve || g.curve.length !== g.moves.length + 1 || g.reviewVersion !== REVIEW_VERSION);
+}
+
+/** A side's chances of winning (0..100) at an evaluation from its own view, centipawns (Lichess's curve). */
+export function winChance(cp: number): number {
+  return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * cp)) - 1);
+}
+
+/** A move's accuracy (0..100) from the winning chances it gave up (Lichess's formula). */
+export function moveAccuracy(chanceLost: number): number {
+  return Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * Math.max(0, chanceLost)) - 3.1669));
+}
+
+export interface SideStats {
+  /** 0..100, from the engine's evaluations only (see `gameStats`). */
+  accuracy: number;
+  moves: number;
+  /** Moves that gave up at least 10 / 20 / 30 points of winning chances (Lichess's bands). */
+  inaccuracies: number;
+  mistakes: number;
+  blunders: number;
+}
+
+/**
+ * How well each side played, from the evaluation curve alone (White's view, one value per position). Every
+ * move's accuracy comes from the winning chances it gave up; a side's accuracy is the average of the plain
+ * mean and the harmonic mean of its moves, so one blunder pulls it down the way it should (close to
+ * Lichess, which also weights by how sharp the position was). Undefined when the curve doesn't fit.
+ */
+export function gameStats(curve: number[] | undefined, startFen: string): { white: SideStats; black: SideStats } | undefined {
+  if (!curve || curve.length < 2) return undefined;
+  const acc = { w: [] as number[], b: [] as number[] };
+  const blank = (): SideStats => ({ accuracy: 0, moves: 0, inaccuracies: 0, mistakes: 0, blunders: 0 });
+  const out = { white: blank(), black: blank() };
+  let mover: 'w' | 'b' = startFen.split(' ')[1] === 'b' ? 'b' : 'w';
+  for (let i = 0; i + 1 < curve.length; i++) {
+    const sign = mover === 'w' ? 1 : -1;
+    const lost = winChance(sign * curve[i]) - winChance(sign * curve[i + 1]);
+    acc[mover].push(moveAccuracy(lost));
+    const s = mover === 'w' ? out.white : out.black;
+    s.moves++;
+    if (lost >= 30) s.blunders++;
+    else if (lost >= 20) s.mistakes++;
+    else if (lost >= 10) s.inaccuracies++;
+    mover = mover === 'w' ? 'b' : 'w';
+  }
+  for (const [side, list] of [['white', acc.w], ['black', acc.b]] as const) {
+    if (!list.length) continue;
+    const mean = list.reduce((a, b) => a + b, 0) / list.length;
+    const harmonic = list.length / list.reduce((a, b) => a + 1 / Math.max(b, 1), 0);
+    out[side].accuracy = Math.round((mean + harmonic) / 2);
+  }
+  return out;
+}
