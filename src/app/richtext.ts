@@ -29,7 +29,8 @@ const KEYS = [
   String.raw`(?:about )?\d+(?:\.\d+)? pawns?`,
 ];
 
-const PATTERN = new RegExp(String.raw`(?<![\w…])(${MOVE})(?![\w=])|\b(${KEYS.join('|')})\b`, 'gi');
+// A percentage (accuracy) is a key too; it ends in a non-word character, so it sits outside the \b pair.
+const PATTERN = new RegExp(String.raw`(?<![\w…])(${MOVE})(?![\w=])|\b(${KEYS.join('|')})\b|(?<![\w.])(\d+%)`, 'gi');
 
 /** Splits the coach's text into plain runs, moves and key words. Joined back, the segments are the text. */
 export function richSegments(text: string): Segment[] {

@@ -17,8 +17,8 @@ import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
-import { gameStats, kindLabel, momentDot, momentUniverses, needsAnalysis, reviewableGames, type SideStats, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, turningPoints } from './review';
-import { REVIEW_VERSION, reviewGame } from '../coach/review';
+import { gameStats, kindLabel, momentDot, momentUniverses, needsAnalysis, reviewableGames, type SideStats, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, performanceLine } from './review';
+import { REVIEW_VERSION, reviewCoachLevel, reviewGame } from '../coach/review';
 import { Game, resultOf, type Color } from './game';
 import { LEVELS, levelInfo, levelLabel, type Level } from './levels';
 import { MODES, OPENING, PUZZLE, REVIEW, modeInfo, type Mode, type ModeId } from './modes';
@@ -1673,13 +1673,12 @@ export class App {
     this.game = game;
     this.mode = REVIEW;
     this.record = saved;
-    const labels = moveLabels(saved);
-    const turning = turningPoints(saved.curve).map((t) => labels[t.ply - 1]);
-    this.reviewing = { moments, index: -1, opponent, curve: saved.curve, say: { ply: 0, text: reviewIntro(moments.length, opponent, turning, gameSummary(saved)), offerAnswer: false } };
+    this.reviewing = { moments, index: -1, opponent, curve: saved.curve, say: { ply: 0, text: this.reviewIntroOf(saved, moments.length), offerAnswer: false } };
     const level = levelInfo(saved.level);
     // A game played against a coach is reviewed by that coach; an imported game by the current tier's coach.
     void this.showCoach(saved.imported ? levelInfo(this.settings.level) : level);
-    this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => new Coach(a, level, saved.playerColor === 'white' ? 'w' : 'b', REVIEW, book));
+    // The coach's face is the game's (above); what it checks in Review and its sidelines is always full depth.
+    this.coach = Promise.all([this.analyst, this.book]).then(([a, book]) => new Coach(a, reviewCoachLevel(level), saved.playerColor === 'white' ? 'w' : 'b', REVIEW, book));
     this.nav.reset(game.moves.length);
     this.nav.start();
     this.log.clear();
@@ -1693,6 +1692,16 @@ export class App {
     this.sync();
     // Review looks at the whole game once, both sides, every pattern (task 1.7e); older records get it now.
     if (!saved.curve || saved.reviewVersion !== REVIEW_VERSION) void this.analyseForReview(saved);
+  }
+
+  /** The coach's first words in Review: the opponent, one line per side on how they played, the moments. */
+  private reviewIntroOf(saved: SavedGame, total: number): string {
+    const stats = needsAnalysis(saved) ? undefined : gameStats(saved.curve, saved.startFen, saved.labels);
+    const them = this.opponentName(saved);
+    const mine = saved.playerColor;
+    const theirs = mine === 'white' ? 'black' : 'white';
+    const perf = stats ? `${performanceLine('You', stats[mine])} ${performanceLine(them, stats[theirs], false)}` : '';
+    return reviewIntro(total, them, perf);
   }
 
   /** Looks at the whole game with the engine and replaces the saved moments with what Review finds. */
@@ -1722,13 +1731,12 @@ export class App {
       if (!result || this.reviewing !== r) return;
       mergeAnalysis(saved, result);
       this.store.save(saved);
-      const labels = moveLabels(saved);
       r.moments = sortedMoments(saved);
       r.index = -1;
       r.curve = saved.curve;
       this.log.clear();
       for (const e of saved.remarks) this.log.add(e.ply, e.remark);
-      r.say = { ply: 0, text: reviewIntro(r.moments.length, r.opponent, turningPoints(saved.curve).map((t) => labels[t.ply - 1]), gameSummary(saved)), offerAnswer: false };
+      r.say = { ply: 0, text: this.reviewIntroOf(saved, r.moments.length), offerAnswer: false };
       this.status('Reviewing a saved game.');
     } catch (e) {
       console.error(e);

@@ -64,26 +64,6 @@ export function reviewBarText(index: number, total: number, revealed: boolean, m
   return `Moment ${index + 1} of ${total}${revealed && m ? ` · ${kindLabel(m)}${cost ? ` · about ${cost} pawns` : ''}` : ''}`;
 }
 
-/** A turning point of the game: the move after which White's evaluation changed most. */
-export interface TurningPoint {
-  /** Moves played (1-based) once the move was made. */
-  ply: number;
-  /** The change in White's evaluation across the move, centipawns. */
-  swing: number;
-}
-
-/** The biggest swings of the evaluation curve (at least `minCp`), most dramatic first. */
-export function turningPoints(curve: number[] | undefined, count = 3, minCp = 150): TurningPoint[] {
-  if (!curve) return [];
-  const all: TurningPoint[] = [];
-  for (let i = 1; i < curve.length; i++) all.push({ ply: i, swing: curve[i] - curve[i - 1] });
-  return all
-    .filter((t) => Math.abs(t.swing) >= minCp)
-    .sort((a, b) => Math.abs(b.swing) - Math.abs(a.swing))
-    .slice(0, count)
-    .sort((a, b) => a.ply - b.ply);
-}
-
 /** The labels ("14.Bc4") of the moves of a game, by ply. */
 export function moveLabels(game: SavedGame): string[] {
   const chess = new Chess(game.startFen);
@@ -112,17 +92,31 @@ export function momentDot(m: Pick<SavedMoment, 'kind' | 'lossCp' | 'answer'>): M
 }
 
 /**
- * The coach's opening words for a reviewed game: how many moments, where the evaluation swung, and
- * (when the record has them) what the moments and takebacks add up to, as at the end of a live game.
+ * The coach's opening words for a reviewed game: who it was against, one short line on how each side played
+ * (`performanceLine`), and how many moments there are to look at.
  */
-export function reviewIntro(total: number, opponent: string | undefined, turning: string[] = [], summary = ''): string {
+export function reviewIntro(total: number, opponent: string | undefined, performance = ''): string {
   const vs = opponent ? ` against ${opponent}` : '';
-  const swings = turning.length ? ` The evaluation swung most at ${turning.join(', ')}.` : '';
-  // The count is already said above, so the summary starts after it.
-  const rest = summary.replace(/^\d+ moments?\.\s*/, '');
-  const sum = rest ? ` ${rest}` : '';
-  if (!total) return `Here is your game${vs}. I found no moments to look at in it.${swings}${sum} Step through the moves with the arrows, or try a sideline from any position.`;
-  return `Here is your game${vs}. I found ${total} moment${total === 1 ? '' : 's'} worth a look.${swings}${sum} Tap Next moment, or a dot on the line, to go through them, or step through the moves with the arrows.`;
+  const perf = performance ? ` ${performance}` : '';
+  if (!total) return `Here is your game${vs}.${perf} I found no moments to look at. Step through the moves with the arrows, or try a sideline from any position.`;
+  return `Here is your game${vs}.${perf} I found ${total} moment${total === 1 ? '' : 's'} worth a look. Tap Next moment, or a dot on the line, to go through them.`;
+}
+
+/** The headline labels in words, singular and plural, for the intro ("2 blunders", "1 brilliant move"). */
+const PERF_WORDS: [MoveLabel, string, string][] = [
+  ['brilliant', 'brilliant move', 'brilliant moves'],
+  ['great', 'great move', 'great moves'],
+  ['blunder', 'blunder', 'blunders'],
+  ['overlooked', 'overlooked chance', 'overlooked chances'],
+  ['mistake', 'mistake', 'mistakes'],
+];
+
+/** One side's play in a few words: "You: 84% accuracy, 1 brilliant move, 2 blunders." (all from the analysis). */
+export function performanceLine(who: string, st: SideStats, first = true): string {
+  const parts = PERF_WORDS.filter(([l]) => st.counts[l]).map(([l, one, many]) => `${st.counts[l]} ${st.counts[l] === 1 ? one : many}`);
+  const clean = !st.counts.blunder && !st.counts.mistake && !st.counts.overlooked;
+  if (clean) parts.push('no big mistakes');
+  return `${who}: ${st.accuracy}%${first ? ' accuracy' : ''}, ${parts.join(', ')}.`;
 }
 
 /**

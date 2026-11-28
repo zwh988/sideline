@@ -22,5 +22,6 @@ describe("the coach's words, formatted", () => {
   it('bolds the concepts and amounts', () => {
     expect(picked("That's a fork: the knight attacks both. Mate in 2 was there; the pinned rook is trapped.", 'key')).toEqual(['fork', 'Mate in 2', 'pinned', 'trapped']);
     expect(picked('about 3.2 pawns better, and 1 pawn more', 'key')).toEqual(['about 3.2 pawns', '1 pawn']);
+    expect(picked('You: 84% accuracy, 2 blunders. rival: 76%, no big mistakes.', 'key')).toEqual(['84%', '76%']);
   });
 });

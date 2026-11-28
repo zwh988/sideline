@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BAD_MOVE_PGN } from './import-fixtures';
 import { parseGame, toSavedGame } from './pgnimport';
-import { gameStats, momentDot, momentUniverses, mergeAnalysis, moveLabels, needsAnalysis, playedSan, reviewableGames, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, turningPoints } from './review';
+import { gameStats, momentDot, momentUniverses, mergeAnalysis, moveLabels, needsAnalysis, playedSan, reviewableGames, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, performanceLine } from './review';
 import { REVIEW_VERSION } from '../coach/review';
 import { SCOTCH_FEN } from './import-fixtures';
 import type { SavedGame, SavedMoment } from './store';
@@ -36,21 +36,18 @@ describe('review helpers', () => {
     expect(reviewBarText(-1, 0, false)).toBe('No moments found in this game.');
   });
 
-  it('introduces the game with the number of moments and where it swung', () => {
-    expect(reviewIntro(1, 'rival')).toContain('I found 1 moment worth a look');
+  it('introduces the game: the opponent, how each side played, the number of moments', () => {
+    expect(reviewIntro(1, 'rival')).toBe('Here is your game against rival. I found 1 moment worth a look. Tap Next moment, or a dot on the line, to go through them.');
     expect(reviewIntro(0, undefined)).toContain('no moments');
-    expect(reviewIntro(2, undefined, ['5.Bc4', '9…Nxd4'])).toContain('The evaluation swung most at 5.Bc4, 9…Nxd4.');
+    expect(reviewIntro(2, 'rival', 'You: 84% accuracy, 2 blunders.')).toContain('against rival. You: 84% accuracy, 2 blunders. I found 2 moments');
+    expect(reviewIntro(2, 'rival')).not.toContain('swung');
   });
 
-  it('finds the turning points of a curve: the biggest swings, in game order, none below 1.5 pawns', () => {
-    const curve = [0, 20, 40, -560, -600, -100, -150, -1000];
-    expect(turningPoints(curve)).toEqual([
-      { ply: 3, swing: -600 },
-      { ply: 5, swing: 500 },
-      { ply: 7, swing: -850 },
-    ]);
-    expect(turningPoints([0, 50, 100, 120])).toEqual([]);
-    expect(turningPoints(undefined)).toEqual([]);
+  it("words a side's play from its accuracy and headline labels", () => {
+    const st = { accuracy: 84, moves: 30, counts: { brilliant: 1, blunder: 2, best: 10, inaccuracy: 3 } };
+    expect(performanceLine('You', st)).toBe('You: 84% accuracy, 1 brilliant move, 2 blunders.');
+    expect(performanceLine('rival', { accuracy: 92, moves: 30, counts: { great: 1 } }, false)).toBe('rival: 92%, 1 great move, no big mistakes.');
+    expect(performanceLine('rival', { accuracy: 70, moves: 30, counts: { overlooked: 2, mistake: 1 } }, false)).toBe('rival: 70%, 2 overlooked chances, 1 mistake.');
   });
 
   it('labels the moves of a game by ply', () => {
@@ -97,12 +94,6 @@ describe('the timeline dots', () => {
     expect(momentDot({ kind: 'their-blunder' }).tone).toBe('theirs');
   });
 
-  it('the intro carries the game summary', () => {
-    const text = reviewIntro(3, undefined, [], '3 moments. You took back 2 moves, both on loose pieces.');
-    expect(text).toContain('You took back 2 moves, both on loose pieces.');
-    expect(text).toContain('a dot on the line');
-    expect(text).not.toContain('3 moments.'); // the count is already said once
-  });
 });
 
 describe('Game review list and accuracy', () => {

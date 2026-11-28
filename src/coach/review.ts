@@ -20,6 +20,7 @@ import type { Moment, Remark } from './coach';
 import type { NoteConcept } from './explain';
 import type { OpeningBook } from './openings';
 import { momentWords } from './reviewwords';
+import { LEVELS, type Level } from '../app/levels';
 import { classifyMove, isOnlyMove, type MoveLabel } from './movelabels';
 import { offeredMaterial } from './explain';
 import { scoreToCp } from '../engine/stockfish';
@@ -50,6 +51,15 @@ const TACTIC_PLIES = 10;
  * about a pawn or more is listed, and every pattern the detectors know counts (nothing is tagged as beyond a level).
  */
 export const REVIEW_DEPTH = { maxPlies: 6, minGain: 1, mistakeCp: 100 };
+
+/**
+ * The coach that talks in Review (and judges its sidelines) at the same full depth, whatever level the game
+ * was played or imported at: every pattern, the longest reading, a pawn counts. Only the face and name stay
+ * the game's coach.
+ */
+export function reviewCoachLevel(base: Level): Level {
+  return { ...base, maxPlies: TACTIC_PLIES, minGain: REVIEW_DEPTH.minGain, mistakeCp: REVIEW_DEPTH.mistakeCp, motifs: LEVELS[LEVELS.length - 1].motifs };
+}
 /** Moments kept per game, most costly first: in practice every moment the analysis flags. */
 export const MAX_MOMENTS = 40;
 export const CURVE_CAP = 1000;
