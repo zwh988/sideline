@@ -10,7 +10,7 @@
 /*
  * Design tokens (task 1.12e). Every colour, size and duration the app uses comes from here; a screen
  * never writes its own hex value. The theme pack (public/themes) adds --coach-accent, --board-light
- * and --board-dark. Quality, status and off-game colours are the same in light and dark.
+ * and --board-dark. Quality and status colours are the same in light and dark.
  */
 :root {
   color-scheme: light dark;
@@ -23,10 +23,6 @@
   --border: #dcd8cf;
   --on-accent: #ffffff;
 
-  /* Off the game: a sideline and the coach's ghost line (squares, border, header) */
-  --off-game: #7c5cc4;
-  --off-game-deep: #6a4fc0;
-  --off-game-soft: #b7a4f0;
 
   /* Status: as text or lines (at least 4.5:1 on the panel; the dark values are in the dark block) */
   --good: #1a7f4f;
@@ -1542,14 +1538,20 @@ button.primary {
 }
 
 /* While the coach's line plays, the board is tinted: it is not the game. */
-/* Off the game (the coach's ghost line, a sideline): the squares turn violet, the pieces keep their colours. */
+/* Off the game (the coach's ghost line, a sideline): the squares take the coach's accent, the pieces keep their
+   colours, and the board's frame goes (the tint already says where we are). */
 .board-area.ghosting cg-board,
 .board-area.sidelining cg-board {
   background: repeating-conic-gradient(
-      color-mix(in srgb, var(--board-dark) 55%, var(--off-game-deep)) 0% 25%,
-      color-mix(in srgb, var(--board-light) 72%, var(--off-game-soft)) 0% 50%
+      color-mix(in srgb, var(--board-dark) 55%, var(--coach-accent)) 0% 25%,
+      color-mix(in srgb, var(--board-light) 72%, color-mix(in srgb, var(--coach-accent) 45%, #fff)) 0% 50%
     )
     0 0 / 25% 25%;
+}
+
+.board-area.ghosting .board-frame::before,
+.board-area.sidelining .board-frame::before {
+  display: none;
 }
 
 .board-area.blunder #board {
@@ -2444,7 +2446,8 @@ button.primary {
  * Surfaces are the neutral base mixed with a little of the coach's colour; the header is the coach's
  * strong colour; the speech box is tinted and outlined in it; a frame in it surrounds the board. A pack
  * can set exact surfaces in theme.json ("surfaces": {"light": {...}, "dark": {...}}), which win over these.
- * Status, quality, off-game (violet) and board-mark colours never change with the coach: they carry meaning.
+ * Status, quality and board-mark colours never change with the coach: they carry meaning. Off the game (a sideline,
+ * the ghost line) the board takes the coach's accent.
  */
 :root {
   --base-bg: #f6f4ef;
@@ -2521,4 +2524,12 @@ button.primary {
 .entry .phrase {
   font-weight: 700;
   color: color-mix(in srgb, var(--coach-accent) 60%, var(--text));
+}
+
+/* The rating beside a coach's name ("Beans 300"): quieter than the name. */
+.c-rating {
+  font-weight: 600;
+  font-size: 0.85em;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
 }

@@ -4,7 +4,11 @@
 export interface Theme {
   name: string;
   board: { light: string; dark: string };
-  pieces: { folder: string; format: 'svg' | 'png' };
+  /**
+   * The piece images. `source` and `tint` are for `scripts/tint-pieces.mjs`, which writes a shared set
+   * recoloured in the coach's colours into `folder`; the app only reads `folder`.
+   */
+  pieces: { folder: string; format: 'svg' | 'png'; source?: string; tint?: { white: PieceTint; black: PieceTint } };
   highlights: { lastMove: string; selected: string; moveDot: string; check: string };
   /** The coach's colour, used by the UI only (buttons, the speech box), never on the board. */
   coach: { accent: string; accentStrong?: string; accentSoft?: string };
@@ -13,6 +17,12 @@ export interface Theme {
   /** Exact app surfaces per mode; without them the surfaces are the neutral base tinted with the accent (style.css). */
   surfaces?: { light?: Surfaces; dark?: Surfaces };
   credits?: string;
+}
+
+/** A side's piece colours: the fill and the outline. */
+export interface PieceTint {
+  fill: string;
+  line?: string;
 }
 
 /** The app's surfaces under a coach: page, panels, borders, the speech box, the header bar (and its text). */

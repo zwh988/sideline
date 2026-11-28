@@ -118,6 +118,15 @@ function labelShape(square: string, label: MoveLabel): DrawShape {
 }
 
 /** Puts text into an element with the moves as chips and the key words in bold (formatting only: no words added). */
+/** A coach's name with its rating beside it ("Beans 300"), for labels under faces and in the bubble. */
+function setCoachName(el: HTMLElement, l: Level, mark = ''): void {
+  const rating = document.createElement('span');
+  rating.className = 'c-rating';
+  rating.textContent = String(l.shownRating);
+  rating.title = `Plays at about ${l.shownRating}`;
+  el.replaceChildren(`${l.coach.name}${mark} `, rating);
+}
+
 /** A remark in the bubble: the coach's phrase (unless plain), then the facts as rich text. */
 function setRemark(el: HTMLElement, r: Remark, plain: boolean): void {
   const phrase = plain ? undefined : r.phrase;
@@ -1332,7 +1341,7 @@ export class App {
   private async showCoach(level: Level, preview = false): Promise<void> {
     if (!preview) this.boardCoach = level;
     const token = ++this.coachToken;
-    for (const el of this.root.querySelectorAll('.js-coach-name')) el.textContent = level.coach.name;
+    for (const el of this.root.querySelectorAll<HTMLElement>('.js-coach-name')) setCoachName(el, level);
     this.el.portrait.title = level.coach.name;
     if (this.loaded.id === level.theme) {
       if (this.face === undefined) this.setMood((this.el.portrait.dataset.mood as Mood | undefined) ?? 'neutral');
@@ -2257,7 +2266,7 @@ export class App {
       b.setAttribute('aria-label', `${l.coach.name}, about ${l.shownRating}${l.level === mine ? ', your coach' : ''}`);
       const name = document.createElement('span');
       name.className = 'p-pick-name';
-      name.textContent = l.level === mine ? `${l.coach.name} ★` : l.coach.name;
+      setCoachName(name, l, l.level === mine ? ' ★' : '');
       b.append(face(l, 'sm'), name);
       picker.append(b);
     }
@@ -2739,7 +2748,7 @@ export class App {
       b.setAttribute('aria-label', `${l.coach.name}, about ${l.shownRating}${l.level === mine ? ', your coach' : ''}`);
       const name = document.createElement('span');
       name.className = 'p-pick-name';
-      name.textContent = l.level === mine ? `${l.coach.name} ★` : l.coach.name;
+      setCoachName(name, l, l.level === mine ? ' ★' : '');
       b.append(coachFace(l, 'sm'), name);
       picker.append(b);
     }

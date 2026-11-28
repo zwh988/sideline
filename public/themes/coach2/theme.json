@@ -5,8 +5,19 @@
     "dark": "#7D8D9D"
   },
   "pieces": {
-    "folder": "../default/pieces",
-    "format": "svg"
+    "folder": "pieces",
+    "format": "svg",
+    "source": "../pieces/mpchess",
+    "tint": {
+      "white": {
+        "fill": "#F2C46F",
+        "line": "#352318"
+      },
+      "black": {
+        "fill": "#352318",
+        "line": "#352318"
+      }
+    }
   },
   "highlights": {
     "lastMove": "rgba(230, 200, 60, 0.45)",
@@ -23,5 +34,5 @@
     "folder": "portraits",
     "format": "png"
   },
-  "credits": "Pieces: rhosgfx by RhosGFX (CC0 1.0), via the Lichess piece collection."
+  "credits": "Pieces: mpchess by Maxime Chupin (GPL-3.0-or-later), via the Lichess piece collection; tinted per coach. Portraits: the developer."
 }

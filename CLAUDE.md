@@ -84,4 +84,4 @@ npx tsc              # type-check only
 - chess.js `history()` and `moves` cover only moves since the start FEN; `Game.startFen` matters for games started from a position (Maia needs it as `baseFen`).
 - The analyst's Stockfish handles one search at a time; `Analyst.run` queues jobs. Don't call `Stockfish.analyse` concurrently on one instance.
 - Stockfish scores are from the side to move. Convert carefully (`scoreToCp`, negate across a move).
-- Licenses: Stockfish and chessground are GPL-3.0, so the app is GPL-compatible open source. Pieces are CC0 (rhosgfx). Maia3 weights' license is unconfirmed (see STATE).
+- Licenses: Stockfish and chessground are GPL-3.0, so the app is GPL-compatible open source. Pieces are mpchess (GPL-3.0-or-later, Maxime Chupin), tinted per coach by `scripts/tint-pieces.mjs`; the `default` pack still has rhosgfx (CC0). Maia3 weights' license is unconfirmed (see STATE).
