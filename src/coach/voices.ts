@@ -23,7 +23,12 @@ export type Cue =
   | 'endgame' // small talk: the endgame
   | 'win' // the player won
   | 'loss' // the player lost
-  | 'draw';
+  | 'draw'
+  | 'puzzlesTab' // greeting on the Puzzles tab
+  | 'openingsTab' // greeting on the Openings tab
+  | 'puzzleStart' // a new puzzle
+  | 'lessonStart' // an opening lesson starts
+  | 'lessonDone'; // an opening line or drill run is finished
 
 export type VoiceBank = Record<Cue, readonly string[]>;
 
@@ -47,6 +52,11 @@ export const VOICES: Record<string, VoiceBank> = {
     win: ['GG! You got me!'],
     loss: ['GG! Run it back?'],
     draw: ['Tie game. Respect.'],
+    puzzlesTab: ['Yo, puzzle time!'],
+    openingsTab: ['Openings, let’s GO.'],
+    puzzleStart: ['Ooh, okay, check this one.'],
+    lessonStart: ['Alright, let’s learn this one together.'],
+    lessonDone: ['Ayy, we did it!'],
   },
   // Cheese, duck: unbothered, few words; an exclamation mark means a lot.
   coach2: {
@@ -67,6 +77,11 @@ export const VOICES: Record<string, VoiceBank> = {
     win: ['Well played. Really.'],
     loss: ['Good game. Again?'],
     draw: ['Even. Fair.'],
+    puzzlesTab: ['Puzzles. No rush.'],
+    openingsTab: ['Openings. Easy does it.'],
+    puzzleStart: ['Mm. Take a look.'],
+    lessonStart: ['Okay. Slow and steady.'],
+    lessonDone: ['Nice. That’s a wrap.'],
   },
   // Jimmeny, cowboy jellyfish: loud, heavy Southern drawl, calls you "partner".
   coach3: {
@@ -87,6 +102,11 @@ export const VOICES: Record<string, VoiceBank> = {
     win: ['Well, I’ll be. Ya outdrew me fair ’n’ square, partner.'],
     loss: ['Mosey on back anytime, partner.'],
     draw: ['A standoff, partner. Reckon that’s fair.'],
+    puzzlesTab: ['Step right up, partner, puzzles for the brave!'],
+    openingsTab: ['Every gunslinger needs an openin’, partner.'],
+    puzzleStart: ['Here’s a varmint for ya, partner.'],
+    lessonStart: ['Saddle up, partner, here’s how ya start.'],
+    lessonDone: ['YEEHAW, that’s the trail done, partner!'],
   },
   // Kelpie, otter: warm and motherly, kindness before correction.
   coach4: {
@@ -107,6 +127,11 @@ export const VOICES: Record<string, VoiceBank> = {
     win: ['Oh, you got me! I’m so proud of you.'],
     loss: ['Good game, sweetie. You’ll get me next time.'],
     draw: ['A draw! Well played, dear.'],
+    puzzlesTab: ['Puzzles, dear! Take your time.'],
+    openingsTab: ['Let’s learn some openings, sweetie.'],
+    puzzleStart: ['Here’s a nice one, dear.'],
+    lessonStart: ['Let’s go through this gently, dear.'],
+    lessonDone: ['Well done, sweetie, all finished!'],
   },
   // Oscar, ostrich: a posh English gentleman; a strong British accent in every line.
   coach5: {
@@ -127,6 +152,11 @@ export const VOICES: Record<string, VoiceBank> = {
     win: ['Well played, old sport. Thoroughly deserved.'],
     loss: ['Good game. Fancy another round?'],
     draw: ['Honours even. Most civilised.'],
+    puzzlesTab: ['Ah, puzzles. Splendid exercise, old sport.'],
+    openingsTab: ['Openings, old sport. Proper preparation.'],
+    puzzleStart: ['Right then, a little conundrum.'],
+    lessonStart: ['Let us begin properly, old sport.'],
+    lessonDone: ['Jolly good. That’s the lot.'],
   },
   // Mortimer, frog: a retired schoolteacher in his sixties at his park table.
   coach6: {
@@ -147,11 +177,16 @@ export const VOICES: Record<string, VoiceBank> = {
     win: ['Hah! Well played, kid. Class dismissed.'],
     loss: ['Good game. Same bench tomorrow?'],
     draw: ['Fair’s fair. A draw.'],
+    puzzlesTab: ['Puzzles. Sharpen the old pencil, kid.'],
+    openingsTab: ['Openings. Every game starts somewhere.'],
+    puzzleStart: ['Here’s one for you, kid.'],
+    lessonStart: ['Right. Today’s lesson, kid.'],
+    lessonDone: ['Class dismissed. Good work.'],
   },
 };
 
 /** Rare moments: a phrase every time. The rest are rationed. */
-const ALWAYS: ReadonlySet<Cue> = new Set<Cue>(['start', 'blunder', 'ownSlip', 'solved', 'solvedFirstTry', 'missed', 'win', 'loss', 'draw']);
+const ALWAYS: ReadonlySet<Cue> = new Set<Cue>(['start', 'blunder', 'ownSlip', 'solved', 'solvedFirstTry', 'missed', 'win', 'loss', 'draw', 'puzzlesTab', 'openingsTab', 'lessonStart', 'lessonDone']);
 /** Sparring keeps quiet: only the start, the end and a blunder. */
 const SPARRING: ReadonlySet<Cue> = new Set<Cue>(['start', 'blunder', 'win', 'loss', 'draw']);
 /** A rationed phrase needs at least this many bubbles without one before it (at most one in three). */
@@ -255,4 +290,9 @@ export function cueForMoment(kind: string, lossCp?: number): Cue | undefined {
   if (kind === 'mistake') return (lossCp ?? 0) >= BLUNDER_LOSS ? 'blunder' : 'mistake';
   if (kind === 'missed-tactic') return 'mistake';
   return undefined;
+}
+
+/** A coach's line for a fixed spot (a tab's greeting): the first of its kind, the same each time, outside the budget. */
+export function fixedLine(coachId: string, cue: Cue): string | undefined {
+  return VOICES[coachId]?.[cue][0];
 }

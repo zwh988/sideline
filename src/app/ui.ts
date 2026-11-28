@@ -12,7 +12,7 @@ import type { LineMove as LineMoveLike } from '../coach/linecheck';
 import { Coach, joinRemarks, type Mark, type Mood, type Remark, type Shape } from '../coach/coach';
 import { HEADLINE, LABEL_INFO, type MoveLabel } from '../coach/movelabels';
 import { richSegments } from './richtext';
-import { afterPhrase, cueForSidelineMove, Voice, type Cue } from '../coach/voices';
+import { afterPhrase, cueForSidelineMove, fixedLine, Voice, type Cue } from '../coach/voices';
 import { Sound } from './sound';
 import { LANE_ARROW, LANE_COLOUR, drawChart, laneBadgeSvg } from './linechart';
 import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode, type Option } from './linetree';
@@ -2328,7 +2328,7 @@ export class App {
     const say = document.createElement('p');
     say.className = 'p-say';
     const names = chosen.specialty.puzzleThemes.map((t) => themeName(t).toLowerCase());
-    say.textContent = `My puzzles: ${listAnd(names)}. Tap one to practise it, or start a mix.`;
+    setPhrased(say, `My puzzles: ${listAnd(names)}. Tap one to practise it, or start a mix.`, fixedLine(chosen.coach.id, 'puzzlesTab'), !!this.settings.plain);
     who.append(title, say);
     hero.append(face(chosen, 'lg'), who);
 
@@ -2474,7 +2474,7 @@ export class App {
     pz.phase = 'solving';
     this.sync();
     const side = run.solverColor === 'white' ? 'White' : 'Black';
-    this.say({ kind: 'phase', text: `They played ${first.san}. What does that move want? Then find the best move for ${side}.`, mood: 'thinking' });
+    this.say({ kind: 'phase', text: `They played ${first.san}. What does that move want? Then find the best move for ${side}.`, mood: 'thinking', cue: 'puzzleStart' });
     this.status(`${side} to move.`);
     void (await this.coach).prepare(this.game.fen);
   }
@@ -2841,7 +2841,7 @@ export class App {
     title.textContent = `${chosen.coach.name} · about ${chosen.shownRating}`;
     const say = document.createElement('p');
     say.className = 'p-say';
-    say.textContent = 'Pick an opening. I teach the replies players at my level play most, from Lichess games.';
+    setPhrased(say, 'Pick an opening. I teach the replies players at my level play most, from Lichess games.', fixedLine(chosen.coach.id, 'openingsTab'), !!this.settings.plain);
     who.append(title, say);
     hero.append(coachFace(chosen, 'lg'), who);
     focus.append(hero);
@@ -3108,7 +3108,7 @@ export class App {
     const what = practice
       ? "You know this line, so let's practise it: I'll ask every move again."
       : `Line ${n + 1} of ${lines.length}. ${start}Tap Next to go through the moves; when it is your turn I'll tell you what is needed and you find the move.`;
-    this.say({ kind: 'phase', text: `${intro}${what}`, mood: 'neutral' });
+    this.say({ kind: 'phase', text: `${intro}${what}`, mood: 'neutral', cue: 'lessonStart' });
     this.status('');
     if (!(await this.waitNext(ls, token, 'Start', false))) return;
     await this.walkLesson(ls, token);
@@ -3455,7 +3455,7 @@ export class App {
     if (ls.practice) text = `That's the line. You found ${ls.found} of ${ls.asked} move${ls.asked === 1 ? '' : 's'} without a hint.`;
     else text = `That's the end of this line. ${ls.learnedNow ? `You learned ${ls.learnedNow} new move${ls.learnedNow === 1 ? '' : 's'}` : 'No new moves learned this time'}: ${count} / ${total} for this course with me.`;
     if (!status.includes('next')) text += ' You know every line of this course at my level now. Replay any of them, or pick a stronger coach for more.';
-    this.say({ kind: 'praise', text, mood: 'pleased' });
+    this.say({ kind: 'praise', text, mood: 'pleased', cue: 'lessonDone' });
     this.status('Line done.');
     this.sync();
     const nextIdx = status.indexOf('next');
@@ -3684,7 +3684,7 @@ export class App {
     let text = `That's the end of this run: ${d.hits} of ${total} move${total === 1 ? '' : 's'} found without a hint.`;
     text += left ? ` ${left} move${left === 1 ? ' is' : 's are'} still due ${where}.` : ` Nothing else is due ${where}.`;
     if (d.misses) text += ` ${d.misses === 1 ? 'The one' : `The ${d.misses}`} you missed come${d.misses === 1 ? 's' : ''} back tomorrow.`;
-    this.say({ kind: 'praise', text, mood: 'pleased' });
+    this.say({ kind: 'praise', text, mood: 'pleased', cue: 'lessonDone' });
     this.status('Run done.');
     this.sync();
     const box = this.el.choices;

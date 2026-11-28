@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LEVELS } from '../app/levels';
 import { afterPhrase, cueForMoment, cueForSidelineMove, OPENERS, Voice, voiced, VOICES, type Cue } from './voices';
 
-const CUES: Cue[] = ['start', 'good', 'mistake', 'blunder', 'tactic', 'sawThreat', 'thinking', 'ownSlip', 'solved', 'solvedFirstTry', 'missed', 'lessonRight', 'openingDone', 'endgame', 'win', 'loss', 'draw'];
+const CUES: Cue[] = ['start', 'good', 'mistake', 'blunder', 'tactic', 'sawThreat', 'thinking', 'ownSlip', 'solved', 'solvedFirstTry', 'missed', 'lessonRight', 'openingDone', 'endgame', 'win', 'loss', 'draw', 'puzzlesTab', 'openingsTab', 'puzzleStart', 'lessonStart', 'lessonDone'];
 const all = Object.entries(VOICES).flatMap(([id, bank]) => CUES.flatMap((cue) => bank[cue].map((line) => ({ id, cue, line }))));
 
 // The coach's real sentences, one per kind it says (templates.ts, coach.ts, ui.ts).

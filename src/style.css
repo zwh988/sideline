@@ -2526,6 +2526,12 @@ button.primary {
   color: color-mix(in srgb, var(--coach-accent) 60%, var(--text));
 }
 
+/* On the Puzzles and Openings tabs: the chosen coach's colour (the card's --p-accent). */
+.p-say .phrase {
+  font-weight: 700;
+  color: color-mix(in srgb, var(--p-accent, var(--coach-accent)) 60%, var(--text));
+}
+
 /* The rating beside a coach's name ("Beans 300"): quieter than the name. */
 .c-rating {
   font-weight: 600;

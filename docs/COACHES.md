@@ -47,6 +47,7 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 - *Opening lesson, right answer:* "Yesss!" · "You got it!"
 - *Small talk (opening over, endgame):* "Okay, halftime!" · "Endgame vibes."
 - *Game end:* win "GG! You got me!" · loss "GG! Run it back?" · draw "Tie game. Respect."
+- *Puzzles and openings (agreed Nov 29):* Puzzles tab "Yo, puzzle time!" · Openings tab "Openings, let’s GO." · a new puzzle "Ooh, okay, check this one." · a lesson starts "Alright, let’s learn this one together." · a line or drill run done "Ayy, we did it!"
 
 ---
 
@@ -83,6 +84,7 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 - *Opening lesson, right answer:* "Yep." · "That's it."
 - *Small talk (opening over, endgame):* "Opening's done. Breathe." · "Endgame. Slow is good."
 - *Game end:* win "Well played. Really." · loss "Good game. Again?" · draw "Even. Fair."
+- *Puzzles and openings (agreed Nov 29):* Puzzles tab "Puzzles. No rush." · Openings tab "Openings. Easy does it." · a new puzzle "Mm. Take a look." · a lesson starts "Okay. Slow and steady." · a line or drill run done "Nice. That’s a wrap."
 
 ---
 
@@ -119,6 +121,7 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 - *Opening lesson, right answer:* "Darn tootin', partner!" · "Now yer ridin'!"
 - *Small talk (opening over, endgame):* "Openin's done, partner. Time to RIDE." · "Endgame, partner. Last ones standin'."
 - *Game end:* win "Well, I'll be. Ya outdrew me fair 'n' square, partner." · loss "Mosey on back anytime, partner." · draw "A standoff, partner. Reckon that's fair."
+- *Puzzles and openings (agreed Nov 29):* Puzzles tab "Step right up, partner, puzzles for the brave!" · Openings tab "Every gunslinger needs an openin’, partner." · a new puzzle "Here’s a varmint for ya, partner." · a lesson starts "Saddle up, partner, here’s how ya start." · a line or drill run done "YEEHAW, that’s the trail done, partner!"
 
 ---
 
@@ -157,6 +160,7 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 - *Opening lesson, right answer:* "That's it, dear!" · "Lovely, you remembered."
 - *Small talk (opening over, endgame):* "Opening's done. Lovely." · "Endgame now, dear." (no advice in the phrase: the fact sentence already gives it)
 - *Game end:* win "Oh, you got me! I'm so proud of you." · loss "Good game, sweetie. You'll get me next time." · draw "A draw! Well played, dear."
+- *Puzzles and openings (agreed Nov 29):* Puzzles tab "Puzzles, dear! Take your time." · Openings tab "Let’s learn some openings, sweetie." · a new puzzle "Here’s a nice one, dear." · a lesson starts "Let’s go through this gently, dear." · a line or drill run done "Well done, sweetie, all finished!"
 
 ---
 
@@ -193,6 +197,7 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 - *Opening lesson, right answer:* "Quite right!" · "Spot on, old sport."
 - *Small talk (opening over, endgame):* "Opening's concluded. Rather civilised." · "Ah, the endgame. My favourite bit."
 - *Game end:* win "Well played, old sport. Thoroughly deserved." · loss "Good game. Fancy another round?" · draw "Honours even. Most civilised."
+- *Puzzles and openings (agreed Nov 29):* Puzzles tab "Ah, puzzles. Splendid exercise, old sport." · Openings tab "Openings, old sport. Proper preparation." · a new puzzle "Right then, a little conundrum." · a lesson starts "Let us begin properly, old sport." · a line or drill run done "Jolly good. That’s the lot."
 
 ---
 
@@ -231,6 +236,7 @@ Six tiers, six animal coaches (PLAN task 1.14). This is the character sheet: who
 - *Opening lesson, right answer:* "That's the one." · "Mm-hm. Just like that."
 - *Small talk (opening over, endgame):* "Now the real game starts." · "Endgame. My favourite part of the day."
 - *Game end:* win "Hah! Well played, kid. Class dismissed." · loss "Good game. Same bench tomorrow?" · draw "Fair's fair. A draw."
+- *Puzzles and openings (agreed Nov 29):* Puzzles tab "Puzzles. Sharpen the old pencil, kid." · Openings tab "Openings. Every game starts somewhere." · a new puzzle "Here’s one for you, kid." · a lesson starts "Right. Today’s lesson, kid." · a line or drill run done "Class dismissed. Good work."
 
 ---
 
