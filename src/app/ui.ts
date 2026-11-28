@@ -17,7 +17,7 @@ import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode
 import { gameToPgn } from './pgn';
 import { ImportDialog } from './import-dialog';
 import { GameStore, newGameId, type SavedGame, type SavedMoment } from './store';
-import { gameStats, kindLabel, momentDot, momentUniverses, needsAnalysis, reviewableGames, type SideStats, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, performanceLine } from './review';
+import { gameStats, kindLabel, momentDot, momentUniverses, needsAnalysis, reviewableGames, type SideStats, type Universe, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, mergeAnalysis, moveLabels, performanceLine, pinRows } from './review';
 import { REVIEW_VERSION, reviewCoachLevel, reviewGame } from '../coach/review';
 import { Game, resultOf, type Color } from './game';
 import { LEVELS, levelInfo, levelLabel, type Level } from './levels';
@@ -183,6 +183,11 @@ export function faceSvg(mood: Mood): string {
 
 const TIMELINE_W = 300;
 const TIMELINE_H = 100;
+
+/** The timeline's pin callouts: the height of a row of badges, the room a badge needs, how many rows at most. */
+const PIN_ROW = 26;
+const PIN_GAP = 28;
+const PIN_ROWS = 3;
 
 /** Text for innerHTML (player names come from imported games). */
 const escapeHtml = (t: string): string => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -1764,36 +1769,67 @@ export class App {
     return !!say?.offerAnswer && say.ply === this.nav.ply;
   }
 
-  /** The timeline: one dot per moment, marked like the board's badges; a dot opens that moment with the question first. */
+  /**
+   * The timeline's moments as pin callouts: a small dot on the curve where the move left the evaluation, and the
+   * badge on a stem in a band above the graph, so the curve's height stays readable. Pins side by side sit at
+   * different heights (`pinRows`); the band is as tall as the rows used. A badge opens that moment, question first.
+   */
   private renderDots(r: { moments: SavedMoment[]; index: number }, busy: boolean): void {
     const box = this.el['review-dots'];
+    const plot = box.parentElement!;
     const curve = this.reviewing?.curve;
     box.hidden = !r.moments.length || !curve || curve.length < 2;
-    const scale = curve && curve.length > 1 ? timelineScale(curve) : undefined;
-    box.replaceChildren(
-      ...r.moments.map((m, i) => {
-        const dot = momentDot(m);
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = `dot ${dot.tone}${i === r.index ? ' current' : ''}`;
-        // The move's label when the analysis has one: the same mark as in the move list and on the board.
-        const tag = this.record?.labels?.[m.ply - 1];
-        b.textContent = tag ? LABEL_INFO[tag].glyph : dot.glyph;
-        if (tag) b.style.setProperty(dot.tone === 'theirs' ? 'border-color' : 'background', LABEL_INFO[tag].colour);
-        if (scale && curve) {
-          // On the evaluation line, where the move of the moment left it.
-          b.style.left = `${(scale.x(m.ply) / TIMELINE_W) * 100}%`;
-          b.style.top = `${(scale.y(curve[m.ply] ?? 0) / TIMELINE_H) * 100}%`;
-        }
-        b.disabled = busy;
-        const label = moveLabels(this.record!)[m.ply - 1];
-        b.setAttribute('aria-label', `Moment ${i + 1} of ${r.moments.length}: ${kindLabel(m)}, ${label}`);
-        b.title = `${label} · ${kindLabel(m)}`;
-        if (i === r.index) b.setAttribute('aria-current', 'true');
-        b.addEventListener('click', () => this.gotoMoment(i));
-        return b;
-      }),
-    );
+    if (box.hidden || !curve) {
+      plot.style.setProperty('--band', '0px');
+      box.replaceChildren();
+      return;
+    }
+    const scale = timelineScale(curve);
+    const width = box.clientWidth || 300;
+    const xs = r.moments.map((m) => scale.x(m.ply) / TIMELINE_W);
+    const rows = pinRows(xs.map((f) => f * width), PIN_GAP, PIN_ROWS);
+    const used = Math.max(0, ...rows) + 1;
+    const band = used * PIN_ROW + 8;
+    plot.style.setProperty('--band', `${band}px`);
+    const labels = moveLabels(this.record!);
+    const parts: HTMLElement[] = [];
+    r.moments.forEach((m, i) => {
+      const dot = momentDot(m);
+      const tag = this.record?.labels?.[m.ply - 1];
+      const colour = tag ? LABEL_INFO[tag].colour : undefined;
+      const left = `${xs[i] * 100}%`;
+      // Where the move left the evaluation, inside the graph under the band.
+      const pointTop = `calc(${band}px + (100% - ${band}px) * ${(scale.y(curve[m.ply] ?? 0) / TIMELINE_H).toFixed(4)})`;
+      const pinY = band - 8 - PIN_ROW / 2 - rows[i] * PIN_ROW;
+      const stem = document.createElement('span');
+      stem.className = `pin-stem ${dot.tone}${i === r.index ? ' current' : ''}`;
+      stem.style.left = left;
+      stem.style.top = `${pinY}px`;
+      stem.style.height = `calc(${pointTop} - ${pinY}px)`;
+      if (colour) stem.style.setProperty('--c', colour);
+      const point = document.createElement('span');
+      point.className = `pin-point ${dot.tone}`;
+      point.style.left = left;
+      point.style.top = pointTop;
+      if (colour) point.style.setProperty('--c', colour);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `dot ${dot.tone}${i === r.index ? ' current' : ''}`;
+      // The move's label when the analysis has one: the same mark as in the move list and on the board.
+      b.textContent = tag ? LABEL_INFO[tag].glyph : dot.glyph;
+      if (colour) b.style.setProperty(dot.tone === 'theirs' ? 'border-color' : 'background', colour);
+      b.style.left = left;
+      b.style.top = `${pinY}px`;
+      b.disabled = busy;
+      const label = labels[m.ply - 1];
+      b.setAttribute('aria-label', `Moment ${i + 1} of ${r.moments.length}: ${kindLabel(m)}, ${label}`);
+      b.title = `${label} · ${kindLabel(m)}`;
+      if (i === r.index) b.setAttribute('aria-current', 'true');
+      b.addEventListener('click', () => this.gotoMoment(i));
+      parts.push(stem, point, b);
+    });
+    // Badges last, so a stem never covers one.
+    box.replaceChildren(...parts.filter((p) => p.tagName !== 'BUTTON'), ...parts.filter((p) => p.tagName === 'BUTTON'));
   }
 
   /** Goes to a moment: the position before the move, with the question. */

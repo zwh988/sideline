@@ -1390,30 +1390,31 @@ button.primary {
 /* Review: the evaluation through the game (White's view) with the moments on the line; tap to jump */
 .timeline {
   flex: 1 0 100%;
-  height: 128px;
-  padding: 14px 14px; /* room for the dots at the edges */
+  padding: 4px 14px 8px; /* room for the pins at the edges */
   box-sizing: border-box;
+  --plot-h: 84px;
 }
 
 .timeline[hidden] {
   display: none;
 }
 
+/* The band for the pins (as tall as the rows used, set by renderDots) above the graph */
 .timeline .plot {
   position: relative;
-  height: 100%;
+  padding-top: var(--band, 0px);
 }
 
 .review-strip {
   display: block;
   width: 100%;
-  height: 100%;
+  height: var(--plot-h);
   overflow: visible;
   cursor: pointer;
   touch-action: manipulation;
 }
 
-/* One dot per moment, marked like the board's badges, sitting where its move left the evaluation */
+/* The moments as pin callouts: a dot on the curve, a stem, and the badge in the band above */
 .review-dots {
   position: absolute;
   inset: 0;
@@ -1424,28 +1425,55 @@ button.primary {
   display: none;
 }
 
+.review-dots .pin-point {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--c, var(--muted));
+  box-shadow: 0 0 0 1.5px var(--panel);
+}
+
+.review-dots .pin-point.theirs {
+  background: var(--panel);
+  box-shadow: inset 0 0 0 2px var(--c, var(--game-line));
+}
+
+.review-dots .pin-stem {
+  position: absolute;
+  width: 0;
+  transform: translateX(-50%);
+  border-left: 1.5px solid color-mix(in srgb, var(--c, var(--muted)) 70%, transparent);
+}
+
+.review-dots .pin-stem.current {
+  border-left-width: 2.5px;
+  border-left-color: var(--text);
+}
+
 .review-dots .dot {
   position: absolute;
   transform: translate(-50%, -50%);
   pointer-events: auto;
-  width: 26px;
+  width: 22px;
   min-width: 0;
-  height: 26px;
+  height: 22px;
   min-height: 0;
   padding: 0;
   border-radius: 50%;
   border: 2px solid var(--panel);
   color: var(--on-accent);
   font-weight: 800;
-  font-size: var(--fs-xs);
+  font-size: 10px;
   line-height: 1;
 }
 
-/* A bigger touch target than the dot itself */
+/* A bigger touch target than the badge itself (rows are 26px apart, so it stays within its own row) */
 .review-dots .dot::after {
   content: '';
   position: absolute;
-  inset: -7px;
+  inset: -2px -4px;
 }
 
 .review-dots .dot:active {
@@ -1463,9 +1491,8 @@ button.primary {
 
 .review-dots .dot.current {
   z-index: 1;
-  width: 32px;
-  height: 32px;
-  outline: 3px solid var(--text);
+  outline: 2.5px solid var(--text);
+  outline-offset: 1px;
 }
 
 .review-strip .strip-mid {
@@ -1914,7 +1941,7 @@ button.primary {
   }
 
   .side .timeline {
-    height: 112px;
+    --plot-h: 72px;
   }
 
   /* The move list takes what is left. */

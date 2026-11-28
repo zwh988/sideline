@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BAD_MOVE_PGN } from './import-fixtures';
 import { parseGame, toSavedGame } from './pgnimport';
-import { gameStats, momentDot, momentUniverses, mergeAnalysis, moveLabels, needsAnalysis, playedSan, reviewableGames, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, performanceLine } from './review';
+import { pinRows, gameStats, momentDot, momentUniverses, mergeAnalysis, moveLabels, needsAnalysis, playedSan, reviewableGames, reviewBarText, reviewIntro, reviewPrompt, sortedMoments, performanceLine } from './review';
 import { REVIEW_VERSION } from '../coach/review';
 import { SCOTCH_FEN } from './import-fixtures';
 import type { SavedGame, SavedMoment } from './store';
@@ -139,5 +139,21 @@ describe('Game review list and accuracy', () => {
     expect(needsAnalysis(base({ curve: [0, 0], labels: ['book'], reviewVersion: REVIEW_VERSION }))).toBe(false);
     expect(needsAnalysis(base({ curve: [0, 0], labels: ['book'], reviewVersion: REVIEW_VERSION - 1 }))).toBe(true);
     expect(needsAnalysis(base({ curve: [0, 0], reviewVersion: REVIEW_VERSION }))).toBe(true); // no labels yet
+  });
+});
+
+describe('pin callouts on the timeline', () => {
+  it('keeps pins in the row nearest the graph when there is room', () => {
+    expect(pinRows([10, 60, 120], 28, 3)).toEqual([0, 0, 0]);
+  });
+
+  it('lifts a pin that would touch its neighbour, and comes back down when there is room', () => {
+    expect(pinRows([10, 20, 30, 80], 28, 3)).toEqual([0, 1, 2, 0]);
+    expect(pinRows([30, 10, 20], 28, 3)).toEqual([2, 0, 1]); // the order given is kept
+  });
+
+  it('reuses the row whose last pin is farthest when all rows are taken', () => {
+    expect(pinRows([0, 5, 10, 15], 28, 3)).toEqual([0, 1, 2, 0]);
+    expect(pinRows([], 28, 3)).toEqual([]);
   });
 });

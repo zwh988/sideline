@@ -231,3 +231,21 @@ export function gameStats(curve: number[] | undefined, startFen: string, labels:
   }
   return out;
 }
+
+/**
+ * Rows for the timeline's pin callouts: each pin sits in the lowest row (nearest the graph) where it is at
+ * least `minGap` from the pin before it, so moments side by side get stems of different heights. When every
+ * row is taken, the row whose last pin is farthest away. `xs` in pixels, any order; rows are returned in that order.
+ */
+export function pinRows(xs: number[], minGap: number, maxRows: number): number[] {
+  const order = xs.map((x, i) => ({ x, i })).sort((a, b) => a.x - b.x);
+  const last: number[] = [];
+  const rows = new Array<number>(xs.length);
+  for (const { x, i } of order) {
+    let row = last.findIndex((lx) => x - lx >= minGap);
+    if (row < 0) row = last.length < maxRows ? last.length : last.indexOf(Math.min(...last));
+    last[row] = x;
+    rows[i] = row;
+  }
+  return rows;
+}
