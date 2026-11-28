@@ -55,16 +55,20 @@ export interface MoveFacts {
 
 /**
  * A target is worth attacking if it is the king, worth more than the
- * attacker, or an undefended piece (not a pawn).
+ * attacker, an undefended piece (not a pawn), or a piece worth at least the
+ * attacker that is attacked more often than it is defended (a knight hit by a
+ * bishop and a queen with one guard: taking it wins material).
  */
 function worthwhileTargets(chess: Chess, from: Square, attackerValue: number, by: Color): Target[] {
   const targets: Target[] = [];
   for (const sq of SQUARES) {
     const p = chess.get(sq);
     if (!p || p.color === by) continue;
-    if (!chess.attackers(sq, by).includes(from)) continue;
-    const defended = chess.attackers(sq, p.color).length > 0;
-    if (p.type === 'k' || VALUE[p.type] > attackerValue || (!defended && VALUE[p.type] >= 3)) {
+    const attackers = chess.attackers(sq, by);
+    if (!attackers.includes(from)) continue;
+    const defenders = chess.attackers(sq, p.color).length;
+    const outnumbered = defenders > 0 && attackers.length > defenders && VALUE[p.type] >= attackerValue;
+    if (p.type === 'k' || VALUE[p.type] > attackerValue || (VALUE[p.type] >= 3 && (defenders === 0 || outnumbered))) {
       targets.push({ square: sq, piece: p.type });
     }
   }

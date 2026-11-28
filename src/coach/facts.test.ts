@@ -58,6 +58,18 @@ describe('playAndDescribe', () => {
     expect(f.doubleAttack).toBe(true);
   });
 
+  it('counts a defended knight as a target when it is attacked more often than defended', () => {
+    // 17...Bxd4: Nc3 has no guard; Ne5 is hit by Bd4, Qf6 and Ng6, guarded only by Qh5.
+    const fen = 'r3k2r/p2b3p/1b2pqnp/3pN2Q/3P4/P1NB4/2P2PPP/R4RK1 b kq - 0 17';
+    const f = playAndDescribe(new Chess(fen), 'b6d4');
+    expect(f.attacks.map((t) => t.square).sort()).toEqual(['c3', 'e5']);
+    expect(f.doubleAttack).toBe(true);
+    // Without Qf6 and Ng6 (a pawn on f7 instead, to keep Qh5 off the king), Ne5 has one attacker and one guard: no fork.
+    const g = playAndDescribe(new Chess('r3k2r/p2b1p1p/1b2p2p/3pN2Q/3P4/P1NB4/2P2PPP/R4RK1 b kq - 0 17'), 'b6d4');
+    expect(g.attacks.map((t) => t.square)).toEqual(['c3']);
+    expect(g.doubleAttack).toBe(false);
+  });
+
   it('does not call it a fork when the forking piece is simply lost', () => {
     // Knight on d5 forks two rooks but a pawn on e6 takes it.
     const chess = new Chess('4k3/2r1r3/4p3/8/8/2N5/8/4K3 w - - 0 1');

@@ -1,6 +1,6 @@
 # Project state
 
-Last updated: 2026-11-29, after the timeline's pin callouts (1.12n).
+Last updated: 2026-11-29, after the fork fix (outnumbered targets, x-ray clause).
 
 ## Summary
 
@@ -174,6 +174,8 @@ Measured on the developer's PC (16 cores, Intel Iris Xe-class integrated GPU).
 - Task 1.12m. **Tests:** `review.test.ts` (the intro with and without the performance line and no "swung"; `performanceLine` for a side with labels, a clean side, overlooked and mistakes), `richtext.test.ts` (percentages bold). **Browser:** the Opera game's intro reads as in decision 46 with 91% and 81% bold. Not checked in the browser: the deeper sideline judging (the code path is the same `Coach` with a different level; covered by type-check only).
 
 - Task 1.12n. **Tests:** `review.test.ts` (`pinRows`: room in the lowest row, lifting a pin that would touch its neighbour and coming back down, the order kept, reusing the farthest row when all are taken). **Browser:** the Opera game: 12 pins in 3 rows, the curve's height readable between them; tapping a pin opens its moment (outline and bold stem); checked at desktop and 375x812.
+
+- Fork fix (the user's report: 17...Bxd4 was called a pin of f2, but it forks both knights and x-rays Ra1). `worthwhileTargets` (`facts.ts`) now also counts a piece worth at least the attacker that is attacked more often than defended (Ne5: Bd4, Qf6, Ng6 against Qh5), so `doubleAttack` fires; the fork sentence (`explain.ts`) adds "and behind the knight on c3 stands my rook on a1" when `lineUps` finds a bigger non-king piece behind one of the forked pieces. **Tests:** `facts.test.ts` (the game position, and a version where Ne5 has one attacker and one guard: no fork), `explain.test.ts` (the full sentence). **Browser:** `conceptNote` imported in the page console on the game position, both sides' wording. Counting attackers is plain counting (no x-ray attackers, no piece order), the same rule `discoveredAttack` uses.
 
 ## Decisions (differ from or add to the spec)
 

@@ -14,6 +14,16 @@ describe('conceptNote', () => {
     expect(f?.text).toBe("That's a fork: my knight on c2 attacks your king on e1 and your rook on a1 at once.");
   });
 
+  it('fork of a loose knight and an outnumbered one, with the rook behind (a real game, 17...Bxd4)', () => {
+    // Bxd4 hits Nc3 (no guard) and Ne5 (Bd4, Qf6 and Ng6 against Qh5); Ra1 stands behind Nc3.
+    // The f2 pawn is pinned too, but the fork is the point.
+    const n = conceptNote('r3k2r/p2b3p/1b2pqnp/3pN2Q/3P4/P1NB4/2P2PPP/R4RK1 b kq - 0 17', 'b6d4', 'you');
+    expect(n).toEqual({
+      concept: 'fork',
+      text: "That's a fork: your bishop on d4 attacks my knight on e5 and my knight on c3 at once, and behind the knight on c3 stands my rook on a1.",
+    });
+  });
+
   it('skewer: the rook checks the king and the queen stands behind it', () => {
     const n = conceptNote('4q3/8/8/8/4k3/8/8/R6K w - - 0 1', 'a1e1', 'you');
     expect(n?.concept).toBe('skewer');

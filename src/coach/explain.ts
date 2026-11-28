@@ -66,7 +66,14 @@ export function conceptNote(fenBefore: string, uci: string, who: 'you' | 'me', o
     };
   }
   if (m.doubleAttack && !m.mate) {
-    return { concept: 'fork', text: `That's a fork: ${piece} attacks ${targetList(m.attacks, !mine, opp)} at once.` };
+    // An x-ray: behind one of the forked pieces, on the forking piece's line, stands a bigger piece.
+    const xray = lineUps(chess, color).find(
+      (l) => l.by === m.to && l.kind === 'pin' && l.back.type !== 'k' && m.attacks.some((t) => t.square === l.front.square),
+    );
+    const behind = xray
+      ? `, and behind the ${PIECE_NAME[xray.front.type]} on ${xray.front.square} stands ${pieceRef(xray.back.type, xray.back.square, !mine, opp)}`
+      : '';
+    return { concept: 'fork', text: `That's a fork: ${piece} attacks ${targetList(m.attacks, !mine, opp)} at once${behind}.` };
   }
   for (const l of lineUps(chess, color)) {
     if (l.by !== m.to) continue;
