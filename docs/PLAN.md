@@ -189,7 +189,7 @@ Found in play (user, Nov 25): the app looks barebones and, worse, the coach feel
 - ✅ **1.12c Actions regrouped** (decision 34, 4): "Ask coach" menu (Hint, Explore), Undo by the last move, Flip and Settings in the header menu; captured pieces beside/above-below the board with +x.
 - ✅ **1.12d Sideline on the board** (decision 34, 5): tinted squares and header, option arrows coloured and weighted by lane (no numbers, no legend), badges on pieces, the path we're on bold and the rest faded, the chart reduced to a wordless strip, aligned and non-overlapping.
 - ✅ **1.12e One visual system** (tokens, Nunito, the coach portrait, buttons, History and Import, focus, reduced motion, contrast; the list below was the starting menu, see STATE for what was done and what was not checked): the list below (tokens, type, coach portrait, controls, dialogs, motion, accessibility), migrated screen by screen.
-- ⬜ **1.12f Sound and haptics** (separate, later): light haptic on a mistake, short sound on a blunder, a Settings switch (haptics on, sound off by default).
+- ✅ **1.12f Sound and haptics** (done; see STATE decision 52: sound only, no haptics by the user's choice; synthesised board and moment sounds, per-coach moment timbres, off by default).
 
 Found in playtesting 1.12a–e (user, Nov 25). Do in this order, one session each:
 - ✅ **1.12g Sideline pass** (done; see STATE. The phone board is smaller in both modes so the chart fits).

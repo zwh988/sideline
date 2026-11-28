@@ -38,6 +38,7 @@ npx tsc              # type-check only
 | `src/app/openingcatalog.ts`, `src/app/openingstore.ts` | Openings tab layout (courses by side, then what you face) and course file loading; learned opening moves on the device (in the backup). The tab, course page and lesson mode (`OPENING`) are in `ui.ts` |
 | `src/app/practice.ts` | The practice scheduler: cards, due dates, results (1, 3, 7, 14, 30 days; a miss resets), on the device and in the backup. Opening drill uses it; puzzles (3.3) will |
 | `src/app/opponent.ts` | Coach's move choice: Maia (human-like), weakened Stockfish fallback |
+| `src/app/sound.ts` | Sounds made with Web Audio: board (move, capture, check) and moments by cue, timbre per coach; off by default (Settings) |
 | `src/app/theme.ts`, `public/themes/<id>/` | Theme packs: `theme.json` + piece images, no code changes to reskin |
 | `src/engine/stockfish.ts` | UCI wrapper for Stockfish WASM (single-threaded lite build) |
 | `src/engine/maia.ts` | Maia3 via maia3-js + ONNX Runtime Web (wasm build) |

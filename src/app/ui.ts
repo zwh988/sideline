@@ -13,6 +13,7 @@ import { Coach, joinRemarks, type Mark, type Mood, type Remark, type Shape } fro
 import { HEADLINE, LABEL_INFO, type MoveLabel } from '../coach/movelabels';
 import { richSegments } from './richtext';
 import { afterPhrase, Voice, type Cue } from '../coach/voices';
+import { Sound } from './sound';
 import { LANE_ARROW, LANE_COLOUR, drawChart, laneBadgeSvg } from './linechart';
 import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode, type Option } from './linetree';
 import { gameToPgn } from './pgn';
@@ -51,6 +52,8 @@ interface Settings {
   mode: ModeId;
   /** "Plain coach": no phrases in the coach's voice, only the facts (task 1.14b). */
   plain?: boolean;
+  /** Sounds on moves and big moments (task 1.12f); off unless the player turns them on. */
+  sound?: boolean;
 }
 
 const SETTINGS_KEY = 'sideline.settings';
@@ -352,6 +355,7 @@ export class App {
   private nav = new Navigation();
   private log = new RemarkLog();
   private voice = new Voice();
+  private sound = new Sound();
   /** True while the board shows arrows from a viewed position's remark. */
   private viewShapes = false;
   /** The sideline the player is trying, if any ("Try a sideline"): a tree of Lines, the game is paused. */
@@ -506,6 +510,12 @@ export class App {
               <option value="plain">Plain (facts only)</option>
             </select>
           </label>
+          <label>Sound
+            <select id="sound">
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+          </label>
           <label>Play as
             <select id="color">
               <option value="white">White</option>
@@ -622,7 +632,7 @@ export class App {
         </aside>
       </main>`;
 
-    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'plain', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-timeline', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file', 'rail-puzzles', 'menu-puzzles', 'puzzles-screen', 'puzzles-close', 'puzzles-note', 'puzzles-list', 'puzzle-bar', 'puzzle-text', 'puzzle-skip', 'puzzle-exit', 'rail-openings', 'menu-openings', 'openings-screen', 'openings-close', 'openings-note', 'openings-list', 'openings-title', 'lesson-bar', 'lesson-text', 'lesson-exit']) {
+    for (const id of ['board', 'promotion', 'bubble', 'bubble-box', 'mood', 'portrait', 'choices', 'status', 'moves', 'level', 'mode', 'color', 'takeback', 'hint', 'board-area', 'viewbar', 'viewtext', 'nav-start', 'nav-back', 'nav-forward', 'nav-live', 'back-to-game', 'cap-top', 'cap-bottom', 'board-note', 'more', 'more-menu', 'ask', 'ask-menu', 'sideline', 'sideline-bar', 'chart', 'chart-wrap', 'sideline-arrows', 'sideline-undo', 'sideline-exit', 'history', 'history-open', 'history-close', 'history-note', 'history-list', 'rail-play', 'rail-settings', 'menu-play', 'menu-review', 'menu-settings', 'newgame', 'ng-level', 'ng-mode', 'plain', 'sound', 'ng-color', 'ng-cancel', 'ng-start', 'settings-screen', 'settings-close', 'review-bar', 'review-text', 'review-strip', 'review-dots', 'review-timeline', 'review-next', 'review-exit', 'import-open', 'backup', 'restore', 'restore-file', 'rail-puzzles', 'menu-puzzles', 'puzzles-screen', 'puzzles-close', 'puzzles-note', 'puzzles-list', 'puzzle-bar', 'puzzle-text', 'puzzle-skip', 'puzzle-exit', 'rail-openings', 'menu-openings', 'openings-screen', 'openings-close', 'openings-note', 'openings-list', 'openings-title', 'lesson-bar', 'lesson-text', 'lesson-exit']) {
       this.el[id] = this.root.querySelector(`#${id}`)!;
     }
     const level = this.el.level as HTMLSelectElement;
@@ -646,6 +656,16 @@ export class App {
       this.updateSettings({ plain: plain.value === 'plain' }, true);
       this.renderBubble(); // applies at once, to what is already said too
     });
+    const sound = this.el.sound as HTMLSelectElement;
+    sound.value = this.settings.sound ? 'on' : 'off';
+    this.sound.enabled = !!this.settings.sound;
+    sound.addEventListener('change', () => {
+      this.updateSettings({ sound: sound.value === 'on' }, true);
+      this.sound.enabled = !!this.settings.sound;
+      this.sound.play('move', ''); // a sample, and it starts audio inside this tap
+    });
+    // Phones start audio only inside a tap: the coach's moves come later, so wake it on the player's taps.
+    this.root.addEventListener('pointerdown', () => this.sound.unlock(), { capture: true });
     // A long coach remark opens on a tap (phones).
     this.el['bubble-box'].addEventListener('click', () => this.root.querySelector('.coach')!.classList.toggle('expanded'));
     this.root.querySelector('#new-game')!.addEventListener('click', () => this.openNewGameSheet());
@@ -817,6 +837,7 @@ export class App {
       (this.el.mode as HTMLSelectElement).value = this.settings.mode;
       (this.el.color as HTMLSelectElement).value = this.settings.color;
       (this.el.plain as HTMLSelectElement).value = this.settings.plain ? 'plain' : 'on';
+      (this.el.sound as HTMLSelectElement).value = this.settings.sound ? 'on' : 'off';
       settings.show();
     }
     this.railCurrent();
@@ -1460,6 +1481,7 @@ export class App {
     const sparring = !this.puzzling && !this.lesson && this.mode.id === 'sparring';
     const phrase = this.voice.next(this.boardCoach?.coach.id ?? '', r.cue, { plain: this.settings.plain, sparring });
     r = { ...r, phrase };
+    this.sound.cue(r.cue, this.boardCoach?.coach.id ?? '');
     // Kept with its ply: it stays readable after the coach moves, and shows
     // again when that position is viewed.
     this.log.add(this.game.moves.length, r);
@@ -1473,6 +1495,12 @@ export class App {
     }
     this.renderBubble();
     this.save();
+  }
+
+  /** A move just played on the game board, live (not a replay): its sound. */
+  private played<M extends { san: string }>(m: M): M {
+    this.sound.board(m.san);
+    return m;
   }
 
   /** Routine game information, outside the coach's bubble. */
@@ -1539,7 +1567,7 @@ export class App {
     this.el.choices.hidden = true;
     this.stopDemo();
     const fenBefore = this.game.fen;
-    const move = this.game.play(from + to + promotion);
+    const move = this.played(this.game.play(from + to + promotion));
     const ply = this.game.moves.length;
     this.board.setAutoShapes([]);
     this.el['bubble-box'].classList.add('stale');
@@ -1609,7 +1637,7 @@ export class App {
     const fenBefore = this.game.fen;
     const prev = this.game.lastMove;
     const lastMove = prev && prev.color === this.game.playerColor ? { san: prev.san, to: prev.to } : undefined;
-    const move = this.game.play(uci);
+    const move = this.played(this.game.play(uci));
     this.thinking = false;
     this.board.setAutoShapes([]);
     this.el['bubble-box'].classList.add('stale');
@@ -2426,7 +2454,7 @@ export class App {
     this.sync();
     await sleep(700); // the position first, then their move
     if (id !== this.gameId) return;
-    const first = this.game.play(run.firstMove);
+    const first = this.played(this.game.play(run.firstMove));
     this.thinking = false;
     pz.phase = 'solving';
     this.sync();
@@ -2451,7 +2479,7 @@ export class App {
     const kind = run.check(uci);
     this.stopDemo();
     this.el.choices.hidden = true;
-    const move = this.game.play(uci);
+    const move = this.played(this.game.play(uci));
     const ply = this.game.moves.length;
     this.board.setAutoShapes([]);
     this.el['bubble-box'].classList.add('stale');
@@ -2467,7 +2495,7 @@ export class App {
       this.sync();
       await sleep(MIN_THINK_MS);
       if (this.stale(id, ply) || !reply) return;
-      const r = this.game.play(reply);
+      const r = this.played(this.game.play(reply));
       pz.line.push(reply);
       pz.hintStep = 0;
       this.thinking = false;
@@ -3120,7 +3148,7 @@ export class App {
       if (!live()) return;
       ls.phase = 'auto';
       this.thinking = true;
-      this.game.play(n.uci);
+      this.played(this.game.play(n.uci));
       this.board.setAutoShapes([]);
       this.status(n.who === 'player' ? `You know this one: ${nodeLabel(ls.tree, n)}.` : `${nodeLabel(ls.tree, n)}.`);
       this.sync();
@@ -3145,7 +3173,7 @@ export class App {
       this.thinking = true;
       await sleep(ls.skip ? 200 : 350);
       if (!live()) return;
-      this.game.play(step.node.uci);
+      this.played(this.game.play(step.node.uci));
       this.board.setAutoShapes([]);
       this.sync();
       ls.index++;
@@ -3249,12 +3277,12 @@ export class App {
     this.board.setAutoShapes([]);
     this.el['bubble-box'].classList.add('stale');
     if (isCourseMove(fenBefore, uci, node)) {
-      this.game.play(node.uci);
+      this.played(this.game.play(node.uci));
       this.sync();
       return this.lessonFound(ls, token);
     }
     if (ls.drill) return this.drillMiss(ls, fenBefore, uci);
-    const move = this.game.play(uci);
+    const move = this.played(this.game.play(uci));
     const ply = this.game.moves.length;
     ls.phase = 'auto';
     this.thinking = true;
@@ -3865,6 +3893,7 @@ export class App {
     if (!sl.canOpen(sl.cursor, o.uci)) return void this.status('That is as many Lines as fit on one chart. Remove a move, or go back to the game.');
     const node = sl.open(sl.cursor, o.uci, o.lane === 'other' ? 'you' : 'engine', o);
     sl.goto(node);
+    this.sound.board(node.san);
     this.cursorMoved(sl);
     void this.noteFor(sl, node);
   }
@@ -3885,6 +3914,7 @@ export class App {
     const opt = this.optionsAt?.nodeId === sl.cursor.id ? this.optionsAt.options.find((o) => o.uci === uci) : undefined;
     const node = sl.open(sl.cursor, uci, opt && opt.lane !== 'other' ? 'engine' : 'you', opt);
     sl.goto(node);
+    this.sound.board(node.san);
     this.cursorMoved(sl);
     void this.noteFor(sl, node);
   }
