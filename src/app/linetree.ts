@@ -2,24 +2,27 @@
 //
 // A Line is a path of moves from a fork; the chart draws every opened move at a column (its
 // depth) and in a lane (how good it was compared with the engine's best move in its own
-// position: Best / Great / Good / Other). The tree holds only opened moves. The options for the
+// position: Best / Excellent / Good / Other). The tree holds only opened moves. The options for the
 // next move at the cursor (the engine's top moves, the move played in the game, ...) are not
 // nodes until the player opens one; `rateOptions` ranks them from the engine's lines.
 import { Chess, SQUARES, type Square } from 'chess.js';
 import { scoreToCp, type Score } from '../engine/stockfish';
 import { resultOf, type Color, type Result } from './game';
 import { plyLabel } from './navigation';
+import { brilliantSacrifice, isOnlyMove, labelOfLoss, type MoveLabel } from '../coach/movelabels';
+import { offeredMaterial } from '../coach/explain';
 
 export type Lane = 'best' | 'great' | 'good' | 'other';
 export const LANES: Lane[] = ['best', 'great', 'good', 'other'];
-export const LANE_NAME: Record<Lane, string> = { best: 'Best', great: 'Great', good: 'Good', other: 'Other' };
+/** The lane `great` is shown as Excellent: "Great" is the move label for the only move that holds (`movelabels.ts`). */
+export const LANE_NAME: Record<Lane, string> = { best: 'Best', great: 'Excellent', good: 'Good', other: 'Other' };
 
 /** Who proposed a move: the game itself, the engine (an engine option the player opened), or the player. */
 export type Author = 'game' | 'engine' | 'you';
 
 /** A move worth this much less than the engine's best (centipawns) is still "Best": ties and noise. */
 export const BEST_CP = 10;
-/** Up to this much less: Great. */
+/** Up to this much less: Excellent (the lane `great`). */
 export const GREAT_CP = 60;
 /** Up to this much less: Good (the same size as `linecheck`'s "refuted" line). Beyond it: Other. */
 export const GOOD_CP = 150;
@@ -51,14 +54,14 @@ export interface Rating {
   evalCp: number;
   /** The engine's best move there, in words ("Bb5"), when this move is not it. */
   bestSan?: string;
-  /** The best move is the only good one: the next-best is at least `ONLY_MOVE_CP` worse. */
+  /** The best move is the only good one: the next-best is much worse (`isOnlyMove`). */
   onlyMove?: boolean;
+  /** It offers material, holds up (close to the best, not behind after it) and the side wasn't already far ahead. */
+  brilliant?: boolean;
   /** Players at the level often choose it (Maia), though the engine may rate it lower. */
   common?: boolean;
 }
 
-/** The best move is "the only move" when the next-best is this much worse (centipawns). */
-export const ONLY_MOVE_CP = 200;
 /** Maia must give a move at least this probability for it to count as "common at your level". */
 export const COMMON_P = 0.15;
 
@@ -67,15 +70,18 @@ export function isCommon(likely: { uci: string; p: number }[], uci: string): boo
   return likely.some((l) => l.uci === uci && l.p >= COMMON_P);
 }
 
-/** A mistake is a blunder from this loss on. */
-export const BLUNDER_CP = 300;
-
-/** A mark for a notable move: ! only move, ? mistake, ?? blunder. Quiet moves get none. */
-export function badgeOf(r: Rating | undefined): '!' | '?' | '??' | undefined {
+/** A mark for a notable move (the labels of `movelabels.ts`): Brilliant, Great, Inaccuracy, Mistake, Blunder. The lane says the rest. */
+export function badgeOf(r: Rating | undefined): MoveLabel | undefined {
   if (!r) return undefined;
-  if (r.onlyMove) return '!';
-  if (r.lane === 'other') return r.lossCp >= BLUNDER_CP ? '??' : '?';
-  return undefined;
+  if (r.brilliant) return 'brilliant';
+  if (r.onlyMove) return 'great';
+  const l = labelOfLoss(r.lossCp);
+  return l === 'inaccuracy' || l === 'mistake' || l === 'blunder' ? l : undefined;
+}
+
+/** Brilliant: offers material, close to the best move, the side not already far ahead and not behind after it. */
+function brilliantOf(fen: string, uci: string, lossCp: number, bestCp: number, valueCp: number): true | undefined {
+  return brilliantSacrifice(lossCp, bestCp, valueCp) && !!offeredMaterial(fen, uci) ? true : undefined;
 }
 
 /** A move that can be opened next: rated, with where it came from. */
@@ -102,7 +108,7 @@ export function rateOptions(fen: string, lines: EngineLine[], me: Color | 'w' | 
   const bestSan = sanOf(fen, first.pv[0]);
   const out: Option[] = [];
   const second = lines.find((l) => l.pv.length && l.pv[0] !== first.pv[0]);
-  const only = !!second && best - scoreToCp(second.score) >= ONLY_MOVE_CP;
+  const only = isOnlyMove(best, second ? scoreToCp(second.score) : undefined);
   for (const l of lines) {
     const uci = l.pv[0];
     if (!uci || out.some((o) => o.uci === uci)) continue;
@@ -117,18 +123,19 @@ export function rateOptions(fen: string, lines: EngineLine[], me: Color | 'w' | 
       evalCp: mover === me[0] ? cp : -cp,
       bestSan: lane === 'best' ? undefined : bestSan,
       onlyMove: l === first && only ? true : undefined,
+      brilliant: brilliantOf(fen, uci, lossCp, best, cp),
     });
   }
   return out;
 }
 
 /** The rating of a move that is not among the engine's lines: its loss is the best score minus what it is worth. */
-export function rateOther(fen: string, bestCp: number, scoreAfter: Score, me: Color | 'w' | 'b', bestSan?: string): Rating {
+export function rateOther(fen: string, bestCp: number, scoreAfter: Score, me: Color | 'w' | 'b', bestSan?: string, uci?: string): Rating {
   const mover = new Chess(fen).turn();
   const value = -scoreToCp(scoreAfter); // the score after the move is the opponent's
   const lossCp = Math.max(0, bestCp - value);
   const lane = laneOf(lossCp);
-  return { lane, lossCp, evalCp: mover === me[0] ? value : -value, bestSan: lane === 'best' ? undefined : bestSan };
+  return { lane, lossCp, evalCp: mover === me[0] ? value : -value, bestSan: lane === 'best' ? undefined : bestSan, brilliant: uci ? brilliantOf(fen, uci, lossCp, bestCp, value) : undefined };
 }
 
 export function sanOf(fen: string, uci: string): string {

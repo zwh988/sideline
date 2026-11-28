@@ -339,6 +339,7 @@ export class ImportDialog {
         game.remarks = result.remarks;
         game.moments = result.moments;
         game.curve = result.curve;
+        game.labels = result.labels;
         game.reviewVersion = REVIEW_VERSION;
         game.opening = book.openingOf(game.startFen, game.moves);
         if (!this.deps.store.save(game)) {

@@ -6,13 +6,14 @@
 // is faded. The grey path is the game itself. A small triangle says who is better after a move.
 // Drawing only: the state is a `LineTree`, the engine work is in ui.ts.
 import { LANES, LANE_NAME, badgeOf, verdictOf, type Lane, type LineNode, type LineTree, type Option } from './linetree';
+import { LABEL_INFO, type MoveLabel } from '../coach/movelabels';
 
 const NS = 'http://www.w3.org/2000/svg';
 
 /** One colour per quality, shared by the chart and the arrows on the board. Never the only cue: rows, meter, thickness. */
 export const LANE_COLOUR: Record<Lane, string> = { best: 'var(--q-best)', great: 'var(--q-great)', good: 'var(--q-good)', other: 'var(--q-other)' };
-/** The badge of each lane: `!` and `?` are the board's own marks, the other two are quieter ticks. */
-export const LANE_BADGE: Record<Lane, string> = { best: '!', great: '✓', good: '=', other: '?' };
+/** The badge of each lane: the marks of the move labels Best, Excellent and Good (`movelabels.ts`); `?` for the rest. */
+export const LANE_BADGE: Record<Lane, string> = { best: LABEL_INFO.best.glyph, great: LABEL_INFO.excellent.glyph, good: LABEL_INFO.good.glyph, other: '?' };
 /** Arrow width on the board (a stronger move is a thicker arrow). */
 export const LANE_ARROW: Record<Lane, number> = { best: 15, great: 12, good: 9, other: 6 };
 const GAME_COLOUR = 'var(--game-line)';
@@ -140,7 +141,7 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
     curve(from(cursor), { x: x - PILL_W / 2, y }, { stroke: LANE_COLOUR[g.lane], 'stroke-width': 2, 'stroke-dasharray': '3 4', opacity: 0.8 });
   }
 
-  const pill = (x: number, y: number, label: string, o: { black: boolean; stroke: string; selected?: boolean; faded?: boolean; ghost?: boolean; pending?: boolean; better?: 'you' | 'them' | 'level'; badge?: string; common?: boolean; aria: string; click: () => void }) => {
+  const pill = (x: number, y: number, label: string, o: { black: boolean; stroke: string; selected?: boolean; faded?: boolean; ghost?: boolean; pending?: boolean; better?: 'you' | 'them' | 'level'; badge?: MoveLabel; common?: boolean; aria: string; click: () => void }) => {
     const g = el(svg, 'g', { class: 'chart-node', transform: `translate(${x} ${y})`, role: 'button', tabindex: 0, 'aria-label': o.aria, opacity: o.pending ? 0.5 : o.faded ? 0.45 : 1 });
     if (o.selected) {
       el(g, 'rect', { x: -PILL_W / 2 - 4, y: -PILL_H / 2 - 4, width: PILL_W + 8, height: PILL_H + 8, rx: (PILL_H + 8) / 2, fill: 'none', stroke: 'var(--text)', 'stroke-width': 2 });
@@ -158,8 +159,9 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
     });
     el(g, 'text', { x: 0, y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': LABEL_FONT, 'font-weight': o.selected ? 600 : 500, fill: o.ghost ? 'var(--muted)' : o.black ? 'var(--on-accent)' : 'var(--text)' }, label);
     if (o.badge) {
-      el(g, 'circle', { cx: -PILL_W / 2 + 2, cy: -PILL_H / 2, r: 8, fill: o.badge === '!' ? 'var(--mark-good)' : o.badge === '?' ? 'var(--mark-bad)' : 'var(--mark-blunder)', stroke: 'var(--panel)', 'stroke-width': 1.5 });
-      el(g, 'text', { x: -PILL_W / 2 + 2, y: -PILL_H / 2 + 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': o.badge.length > 1 ? 9 : 11, 'font-weight': 800, fill: 'var(--on-accent)' }, o.badge);
+      const info = LABEL_INFO[o.badge];
+      el(g, 'circle', { cx: -PILL_W / 2 + 2, cy: -PILL_H / 2, r: 8, fill: info.colour, stroke: 'var(--panel)', 'stroke-width': 1.5 });
+      el(g, 'text', { x: -PILL_W / 2 + 2, y: -PILL_H / 2 + 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': info.glyph.length > 1 ? 9 : 11, 'font-weight': 800, fill: 'var(--on-accent)' }, info.glyph);
     }
     if (o.better) {
       // Who is better after the move, by shape (not hue): a triangle up for you, down for them, a bar for level.
@@ -205,7 +207,7 @@ export function drawChart(svg: SVGSVGElement, input: ChartInput, on: ChartHandle
       better: v,
       badge: badgeOf(n.rating),
       common: n.rating?.common,
-      aria: `${n.label}, ${lane}${n.author === 'game' ? ', played in the game' : ''}${n.rating?.common ? ', common at your level' : ''}`,
+      aria: `${n.label}, ${lane}${badgeOf(n.rating) ? `, ${LABEL_INFO[badgeOf(n.rating)!].name}` : ''}${n.author === 'game' ? ', played in the game' : ''}${n.rating?.common ? ', common at your level' : ''}`,
       click: () => on.node(n),
     });
   }

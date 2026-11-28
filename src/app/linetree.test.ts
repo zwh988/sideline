@@ -62,13 +62,22 @@ describe('badges and the only move', () => {
     expect(close[0].onlyMove).toBeUndefined(); // 190 apart
   });
 
+  it('a queen offered for a pawn that holds is brilliant; the same move losing is not', () => {
+    const holds = rateOptions(SCOTCH, [{ pv: ['d4d6'], score: cp(40) }], 'white');
+    expect(holds[0].brilliant).toBe(true);
+    expect(rateOther(SCOTCH, 40, cp(800), 'white', 'Qa4', 'd4d6').brilliant).toBeUndefined();
+    expect(rateOther(SCOTCH, 40, cp(-30), 'white', 'Qa4', 'd4d6').brilliant).toBe(true);
+  });
+
   it('gives a mark only to notable moves', () => {
     const base = { evalCp: 0 };
-    expect(badgeOf({ ...base, lane: 'best', lossCp: 0, onlyMove: true })).toBe('!');
+    expect(badgeOf({ ...base, lane: 'best', lossCp: 0, onlyMove: true })).toBe('great');
+    expect(badgeOf({ ...base, lane: 'best', lossCp: 0, brilliant: true })).toBe('brilliant');
     expect(badgeOf({ ...base, lane: 'best', lossCp: 0 })).toBeUndefined();
-    expect(badgeOf({ ...base, lane: 'good', lossCp: 120 })).toBeUndefined();
-    expect(badgeOf({ ...base, lane: 'other', lossCp: 200 })).toBe('?');
-    expect(badgeOf({ ...base, lane: 'other', lossCp: 610 })).toBe('??');
+    expect(badgeOf({ ...base, lane: 'good', lossCp: 90 })).toBeUndefined();
+    expect(badgeOf({ ...base, lane: 'good', lossCp: 120 })).toBe('inaccuracy');
+    expect(badgeOf({ ...base, lane: 'other', lossCp: 200 })).toBe('mistake');
+    expect(badgeOf({ ...base, lane: 'other', lossCp: 610 })).toBe('blunder');
     expect(badgeOf(undefined)).toBeUndefined();
   });
 });

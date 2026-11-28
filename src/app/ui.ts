@@ -10,6 +10,8 @@ import { Analyst } from '../coach/analyst';
 import { loadOpeningBook, openingBookIfLoaded, type OpeningBook } from '../coach/openings';
 import type { LineMove as LineMoveLike } from '../coach/linecheck';
 import { Coach, joinRemarks, type Mark, type Mood, type Remark, type Shape } from '../coach/coach';
+import { HEADLINE, LABEL_INFO, type MoveLabel } from '../coach/movelabels';
+import { richSegments } from './richtext';
 import { LANE_ARROW, LANE_COLOUR, drawChart, laneBadgeSvg } from './linechart';
 import { LANE_NAME, LANES, LineTree, badgeOf, isCommon, verdictOf, type LineNode, type Option } from './linetree';
 import { gameToPgn } from './pgn';
@@ -92,15 +94,37 @@ function markShape(m: Mark): DrawShape {
   if (m.kind === 'ring') {
     return { orig: m.square as Key, customSvg: { html: '<circle class="mark-ring" cx="50" cy="50" r="43" fill="none" stroke="var(--mark-blunder)" stroke-width="7"/>', center: 'orig' } };
   }
-  const glyph = MARK_GLYPH[m.kind];
+  return badgeShape(m.square, MARK_GLYPH[m.kind], MARK_COLOUR[m.kind]);
+}
+
+/** A badge on a square (top right of the piece): a coloured disc with its mark. */
+function badgeShape(square: string, glyph: string, colour: string): DrawShape {
   const size = glyph.length > 1 ? 26 : 32;
   return {
-    orig: m.square as Key,
+    orig: square as Key,
     customSvg: {
-      html: `<g class="mark-badge"><circle cx="72" cy="28" r="26" fill="${MARK_COLOUR[m.kind]}" stroke="var(--on-accent)" stroke-width="4"/><text x="72" y="${glyph.length > 1 ? 37 : 39}" text-anchor="middle" font-size="${size}" font-weight="800" font-family="system-ui,sans-serif" fill="var(--on-accent)">${glyph}</text></g>`,
+      html: `<g class="mark-badge"><circle cx="72" cy="28" r="26" fill="${colour}" stroke="var(--on-accent)" stroke-width="4"/><text x="72" y="${glyph.length > 1 ? 37 : 39}" text-anchor="middle" font-size="${size}" font-weight="800" font-family="system-ui,sans-serif" fill="var(--on-accent)">${glyph}</text></g>`,
       center: 'orig',
     },
   };
+}
+
+/** A move label's badge on the piece that moved. */
+function labelShape(square: string, label: MoveLabel): DrawShape {
+  return badgeShape(square, LABEL_INFO[label].glyph, LABEL_INFO[label].colour);
+}
+
+/** Puts text into an element with the moves as chips and the key words in bold (formatting only: no words added). */
+function setRich(el: HTMLElement, text: string): void {
+  el.replaceChildren(
+    ...richSegments(text).map((s) => {
+      if (s.kind === 'text') return document.createTextNode(s.text);
+      const span = document.createElement(s.kind === 'move' ? 'span' : 'strong');
+      span.className = s.kind === 'move' ? 'mv-chip' : 'key';
+      span.textContent = s.text;
+      return span;
+    }),
+  );
 }
 
 /** Everything a remark draws on the board: its arrows and its marks. */
@@ -922,6 +946,12 @@ export class App {
       this.board.setAutoShapes(this.shapesAt(nav.live));
       this.viewShapes = false;
     }
+    // In Review the move just played wears its label on the board.
+    if (this.reviewing) {
+      const label = this.reviewLabel(nav.ply);
+      const move = g.moves[nav.ply - 1];
+      this.board.setAutoShapes(label && move ? [labelShape(move.to, label)] : []);
+    }
     // In Review nothing is played in the game: a move of either side on the shown position opens a sideline with it.
     if (this.reviewing && !this.reviewing.analysing) {
       const dests = new LineTree(shown.fen, g.playerColor).dests;
@@ -1142,8 +1172,13 @@ export class App {
     // Each cell is a button: tapping it shows the position after that move.
     const cells = this.game.moves.map((m, i) => ({ san: m.san, ply: i + 1 }));
     if (turn === 'b') cells.unshift({ san: '…', ply: 0 });
+    // In Review every move wears its label (the asked moment's move only once it is revealed).
+    const mark = (ply: number) => {
+      const label = this.reviewLabel(ply);
+      return label ? `<i class="mv-badge" style="--c:${LABEL_INFO[label].colour}" title="${LABEL_INFO[label].name}" aria-label="${LABEL_INFO[label].name}">${LABEL_INFO[label].glyph}</i>` : '';
+    };
     const cell = (c?: { san: string; ply: number }) =>
-      !c ? '<span></span>' : c.ply === 0 ? `<span>${c.san}</span>` : `<button data-ply="${c.ply}" class="mv">${c.san}</button>`;
+      !c ? '<span></span>' : c.ply === 0 ? `<span>${c.san}</span>` : `<button data-ply="${c.ply}" class="mv">${c.san}${mark(c.ply)}</button>`;
     const first = Number(full) || 1;
     const rows: string[] = [];
     for (let i = 0; i < cells.length; i += 2) {
@@ -1154,6 +1189,14 @@ export class App {
       this.el.moves.scrollTop = this.el.moves.scrollHeight;
       this.el.moves.scrollLeft = this.el.moves.scrollWidth; // phones show the moves as a strip
     }
+  }
+
+  /** A move's label in Review, unless it is the move the coach is asking about (that would give the answer away). */
+  private reviewLabel(ply: number): MoveLabel | undefined {
+    const r = this.reviewing;
+    if (!r || r.analysing || ply < 1) return undefined;
+    if (this.asking() && r.moments[r.index]?.ply === ply) return undefined;
+    return this.record?.labels?.[ply - 1];
   }
 
   /** The bubble: the coach's remarks for the position, newest at the bottom. */
@@ -1169,7 +1212,7 @@ export class App {
       const entries = lines.map((text) => {
         const p = document.createElement('p');
         p.className = 'entry';
-        p.textContent = text;
+        setRich(p, text);
         return p;
       });
       if (node.rating) {
@@ -1185,7 +1228,7 @@ export class App {
       if (node.reason) {
         const p = document.createElement('p');
         p.className = 'entry reason';
-        p.textContent = node.reason.text;
+        setRich(p, node.reason.text);
         entries.push(p);
       }
       bubble.replaceChildren(...entries);
@@ -1198,7 +1241,7 @@ export class App {
     if (say && say.ply === nav.ply) {
       const p = document.createElement('p');
       p.className = 'entry';
-      p.textContent = say.text;
+      setRich(p, say.text);
       bubble.replaceChildren(p);
       this.el.mood.textContent = '';
       this.setMood('thinking');
@@ -1215,7 +1258,7 @@ export class App {
     entries.forEach((e, i) => {
       const p = document.createElement('p');
       p.className = !nav.viewing && i < entries.length - 1 ? 'entry old' : 'entry';
-      p.textContent = e.remark.text;
+      setRich(p, e.remark.text);
       bubble.append(p);
     });
     const newest = entries.at(-1)?.remark;
@@ -1725,7 +1768,10 @@ export class App {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = `dot ${dot.tone}${i === r.index ? ' current' : ''}`;
-        b.textContent = dot.glyph;
+        // The move's label when the analysis has one: the same mark as in the move list and on the board.
+        const tag = this.record?.labels?.[m.ply - 1];
+        b.textContent = tag ? LABEL_INFO[tag].glyph : dot.glyph;
+        if (tag) b.style.setProperty(dot.tone === 'theirs' ? 'border-color' : 'background', LABEL_INFO[tag].colour);
         if (scale && curve) {
           // On the evaluation line, where the move of the moment left it.
           b.style.left = `${(scale.x(m.ply) / TIMELINE_W) * 100}%`;
@@ -1990,7 +2036,7 @@ export class App {
     const box = this.el['history-list'].querySelector<HTMLElement>(`li[data-id="${CSS.escape(g.id)}"] .h-graph`);
     if (!box) return;
     const p = this.historyProgress?.id === g.id ? this.historyProgress : undefined;
-    const stats = needsAnalysis(g) ? undefined : gameStats(g.curve, g.startFen);
+    const stats = needsAnalysis(g) ? undefined : gameStats(g.curve, g.startFen, g.labels);
     if (!stats || !g.curve) {
       box.className = 'h-graph pending';
       const pct = p && p.total ? Math.round((p.done / p.total) * 100) : 0;
@@ -2006,7 +2052,11 @@ export class App {
     const y = (cp: number) => H / 2 - (cp / most) * (H / 2 - 3);
     const pts = curve.map((cp, i) => `${x(i).toFixed(1)},${y(cp).toFixed(1)}`).join(' ');
     const dots = sortedMoments(g)
-      .map((m) => `<circle cx="${x(m.ply).toFixed(1)}" cy="${y(curve[m.ply] ?? 0).toFixed(1)}" r="3.2" class="g-dot ${momentDot(m).tone}"/>`)
+      .map((m) => {
+        const label = g.labels?.[m.ply - 1];
+        const fill = label ? ` style="fill:${LABEL_INFO[label].colour}"` : '';
+        return `<circle cx="${x(m.ply).toFixed(1)}" cy="${y(curve[m.ply] ?? 0).toFixed(1)}" r="3.2" class="g-dot ${momentDot(m).tone}"${fill}/>`;
+      })
       .join('');
     // White's share is the light area above the middle, Black's the dark one below.
     const svg = `<svg class="h-eval" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
@@ -2015,13 +2065,16 @@ export class App {
       <line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" class="g-mid"/>
       <polyline points="${pts}" class="g-line"/>${dots}</svg>`;
     const mine = g.playerColor;
+    // Each side on one line: who, the important labels as marks with a count (words only in the tooltip), accuracy.
     const side = (who: string, color: 'white' | 'black', st: SideStats) => {
-      const marks = [
-        st.blunders ? `<span class="g-count blunder" title="Blunders">??&thinsp;${st.blunders}</span>` : '',
-        st.mistakes ? `<span class="g-count bad" title="Mistakes">?&thinsp;${st.mistakes}</span>` : '',
-        st.inaccuracies ? `<span class="g-count inacc" title="Inaccuracies">?!&thinsp;${st.inaccuracies}</span>` : '',
-      ].join('');
-      return `<div class="g-side ${color}"><span class="g-who"><i class="g-swatch ${color}"></i>${escapeHtml(who)}</span><b class="g-acc">${st.accuracy}%</b><span class="g-marks">${marks || '<span class="g-clean">no mistakes</span>'}</span></div>`;
+      const chips = HEADLINE.filter((l) => st.counts[l])
+        .map((l) => {
+          const n = st.counts[l]!;
+          const words = `${n} ${n === 1 ? LABEL_INFO[l].name : LABEL_INFO[l].plural}`;
+          return `<span class="g-chip" style="--c:${LABEL_INFO[l].colour}" title="${words}" aria-label="${words}"><b>${LABEL_INFO[l].glyph}</b>${n}</span>`;
+        })
+        .join('');
+      return `<div class="g-side ${color}"><span class="g-who"><i class="g-swatch ${color}"></i>${escapeHtml(who)}</span><span class="g-marks">${chips}</span><b class="g-acc">${st.accuracy}%</b></div>`;
     };
     const you = side('You', mine, stats[mine]);
     const them = side(this.opponentName(g), mine === 'white' ? 'black' : 'white', stats[mine === 'white' ? 'black' : 'white']);
@@ -3816,7 +3869,7 @@ export class App {
     // strongest drawn last so it stays on top; the cursor's move wears its badge on the piece.
     const arrows: DrawShape[] = [...ghosts].reverse().map((g) => ({ orig: g.uci.slice(0, 2) as Key, dest: g.uci.slice(2, 4) as Key, brush: `q-${g.lane}` }));
     const badge = cur === sl.root ? undefined : badgeOf(cur.rating);
-    const badgeMark: DrawShape[] = badge ? [markShape({ square: cur.uci.slice(2, 4) as Square, kind: badge === '!' ? 'good' : badge === '?' ? 'bad' : 'blunder' })] : [];
+    const badgeMark: DrawShape[] = badge ? [labelShape(cur.uci.slice(2, 4), badge)] : [];
     this.board.setAutoShapes([...reasonShapes, ...arrows, ...badgeMark]);
     const opts = this.el['sideline-arrows'];
     opts.classList.toggle('on', this.arrowsOn);

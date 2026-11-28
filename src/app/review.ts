@@ -6,6 +6,7 @@
 import { Chess } from 'chess.js';
 import type { SavedGame, SavedMoment } from './store';
 import { REVIEW_VERSION, type ReviewedGame } from '../coach/review';
+import type { MoveLabel } from '../coach/movelabels';
 import { endsInMate } from '../coach/reviewwords';
 import { plyLabel } from './navigation';
 
@@ -137,6 +138,7 @@ export function mergeAnalysis(game: SavedGame, result: ReviewedGame): void {
   });
   game.remarks = [...game.remarks.filter((r) => !r.remark.moment), ...result.remarks].sort((a, b) => a.ply - b.ply);
   game.curve = result.curve;
+  game.labels = result.labels;
   game.reviewVersion = REVIEW_VERSION;
 }
 
@@ -183,7 +185,7 @@ export function reviewableGames(games: SavedGame[]): SavedGame[] {
 
 /** The game has no analysis yet, or one made by an older version of the moment-finding. */
 export function needsAnalysis(g: SavedGame): boolean {
-  return g.moves.length > 0 && (!g.curve || g.curve.length !== g.moves.length + 1 || g.reviewVersion !== REVIEW_VERSION);
+  return g.moves.length > 0 && (!g.curve || g.curve.length !== g.moves.length + 1 || g.labels?.length !== g.moves.length || g.reviewVersion !== REVIEW_VERSION);
 }
 
 /** A side's chances of winning (0..100) at an evaluation from its own view, centipawns (Lichess's curve). */
@@ -200,22 +202,21 @@ export interface SideStats {
   /** 0..100, from the engine's evaluations only (see `gameStats`). */
   accuracy: number;
   moves: number;
-  /** Moves that gave up at least 10 / 20 / 30 points of winning chances (Lichess's bands). */
-  inaccuracies: number;
-  mistakes: number;
-  blunders: number;
+  /** How many of the side's moves got each label. */
+  counts: Partial<Record<MoveLabel, number>>;
 }
 
 /**
- * How well each side played, from the evaluation curve alone (White's view, one value per position). Every
- * move's accuracy comes from the winning chances it gave up; a side's accuracy is the average of the plain
- * mean and the harmonic mean of its moves, so one blunder pulls it down the way it should (close to
- * Lichess, which also weights by how sharp the position was). Undefined when the curve doesn't fit.
+ * How well each side played. Accuracy comes from the evaluation curve alone (White's view, one value per
+ * position): every move's accuracy from the winning chances it gave up; a side's accuracy is the average of
+ * the plain mean and the harmonic mean of its moves, so one blunder pulls it down the way it should (close
+ * to Lichess, which also weights by how sharp the position was). The counts are the moves' labels. Undefined
+ * when the curve doesn't fit.
  */
-export function gameStats(curve: number[] | undefined, startFen: string): { white: SideStats; black: SideStats } | undefined {
+export function gameStats(curve: number[] | undefined, startFen: string, labels: MoveLabel[] = []): { white: SideStats; black: SideStats } | undefined {
   if (!curve || curve.length < 2) return undefined;
   const acc = { w: [] as number[], b: [] as number[] };
-  const blank = (): SideStats => ({ accuracy: 0, moves: 0, inaccuracies: 0, mistakes: 0, blunders: 0 });
+  const blank = (): SideStats => ({ accuracy: 0, moves: 0, counts: {} });
   const out = { white: blank(), black: blank() };
   let mover: 'w' | 'b' = startFen.split(' ')[1] === 'b' ? 'b' : 'w';
   for (let i = 0; i + 1 < curve.length; i++) {
@@ -224,9 +225,8 @@ export function gameStats(curve: number[] | undefined, startFen: string): { whit
     acc[mover].push(moveAccuracy(lost));
     const s = mover === 'w' ? out.white : out.black;
     s.moves++;
-    if (lost >= 30) s.blunders++;
-    else if (lost >= 20) s.mistakes++;
-    else if (lost >= 10) s.inaccuracies++;
+    const label = labels[i];
+    if (label) s.counts[label] = (s.counts[label] ?? 0) + 1;
     mover = mover === 'w' ? 'b' : 'w';
   }
   for (const [side, list] of [['white', acc.w], ['black', acc.b]] as const) {

@@ -53,7 +53,9 @@ npx tsc              # type-check only
 | `src/coach/opening-tree.ts`, `opening-ideas.ts`, `opening-courses.ts` | Opening courses (6.1): tree rules per coach tier, idea tags from board code, the 14 course definitions; files in `public/openings/` (`npm run openings`) |
 | `src/coach/opening-lesson.ts`, `opening-words.ts` | Learning a course (6.2): lines per coach, the lesson walk, answer checking; the coach's words from tags, shares and stored lines |
 | `src/coach/opening-drill.ts` | Drill (6.3): a card per learned move, a run's replies weighted by share and steered toward due cards, "Why this move?" choices checked against the idea tags |
-| `src/coach/review.ts` | The coach's moment-finding over a whole game already played (imported games), with progress and cancel |
+| `src/coach/review.ts` | The coach's moment-finding over a whole game already played (imported games), with progress and cancel; every move's label |
+| `src/coach/movelabels.ts` | Move labels (Brilliant … Blunder, Overlooked): rules from engine and board facts, marks and colours |
+| `src/app/richtext.ts` | The coach's words split for display: moves as chips, key ideas bold (never changes the text) |
 | `src/coach/coach.ts` | Trigger rules (when the coach speaks, by level and mode), hint ladder, comment budget |
 | `src/coach/templates.ts` | Sentences built from facts. This is the coach's voice |
 | `src/tests/`, `tests.html` | Feasibility test page (Stockfish, Maia, WebLLM benchmarks) |

@@ -65,7 +65,8 @@ describe('review helpers', () => {
       { ply: 9, remark: { kind: 'mistake', text: 'Careful: after Bc4…', mood: 'concerned', moment: { kind: 'mistake', fen: SCOTCH_FEN, played: 'f1c4' } } },
     ];
     const fresh = { ...mistake, text: 'You played 5.Bc4. …' };
-    mergeAnalysis(g, { moments: [fresh], remarks: [{ ply: 9, remark: { kind: 'mistake', text: fresh.text, mood: 'concerned', moment: fresh } }], curve: [0, 10] });
+    mergeAnalysis(g, { moments: [fresh], remarks: [{ ply: 9, remark: { kind: 'mistake', text: fresh.text, mood: 'concerned', moment: fresh } }], curve: [0, 10], labels: ['best'] });
+    expect(g.labels).toEqual(['best']);
     expect(g.moments).toEqual([{ ...fresh, outcome: 'taken-back', showedMe: true }]);
     expect(g.remarks.map((r) => r.remark.text)).toEqual(['I am putting a pawn in the centre.', 'You played 5.Bc4. …']);
     expect(g.curve).toEqual([0, 10]);
@@ -123,28 +124,29 @@ describe('Game review list and accuracy', () => {
 
   it('a level game played perfectly is 100% for both sides', () => {
     const s = gameStats([20, 20, 20, 20], START)!;
-    expect(s.white).toMatchObject({ accuracy: 100, moves: 2, blunders: 0 });
+    expect(s.white).toMatchObject({ accuracy: 100, moves: 2, counts: {} });
     expect(s.black).toMatchObject({ accuracy: 100, moves: 1 });
   });
 
   it("a blunder counts against the side that made it, and pulls its accuracy down", () => {
     // White keeps +0.2; Black's move drops from +0.2 to +5.0 for White.
-    const s = gameStats([20, 20, 500, 500, 500], START)!;
-    expect(s.black.blunders).toBe(1);
-    expect(s.white.blunders).toBe(0);
+    const s = gameStats([20, 20, 500, 500, 500], START, ['best', 'blunder', 'best', 'excellent'])!;
+    expect(s.black.counts).toEqual({ blunder: 1, excellent: 1 });
+    expect(s.white.counts).toEqual({ best: 2 });
     expect(s.white.accuracy).toBe(100);
     expect(s.black.accuracy).toBeLessThan(60);
   });
 
   it('starts with Black when the position does', () => {
-    const s = gameStats([0, 600], '4k3/8/8/8/8/8/4P3/4K3 b - - 0 1')!;
-    expect(s.black.blunders).toBe(1);
+    const s = gameStats([0, 600], '4k3/8/8/8/8/8/4P3/4K3 b - - 0 1', ['blunder'])!;
+    expect(s.black.counts.blunder).toBe(1);
     expect(s.white.moves).toBe(0);
   });
 
   it('a stale or missing analysis needs doing again', () => {
     expect(needsAnalysis(base({}))).toBe(true);
-    expect(needsAnalysis(base({ curve: [0, 0], reviewVersion: REVIEW_VERSION }))).toBe(false);
-    expect(needsAnalysis(base({ curve: [0, 0], reviewVersion: REVIEW_VERSION - 1 }))).toBe(true);
+    expect(needsAnalysis(base({ curve: [0, 0], labels: ['book'], reviewVersion: REVIEW_VERSION }))).toBe(false);
+    expect(needsAnalysis(base({ curve: [0, 0], labels: ['book'], reviewVersion: REVIEW_VERSION - 1 }))).toBe(true);
+    expect(needsAnalysis(base({ curve: [0, 0], reviewVersion: REVIEW_VERSION }))).toBe(true); // no labels yet
   });
 });

@@ -20,6 +20,9 @@ import type { Moment, Remark } from './coach';
 import type { NoteConcept } from './explain';
 import type { OpeningBook } from './openings';
 import { momentWords } from './reviewwords';
+import { classifyMove, isOnlyMove, type MoveLabel } from './movelabels';
+import { offeredMaterial } from './explain';
+import { scoreToCp } from '../engine/stockfish';
 
 export interface ReviewedGame {
   /** The coach's remarks that carry a moment, with the ply (moves played) they belong to. */
@@ -27,6 +30,8 @@ export interface ReviewedGame {
   moments: SavedMoment[];
   /** White's evaluation after 0..n moves, in centipawns, clamped to ±CURVE_CAP. */
   curve: number[];
+  /** Every move's label, both sides, by ply - 1 (`movelabels.ts`). */
+  labels: MoveLabel[];
 }
 
 export interface ReviewOptions {
@@ -49,7 +54,7 @@ export const REVIEW_DEPTH = { maxPlies: 6, minGain: 1, mistakeCp: 100 };
 export const MAX_MOMENTS = 40;
 export const CURVE_CAP = 1000;
 /** Raised when the moment-finding changes, so saved games are analysed again the next time they are opened. */
-export const REVIEW_VERSION = 3;
+export const REVIEW_VERSION = 5;
 const MATE_CP = 90000;
 
 type Draft = Moment & { ply: number };
@@ -59,7 +64,7 @@ async function evalAt(analyst: Analyst, fen: string): Promise<PositionEval> {
   const chess = new Chess(fen);
   if (chess.isCheckmate()) return { fen, bestCp: -(MATE_CP + 10000), lines: [] };
   if (chess.isGameOver()) return { fen, bestCp: 0, lines: [] };
-  return analyst.evaluate(fen, 1);
+  return analyst.evaluate(fen, 2); // two lines: the second tells whether the best move is the only one
 }
 
 /**
@@ -98,6 +103,7 @@ export async function reviewGame(
   const evals: PositionEval[] = [await evalAt(analyst, fens[0])];
   const drafts: Draft[] = [];
   const score = new Map<Draft, number>();
+  const labels: MoveLabel[] = [];
 
   for (let i = 0; i < n; i++) {
     if (opts.signal?.aborted) return undefined;
@@ -119,12 +125,29 @@ export async function reviewGame(
       score.set(draft, s);
     };
 
+    const played = tactic?.moves[0].uci === uci;
+    // A mate or a win passed up is listed even when the side stays far ahead, where `moveLoss` counts no loss.
+    const waived = lossCp === 0 && !top;
+    const missedMate = !!tactic?.mate && !played && -after.bestCp < MATE_CP;
+    const missedWin = !!tactic && !tactic.mate && !played && waived && materialAfter(fen, [uci, ...(after.lines[0]?.pv ?? [])], tactic.moves.length) < tactic.gain;
+
+    // The move's label (both sides): engine facts and board code only.
+    const second = best.lines.find((l) => l.pv.length && l.pv[0] !== best.lines[0]?.pv[0]);
+    labels.push(
+      classifyMove({
+        lossCp,
+        book: inBook,
+        forced: new Chess(fen).moves().length === 1,
+        onlyMove: top && isOnlyMove(best.bestCp, second ? scoreToCp(second.score) : undefined),
+        sacrifice: !!offeredMaterial(fen, uci),
+        beforeCp: best.bestCp,
+        afterCp: -after.bestCp,
+        chance: (!!tactic && !played) || (i > 0 && (labels[i - 1] === 'mistake' || labels[i - 1] === 'blunder' || labels[i - 1] === 'overlooked')),
+        passedUp: missedMate || missedWin,
+      }),
+    );
+
     if (mover === me) {
-      const played = tactic?.moves[0].uci === uci;
-      // A mate or a win the player passed up is listed even when they stay far ahead, where `moveLoss` counts no loss.
-      const waived = lossCp === 0 && !top;
-      const missedMate = !!tactic?.mate && !played && -after.bestCp < MATE_CP;
-      const missedWin = !!tactic && !tactic.mate && !played && waived && materialAfter(fen, [uci, ...(after.lines[0]?.pv ?? [])], tactic.moves.length) < tactic.gain;
       if (tactic && played) {
         add({ kind: 'found-tactic', fen, played: uci, line: ucisOf(tactic), concept: lineConceptOf(fen, ucisOf(tactic), previous, tactic.motif) }, 50 + tactic.gain * 20);
       } else if (tactic && (missedMate || missedWin)) {
@@ -199,7 +222,7 @@ export async function reviewGame(
   const chosen = [...kept].sort((a, b) => (score.get(b) ?? 0) - (score.get(a) ?? 0)).slice(0, MAX_MOMENTS).sort((a, b) => a.ply - b.ply);
 
   const seen = new Set<NoteConcept>();
-  const out: ReviewedGame = { remarks: [], moments: [], curve: evals.map((e, k) => curveValue(fens[k], e)) };
+  const out: ReviewedGame = { remarks: [], moments: [], curve: evals.map((e, k) => curveValue(fens[k], e)), labels };
   for (const d of chosen) {
     const { ply, ...moment } = d;
     const words = momentWords(moment, ply, { startFen: game.startFen, me, opponent: game.opponent, seen });

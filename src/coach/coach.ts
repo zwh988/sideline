@@ -485,7 +485,7 @@ export class Coach {
   /** Concepts named this game: a concept's habit is said only once. */
   private seenConcepts = new Set<NoteConcept>();
 
-  /** The engine's top moves at `fen`, ranked into lanes (Best / Great / Good / Other) against its best move there. */
+  /** The engine's top moves at `fen`, ranked into lanes (Best / Excellent / Good / Other) against its best move there. */
   async options(fen: string, count = 5): Promise<Option[]> {
     const ev = await this.evaluator.evaluate(fen, count);
     return rateOptions(fen, ev.lines, this.me);
@@ -551,7 +551,7 @@ export class Coach {
     else if (chess.isDraw() || chess.isStalemate()) after = { kind: 'cp', value: 0 };
     else after = (await this.evaluator.evaluate(chess.fen(), 1)).lines[0]?.score ?? { kind: 'cp', value: 0 };
     const bestCp = ev.lines[0] ? scoreToCp(ev.lines[0].score) : 0;
-    return rateOther(fen, bestCp, after, this.me, opts[0]?.san);
+    return rateOther(fen, bestCp, after, this.me, opts[0]?.san, uci);
   }
 
   /**
@@ -567,7 +567,7 @@ export class Coach {
     const pawns = (rating.lossCp / 100).toFixed(1);
     const best = rating.bestSan ?? 'another move';
     if (rating.lane === 'best') return moveNote("The engine's top choice here.", step, this.seenConcepts);
-    if (rating.lane === 'great') return moveNote(`A great move: the engine's top pick is ${best}, only ${pawns} pawns better.`, step, this.seenConcepts);
+    if (rating.lane === 'great') return moveNote(`An excellent move: the engine's top pick is ${best}, only ${pawns} pawns better.`, step, this.seenConcepts);
     if (rating.lane === 'good') return moveNote(`A good move that holds up, though the engine prefers ${best}.`, step, this.seenConcepts);
     const parent = new Chess(rootFen);
     for (const u of ucis.slice(0, -1)) parent.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });

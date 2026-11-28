@@ -37,6 +37,15 @@
   --mark-good: #2aa66b;
   --mark-bad: #e0861a;
   --mark-blunder: #d63a3a;
+  /* The move labels (movelabels.ts): each has its own mark too, never a hue alone */
+  --mark-brilliant: #13a3a8;
+  --mark-great: #3a7fd6;
+  --mark-excellent: #6aae4f;
+  --mark-ok: #8a9a6b;
+  --mark-book: #9b7650;
+  --mark-forced: #7d8580;
+  --mark-inacc: #d2a514;
+  --mark-overlooked: #b8457f;
 
   /* Quality of a move: one colour each, always with a second cue (row, meter, arrow width) */
   --q-best: #2e9e6b;
@@ -1163,23 +1172,25 @@ button.primary {
 .h-eval .g-dot.theirs { fill: var(--muted); }
 
 .history-list .g-sides {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-top: var(--sp-2);
 }
 
 .history-list .g-side {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: baseline;
-  gap: 0 var(--sp-2);
-  padding: 6px var(--sp-2);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px var(--sp-2);
   border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--text) 5%, transparent);
+  min-width: 0;
 }
 
 .history-list .g-who {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: var(--fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1198,30 +1209,41 @@ button.primary {
 .history-list .g-swatch.white { background: #eef0ec; }
 .history-list .g-swatch.black { background: #3a3f3c; }
 
-.history-list .g-acc {
-  font-size: var(--fs-lg);
-  font-weight: 800;
-}
-
 .history-list .g-marks {
-  grid-column: 1 / -1;
+  flex: 1;
   display: flex;
-  flex-wrap: wrap;
   gap: 4px;
-  font-size: var(--fs-xs);
-  min-height: 1.4em;
 }
 
-.history-list .g-count {
-  padding: 0 6px;
+/* A label's mark and how many: no words (they are in the tooltip) */
+.history-list .g-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 7px 0 2px;
   border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  background: color-mix(in srgb, var(--c) 18%, transparent);
+  color: var(--text);
+}
+
+.history-list .g-chip b {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--c);
   color: #fff;
+  font-size: 11px;
+}
+
+.history-list .g-acc {
+  font-size: var(--fs-md);
   font-weight: 800;
 }
-.history-list .g-count.blunder { background: var(--mark-blunder); }
-.history-list .g-count.bad { background: var(--mark-bad); }
-.history-list .g-count.inacc { background: color-mix(in srgb, var(--mark-bad) 55%, var(--muted)); }
-.history-list .g-clean { color: var(--mark-good); font-weight: 700; }
 
 .history-list .h-graph.pending {
   display: flex;
@@ -1243,6 +1265,39 @@ button.primary {
   height: 100%;
   background: var(--coach-accent);
   transition: width 0.3s;
+}
+
+/* Move labels in the move list (Review) */
+.moves .mv-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  margin-left: 3px;
+  padding: 0 2px;
+  border-radius: 999px;
+  background: var(--c);
+  color: #fff;
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: 1px;
+}
+
+/* The coach's words: moves as chips, key ideas in bold */
+.log .mv-chip {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.log strong.key {
+  font-weight: 800;
 }
 
 /* Import games */

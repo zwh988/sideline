@@ -3,6 +3,7 @@
 // format. Every storage call is wrapped: private windows and full or blocked
 // storage must never break the game, they just mean nothing is saved.
 import type { Moment, Remark } from '../coach/coach';
+import type { MoveLabel } from '../coach/movelabels';
 import type { ModeId } from './modes';
 import type { Takeback } from './summary';
 
@@ -55,6 +56,8 @@ export interface SavedGame {
   moments: SavedMoment[];
   /** Review's evaluation curve: White's score after 0..n moves (centipawns, clamped). Present once Review has analysed the game. */
   curve?: number[];
+  /** Every move's label (Best, Blunder, …), both sides, by ply - 1; made with the curve. */
+  labels?: MoveLabel[];
   /** The version of the moment-finding that made the curve and moments (see `REVIEW_VERSION`). */
   reviewVersion?: number;
   hintsUsed: number;

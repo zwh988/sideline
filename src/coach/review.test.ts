@@ -178,3 +178,33 @@ describe('reviewGame: every pattern, both sides, at any level', () => {
     expect(moves).toBe(3); // no engine work after the cancel
   });
 });
+
+describe('reviewGame: a label for every move', () => {
+  it('labels both sides: the blunder 5.Bc4 and the fork that punishes it', async () => {
+    const r = await reviewGame(new FakeAnalyst(SCOTCH_SCRIPT) as unknown as Analyst, asGame(BAD_MOVE_PGN, 'white'), {});
+    expect(r!.labels).toHaveLength(12);
+    expect(r!.labels[8]).toBe('blunder'); // 5.Bc4: +0.4 to -6.0
+    expect(r!.labels[9]).toBe('best'); // 5…Nxd4, the engine's move
+  });
+
+  it('a move the engine rates as the only one that holds is great', async () => {
+    const fen = SCOTCH_FEN;
+    const a = new FakeAnalyst({});
+    a.evaluate = async (f: string) => {
+      a.searches++;
+      return f === fen
+        ? { fen: f, bestCp: 40, lines: [{ multipv: 1, depth: 12, score: { kind: 'cp', value: 40 }, pv: ['d4a4'] }, { multipv: 2, depth: 12, score: { kind: 'cp', value: -250 }, pv: ['f1c4'] }] }
+        : { fen: f, bestCp: -40, lines: [] };
+    };
+    const r = await reviewGame(a as unknown as Analyst, { startFen: fen, moves: ['d4a4'], playerColor: 'white' }, {});
+    expect(r!.labels).toEqual(['great']);
+  });
+});
+
+describe('reviewGame: a sacrifice that holds', () => {
+  it('is brilliant (Qxd6 gives the queen for a pawn; in this script the engine says it holds)', async () => {
+    const script: Script = { [SCOTCH_FEN]: { cp: 40, pv: ['d4d6'] }, [after(SCOTCH_FEN, 'd4d6')]: { cp: -40 } };
+    const r = await reviewGame(new FakeAnalyst(script) as unknown as Analyst, { startFen: SCOTCH_FEN, moves: ['d4d6'], playerColor: 'white' }, {});
+    expect(r!.labels).toEqual(['brilliant']);
+  });
+});

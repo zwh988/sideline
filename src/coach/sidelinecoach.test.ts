@@ -53,7 +53,7 @@ describe('Coach lines (task 1.9): options, ratings and a move in words', () => {
     const note = await coach.lineNote(SCOTCH, ['f1b5'], bb5);
     expect(note.startsWith("The engine's top choice here.")).toBe(true);
     const great = (await coach.options(SCOTCH))[1];
-    expect(await coach.lineNote(SCOTCH, ['d4d3'], great)).toContain('A great move: the engine\'s top pick is Bb5, only 0.4 pawns better.');
+    expect(await coach.lineNote(SCOTCH, ['d4d3'], great)).toContain('An excellent move: the engine\'s top pick is Bb5, only 0.4 pawns better.');
   });
 
   it('lineNote: a move far below the best is judged and its refutation named', async () => {
